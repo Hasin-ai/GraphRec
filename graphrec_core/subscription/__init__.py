@@ -1,0 +1,1 @@
+"""Tenant subscription query behavior."""

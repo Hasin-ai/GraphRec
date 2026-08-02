@@ -1,0 +1,114 @@
+# ==========================================
+# Operating System Files
+# ==========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ==========================================
+# IDEs & Code Editors
+# ==========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-workspace
+*.sublime-project
+
+# ==========================================
+# Python & Virtual Environments
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# ==========================================
+# Node.js & Frontend (Vite / Next.js)
+# ==========================================
+node_modules/
+.next/
+out/
+.cache/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ==========================================
+# Machine Learning, Datasets & Models
+# ==========================================
+*.pt
+*.pth
+*.bin
+*.onnx
+*.safetensors
+*.ckpt
+*.h5
+*.pkl
+*.pickle
+data/
+datasets/
+snapshots/
+artifacts/
+models/
+checkpoints/
+exports/
+
+# ==========================================
+# Environment Variables & Secrets
+# ==========================================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+
+# ==========================================
+# Logs, Databases & Storage Volumes
+# ==========================================
+*.log
+logs/
+*.sqlite
+*.sqlite3
+*.db
+postgres_data/
+minio_data/
+rustfs_data/
+redis_data/
+rabbitmq_data/
+
+# ==========================================
+# Temporary / Generated Binary Documents
+# ==========================================
+*.docx
+*.tmp
+*.temp
+
+# ==========================================
+# Documentation & Diagrams
+# ==========================================
+docs/
+diagrams/
+

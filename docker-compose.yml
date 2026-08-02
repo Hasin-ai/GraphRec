@@ -1,0 +1,131 @@
+services:
+  postgres:
+    image: postgres:17.5-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_OWNER_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_OWNER_PASSWORD}
+      GRAPHREC_APP_PASSWORD: ${POSTGRES_APP_PASSWORD}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/10-create-runtime-role.sh:/docker-entrypoint-initdb.d/10-create-runtime-role.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_OWNER_USER} -d ${POSTGRES_DB}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    build: .
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_OWNER_USER}:${POSTGRES_OWNER_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.0
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:6333/healthz || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgresql+psycopg://graphrec_app:${POSTGRES_APP_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      AUDIT_HASH_SECRET: ${AUDIT_HASH_SECRET}
+      JWT_SIGNING_SECRET: ${JWT_SIGNING_SECRET}
+      ACCESS_TOKEN_TTL_SECONDS: ${ACCESS_TOKEN_TTL_SECONDS}
+      REFRESH_TOKEN_TTL_SECONDS: ${REFRESH_TOKEN_TTL_SECONDS}
+      LOGIN_RATE_LIMIT: ${LOGIN_RATE_LIMIT}
+      LOGIN_RATE_WINDOW_SECONDS: ${LOGIN_RATE_WINDOW_SECONDS}
+      SUBSCRIPTION_RATE_LIMIT: ${SUBSCRIPTION_RATE_LIMIT}
+      SUBSCRIPTION_RATE_WINDOW_SECONDS: ${SUBSCRIPTION_RATE_WINDOW_SECONDS}
+      USAGE_RATE_LIMIT: ${USAGE_RATE_LIMIT}
+      USAGE_RATE_WINDOW_SECONDS: ${USAGE_RATE_WINDOW_SECONDS}
+      API_KEY_HMAC_PEPPER: ${API_KEY_HMAC_PEPPER}
+      API_KEY_HASH_VERSION: ${API_KEY_HASH_VERSION}
+      API_KEY_RATE_LIMIT: ${API_KEY_RATE_LIMIT}
+      API_KEY_RATE_WINDOW_SECONDS: ${API_KEY_RATE_WINDOW_SECONDS}
+      MAX_ACTIVE_API_KEYS_PER_TENANT: ${MAX_ACTIVE_API_KEYS_PER_TENANT}
+      MAX_API_KEY_NAME_LENGTH: ${MAX_API_KEY_NAME_LENGTH}
+      MAX_API_KEY_SCOPES: ${MAX_API_KEY_SCOPES}
+      MAX_API_KEY_ROTATION_REASON_LENGTH: ${MAX_API_KEY_ROTATION_REASON_LENGTH}
+      MAX_API_KEY_GRACE_SECONDS: ${MAX_API_KEY_GRACE_SECONDS}
+      REGISTRATION_RATE_LIMIT: ${REGISTRATION_RATE_LIMIT}
+      REGISTRATION_RATE_WINDOW_SECONDS: ${REGISTRATION_RATE_WINDOW_SECONDS}
+      MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES}
+      MAX_TENANT_NAME_LENGTH: ${MAX_TENANT_NAME_LENGTH}
+      MAX_IDEMPOTENCY_KEY_LENGTH: ${MAX_IDEMPOTENCY_KEY_LENGTH}
+      MAX_PASSWORD_LENGTH: ${MAX_PASSWORD_LENGTH}
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6334}
+      QDRANT_COLLECTION_PREFIX: ${QDRANT_COLLECTION_PREFIX:-graphrec}
+      QDRANT_EMBEDDING_DIM: ${QDRANT_EMBEDDING_DIM:-128}
+      QDRANT_TOP_K: ${QDRANT_TOP_K:-100}
+    ports:
+      - "${API_PORT:-8010}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "${FRONTEND_PORT:-5180}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  frontend-test:
+    image: node:22.17.0-alpine
+    profiles: ["test"]
+    working_dir: /app
+    command: ["sh", "-c", "npm ci && npm test -- --run && npm run build && npm audit"]
+    volumes:
+      - ./frontend:/app:ro
+      - /app/node_modules
+      - /app/dist
+
+  demo-account:
+    build: .
+    profiles: ["demo"]
+    command: ["python", "-m", "scripts.create_local_demo_user"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://graphrec_app:${POSTGRES_APP_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      AUDIT_HASH_SECRET: ${AUDIT_HASH_SECRET}
+      JWT_SIGNING_SECRET: ${JWT_SIGNING_SECRET}
+      MAX_TENANT_NAME_LENGTH: ${MAX_TENANT_NAME_LENGTH}
+      MAX_PASSWORD_LENGTH: ${MAX_PASSWORD_LENGTH}
+      DEMO_TENANT_NAME: ${DEMO_TENANT_NAME}
+      DEMO_REGISTRATION_EMAIL: ${DEMO_REGISTRATION_EMAIL}
+      DEMO_LOGIN_EMAIL: ${DEMO_LOGIN_EMAIL}
+      DEMO_LOGIN_PASSWORD: ${DEMO_LOGIN_PASSWORD}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  pg_data: {}
+  qdrant_data: {}

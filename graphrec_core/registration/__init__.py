@@ -1,0 +1,1 @@
+"""Tenant registration domain services."""
