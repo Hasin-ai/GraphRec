@@ -105,6 +105,13 @@ services:
     env_file:
       - path: .env
         required: false
+    volumes:
+      # Mounted, never baked. `secrets/` is ignored by both git and Docker, so
+      # the signing key exists only on the host that generated it — a key in an
+      # image layer is a published key, and every token issued under it is
+      # forgeable. Read-only: the API verifies and signs, it never writes here.
+      # Generate with `python scripts/gen_jwt_keys.py` before the first `up`.
+      - ./secrets:/app/secrets:ro
     ports:
       - "${API_PORT:-8010}:8010"
     command:

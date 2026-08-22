@@ -1,15 +1,16 @@
 # ADR 0009 — Access tokens are EdDSA-signed, with a published JWKS
 
-**Status:** **Proposed — built to.** D5 has not been confirmed.
+**Status:** Accepted. D5 confirmed 2026-08-22.
 **Phase:** 2
 **Date:** 2026-08-22
 
 ## Context
 
 D5 in BUILD_PROMPT's appendix proposes EdDSA (Ed25519) with a published JWKS,
-and asks for confirmation before Phase 3. Phase 2 cannot issue a credential
-without choosing something, so this is built to the stated recommendation and
-flagged. See §"Decisions taken by default" in the Phase 2 report.
+and asks for confirmation before Phase 3. Phase 2 could not issue a credential
+without choosing something, so it was built to the stated recommendation and
+flagged in the Phase 2 report. That recommendation has since been confirmed, so
+no rework followed.
 
 ## Decision
 
@@ -47,6 +48,10 @@ private key is generated per environment by `scripts/gen_jwt_keys.py`, written
   per-tenant inference process viable without giving it minting authority.
 - Key rotation is a JWKS with two entries and a `kid` on each token. The
   machinery is present; the rotation procedure is not yet written.
-- **If D5 is answered differently, this is a Phase 2 rework**, touching
-  `graphrec/auth/tokens.py`, `scripts/gen_jwt_keys.py`, the `well_known` router
-  and the token settings block. Nothing outside those files reads the algorithm.
+- The signing key is never baked into an image and never committed. The
+  container mounts `./secrets` read-only at `/app/secrets`; `secrets/` is
+  ignored by both git and Docker. A key that ships in a layer is a published
+  key, and every token ever issued under it is forgeable.
+- Nothing outside `graphrec/auth/tokens.py`, `scripts/gen_jwt_keys.py`,
+  `routers/well_known.py` and the token settings block reads the algorithm, so
+  the choice stays reversible even though it is now settled.

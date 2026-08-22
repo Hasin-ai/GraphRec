@@ -12,24 +12,24 @@ gate that depends on it.
 | D2 | Job queue: PostgreSQL `SKIP LOCKED` | Accepted | Phase 5 |
 | D3 | Serving: Compose + `ServingDriver` port | Accepted | Phase 10 |
 | D4 | Candidates: in-process exact top-K behind `CandidateIndex` | Accepted | Phase 10 |
-| D5 | Token signing: EdDSA + published JWKS | **Proposed — built to** (ADR 0009) | Phase 3 |
+| D5 | Token signing: EdDSA + published JWKS | **Confirmed** (ADR 0009) | Phase 3 |
 | D6 | Versioning: `/v1` and `/v1/platform/*` | **Proposed — built to** | Phase 2 |
 | D7 | Body limits: per-endpoint, not global | **Proposed — built to** | Phase 1 |
 | D8 | Model lifecycle: seven states | Accepted | Phase 8 |
 | D9 | Product writes: POST + PUT + PATCH | Accepted | Phase 6 |
 | D10 | Pagination: limit/offset for console, cursor for volume | Accepted | Phase 6 |
-| D11 | Plans: STARTER / GROWTH / SCALE | **Proposed — built to** | Phase 4 |
-| D12 | Wire casing: snake_case | **Proposed — built to** | Phase 2 |
+| D11 | Plans: STARTER / GROWTH / SCALE | **Confirmed** | Phase 4 |
+| D12 | Wire casing: snake_case | **Confirmed** | Phase 2 |
 
-D1 was confirmed SRS-native and Phase 2 was built on it.
+D1 (SRS-native), D5, D11 and D12 have been confirmed. Phase 2 was built on
+D1, and D5/D11/D12 were built to ahead of confirmation and matched what was
+confirmed, so no rework followed.
 
-Four decisions carry a **Proposed** status *and have been built to*, on the
-basis that each of them was a stated recommendation in BUILD_PROMPT's appendix
-and Phase 2 could not proceed without an answer. **This is a departure from
-BUILD_PROMPT §2, which says not to build past a gate on an unconfirmed
-decision**, and it is reported rather than assumed. D5 is the one with a
-deadline: it is due before Phase 3. The rework cost of each is scoped in the
-Phase 2 report.
+**D6 remains unconfirmed and has been built to.** Every route under `/v1` and
+`/v1/platform/*` assumes it. This is a departure from BUILD_PROMPT §2, which
+says not to build past a gate on an unconfirmed decision; it is reported rather
+than assumed. The rework is mechanical but wide — router prefixes and every
+test URL — and it gets more expensive with each phase.
 
 There is also a conflict the authorities do not resolve between them: the SRS
 specifies a Qdrant Vector Store Contract (§6.3), which outranks D4's in-process

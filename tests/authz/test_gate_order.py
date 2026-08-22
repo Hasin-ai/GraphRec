@@ -11,8 +11,10 @@ from __future__ import annotations
 import uuid
 
 import pytest
+import sqlalchemy as sa
 
 from tests.authz.conftest import PASSWORD, auth
+from tests.isolation.conftest import _force_lifted
 
 pytestmark = pytest.mark.authz
 
@@ -82,6 +84,69 @@ def test_the_suspension_message_says_it_is_not_tenant_actionable(api, realm) -> 
         pytest.skip("sign-in refuses a suspended tenant outright; gate 2 is covered above")
     body = api.get("/v1/tenant", headers=auth(signed.json()["access_token"])).json()["error"]
     assert "Platform Administrator" in body["reason"]
+
+
+def test_a_freshly_registered_tenant_is_pending_and_cannot_work(api, owner_engine) -> None:
+    """Registration yields `pending`, and `pending` is not operable.
+
+    Pinned because it is surprising and because nothing else covers it: every
+    other test in this suite seeds an `active` tenant directly, so the
+    registration path was exercised end to end for the first time against the
+    containerised stack, not here.
+
+    The sequence is deliberate and each step matters. Sign-in **succeeds** —
+    gate 1 is about the credential, and the credential is real. The refusal
+    comes at gate 2, on the first authenticated request, with the prototype's
+    wording for a transition only a Platform Administrator can make.
+
+    What this also documents is a gap: **no route in Phase 2 can move a tenant
+    from `pending` to `active`.** That is platform tenant management, which is
+    Phase 4. Until then a self-registered tenant is stranded, and this test will
+    start failing the moment that changes — which is the point.
+
+    The gap is a consequence of the schema rather than an omission in the
+    routers. `ck_tenants_active_requires_plan` (migration 0002, from SRS §5.2.2:
+    "A Tenant must reference one active Pricing Plan when activated") makes
+    `active` unreachable without a plan, and registration deliberately passes
+    `plan_id=None` — choosing a plan is not the registrant's decision to make.
+    """
+    suffix = uuid.uuid4().hex[:8].upper()
+    registered = api.post(
+        "/v1/tenants",
+        json={
+            "tenant_name": f"Northgate {suffix}",
+            "tenant_code": f"NGS{suffix}",
+            "email": f"admin-{suffix.lower()}@example.com",
+            "password": PASSWORD,
+        },
+    )
+    assert registered.status_code == 201, registered.text
+    assert registered.json()["status"] == "pending"
+
+    signed_in = api.post(
+        "/v1/auth/sign-in",
+        json={
+            "tenant_code": f"NGS{suffix}",
+            "email": f"admin-{suffix.lower()}@example.com",
+            "password": PASSWORD,
+        },
+    )
+    assert signed_in.status_code == 200, "gate 1 is about the credential, and it is valid"
+
+    refused = api.get("/v1/me", headers=auth(signed_in.json()["access_token"]))
+    assert refused.status_code == 403
+    assert refused.json()["error"]["code"] == "tenant_not_active"
+    assert "Platform Administrator" in refused.json()["error"]["reason"]
+
+    # This is the only test that registers a tenant the `realm` fixture does not
+    # own, so it cleans up after itself. No role holds DELETE on `tenants`, so
+    # teardown is the owner with `FORCE` briefly lifted — the same escape hatch
+    # the fixtures use, in a `finally`-shaped place and nowhere else.
+    with owner_engine.begin() as conn, _force_lifted(conn, "tenants"):
+        conn.execute(
+            sa.text("DELETE FROM tenants WHERE tenant_id = :t"),
+            {"t": registered.json()["tenant_id"]},
+        )
 
 
 # ------------------------------------------------------------ gate 3: role

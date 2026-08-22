@@ -6,3 +6,5 @@ __pycache__
 frontend
 docs
 diagrams
+# Never in a build context: the signing key is mounted at runtime, not baked.
+secrets

@@ -31,12 +31,57 @@ def test_readyz_reports_each_dependency_separately(client) -> None:
 
 
 def test_readyz_reports_an_unprobed_check_as_unavailable_not_pass(client) -> None:
-    """UC-30's rule applied to ourselves: a gap is a gap, never a pass."""
+    """UC-30's rule applied to ourselves: a gap is a gap, never a pass.
+
+    `unavailable` and `fail` are distinct on purpose. A dependency with no client
+    yet has not failed — nothing was asked of it — and reporting it as `pass`
+    would be the lie this endpoint exists to prevent. Every one of them carries a
+    `detail` saying which phase brings the probe.
+    """
     body = client.get("/readyz").json()
-    assert body["status"] == "unavailable"
-    for check in body["checks"]:
+    unprobed = [c for c in body["checks"] if c["name"] in {"redis", "object_storage"}]
+    assert len(unprobed) == 2
+    for check in unprobed:
         assert check["status"] == "unavailable"
         assert check["detail"]
+
+    # Overall is never `pass` while anything is unprobed, so /readyz stays 503.
+    assert body["status"] != "pass"
+
+
+def test_readyz_actually_probes_postgres(client) -> None:
+    """From Phase 2 this is a real query, not a placeholder.
+
+    Either outcome is acceptable here — a developer without a database gets
+    `fail` — but `unavailable` is not: that would mean the probe silently went
+    back to not running.
+    """
+    postgres = next(
+        check for check in client.get("/readyz").json()["checks"] if check["name"] == "postgres"
+    )
+    assert postgres["status"] in {"pass", "fail"}
+
+
+def test_a_failed_probe_does_not_leak_connection_details(client, monkeypatch) -> None:
+    """A connection error names the host, the port and sometimes the role.
+
+    `/readyz` is typically unauthenticated, so none of that may reach the body
+    (NR-NF-06). The exception goes to the log; the response says "unreachable".
+    """
+    import apps.control_api.routers.health as health
+
+    class _Exploding:
+        def __call__(self):
+            raise OSError("could not connect to graphrec_app@db.internal:5432")
+
+    monkeypatch.setattr(client.app.state, "sessionmaker", _Exploding())
+    body = client.get("/readyz").json()
+    postgres = next(c for c in body["checks"] if c["name"] == "postgres")
+    assert postgres["status"] == "fail"
+    assert postgres["detail"] == "unreachable"
+    assert "db.internal" not in client.get("/readyz").text
+    assert "graphrec_app" not in client.get("/readyz").text
+    assert health.PROBE_TIMEOUT_SECONDS > 0
 
 
 def test_every_response_carries_a_request_id(client) -> None:

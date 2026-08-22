@@ -1,7 +1,7 @@
 # Phase 2 report — Identity, tenancy and authorization
 
 **Date:** 2026-08-22
-**Status:** Complete, with three items requiring a human (§6). **D5 is due before Phase 3.**
+**Status:** Complete. **D5, D11 and D12 were confirmed on 2026-08-22, all three as built, so no rework followed.** Four items still require a human (§6): the D6 route-prefix decision, two authority conflicts, and a CI run.
 
 ---
 
@@ -80,17 +80,41 @@ absent, so a platform handler that reaches for one fails loudly.
 
 ## 2. What was verified, and how
 
-**196 tests, all passing** against PostgreSQL 18.
+**199 tests, all passing** against PostgreSQL 18 locally, and the whole stack verified end to end on PostgreSQL 16 in Docker.
 
 | Gate | Result |
 |---|---|
 | `ruff check .` | clean |
-| `ruff format --check .` | 69 files formatted |
+| `ruff format --check .` | 73 files formatted |
 | `mypy graphrec apps` (strict) | no issues, 43 files |
-| `pytest -q` | 196 passed |
+| `pytest -q` | 199 passed |
 | `pytest -m isolation` | 37 passed |
 | `pytest -m authz` | 69 passed |
 | `alembic upgrade head` → `downgrade base` → `upgrade head` | clean, twice |
+
+### The stack runs, on the PostgreSQL version CI uses
+
+`docker compose up` now yields a healthy stack — the Phase 1 exit criterion that
+had never been checked, because no Docker daemon was available until now.
+Migrations `0001`–`0004` applied from scratch on **postgres:16-alpine**, which
+matters because every local run so far had been against PostgreSQL 18, and the
+four database roles, the `FORCE`d policies and the `SECURITY DEFINER` resolvers
+are exactly the kind of thing that differs across major versions. It did not.
+
+A 27-check end-to-end script then drove the real HTTP surface against the real
+database — registration, activation, sign-in, invitation, acceptance, replay
+refusal, all five gates, both realms, refresh rotation, sign-out idempotency and
+credential non-disclosure. All 27 passed. This is not a substitute for the test
+suite; it is a check that the suite's fixtures had not been quietly diverging
+from how the service actually assembles itself. **One finding came out of it
+that the suite could not have produced** — see §3, the `pending` tenant — because
+every authz test seeds an `active` tenant directly and so never exercised
+registration end to end.
+
+`/readyz` now runs a real bounded probe against PostgreSQL rather than reporting
+it unprobed, and a failed probe is logged and never echoed: the body says
+`unreachable`, with no host, port or role name in it (NR-NF-06). Pinned by
+`test_a_failed_probe_does_not_leak_connection_details`.
 
 ### The two required merge gates are now wired
 
@@ -133,8 +157,18 @@ tick. They are separate from `test` so a red run names the promise that broke.
   It needs the email-delivery question answered.
 - **Account recovery** (`rec_…`, dc.html L1036-1041). `recovery_tokens` exists
   in `0002`; no route uses it, for the same reason.
-- **`docker compose up` has still never run** — no Docker daemon in this
-  environment. Carried over unresolved from Phase 1.
+- **No route activates a `pending` tenant.** Registration yields `pending`, and
+  `pending` is not operable, so a self-registered tenant can sign in but every
+  authenticated route answers 403 `tenant_not_active`. This is a consequence of
+  the schema, not an omission in the routers:
+  `ck_tenants_active_requires_plan` (migration `0002`, from SRS §5.2.2 — "A
+  Tenant must reference one active Pricing Plan when activated") makes `active`
+  unreachable without a plan, and registration deliberately passes
+  `plan_id=None`, because choosing a plan is not the registrant's decision.
+  Activation is platform tenant management, which is **Phase 4**. Until then the
+  only way through is a direct database update. Pinned by
+  `test_a_freshly_registered_tenant_is_pending_and_cannot_work`, which will
+  start failing the moment a route can do it — which is the point.
 - **CI has still never executed.** Every gate in it has been run locally with
   the same commands, but no workflow run exists.
 - **Key rotation procedure.** The `kid`/JWKS machinery supports two keys; the
@@ -153,6 +187,14 @@ tick. They are separate from `test` so a red run names the promise that broke.
 | `invalid input syntax for type inet: "testclient"` | ASGI peer is not always an address | `_client_address` parses via `ipaddress.ip_address`, `None` on failure |
 | An unbound session opened per request | leftover `Depends(get_session)` in `current_tenant_principal` | removed |
 | `TCH003` on `datetime`/`uuid` in models and schemas | SQLAlchemy and Pydantic resolve annotations at runtime | per-file ignores, with the reason stated |
+| **The entire ORM layer was invisible to git** | an unanchored `models/` rule in `.gitignore` matched `graphrec/db/models/` as well as the artefact directory it was written for | anchored every artefact rule to the repo root |
+| **The containerised API had no signing key** | `secrets/` is gitignored and not in the image, so `TokenService` would start with no key | read-only bind mount in `docker-compose.yml`, plus a `.dockerignore` entry so it can never be baked into a layer |
+| `/readyz` reported `postgres` as unprobed | placeholder from Phase 1 | a real `asyncio.timeout`-bounded probe; failures logged, never echoed |
+
+The first of those is the one worth dwelling on. It was not a runtime bug and no
+test could have caught it: the code worked, the suite passed, and the files
+simply would not have been in the Phase 2 commit. It was found only by reading
+`git status` before committing rather than trusting it.
 
 ---
 
@@ -163,25 +205,29 @@ tick. They are separate from `test` so a red run names the promise that broke.
 | 0006 | Registration mints the tenant id, binds the context, then inserts |
 | 0007 | Invitations: stored digest, derived seven-day life, one-time return |
 | 0008 | Pre-credential lookups go through one narrow `SECURITY DEFINER` resolver |
-| 0009 | Tokens are EdDSA with a published JWKS — **Proposed, built to** |
+| 0009 | Tokens are EdDSA with a published JWKS — **Accepted; D5 confirmed 2026-08-22** |
 
 ---
 
 ## 6. Open items requiring a human
 
-### 6.1 Decisions taken by default — a departure from BUILD_PROMPT §2
+### 6.1 One decision still taken by default — a departure from BUILD_PROMPT §2
 
-BUILD_PROMPT says: *"Do not build past a gate on an unconfirmed decision."*
-Phase 2 was built past four of them, on the basis that each was a stated
-recommendation in the appendix and no route could be written without an answer.
-This is reported, not assumed to be acceptable.
+BUILD_PROMPT says: *"Do not build past a gate on an unconfirmed decision."* Phase
+2 built past four of them. **Three have since been confirmed** (2026-08-22), and
+each was confirmed as built, so no rework followed:
+
+| # | Confirmed as | Status |
+|---|---|---|
+| D5 | EdDSA (Ed25519) + published JWKS | Confirmed. ADR 0009 moved to Accepted. |
+| D11 | `STARTER` / `GROWTH` / `SCALE` | Confirmed. The `pricing_plans` seed in `0002` already carried these. |
+| D12 | snake_case on the wire | Confirmed. No schema change. |
+
+**D6 remains unconfirmed and has been built to.**
 
 | # | Taken as | Rework cost if answered differently |
 |---|---|---|
-| D5 | EdDSA + published JWKS | `graphrec/auth/tokens.py`, `scripts/gen_jwt_keys.py`, `routers/well_known.py`, the token settings block. **Due before Phase 3.** |
-| D6 | `/v1` and `/v1/platform/*` | Router prefixes and every test URL. Mechanical, wide. |
-| D11 | STARTER / GROWTH / SCALE | `pricing_plans` seed data in `0002`, and fixtures. Small. |
-| D12 | snake_case on the wire | `apps/control_api/schemas.py` and the console. Mechanical, wide. |
+| D6 | `/v1` and `/v1/platform/*` | Router prefixes and every test URL. Mechanical, but it widens with every phase, and Phase 3 adds the whole ingest surface. **This is the cheapest it will ever be.** |
 
 ### 6.2 Conflict: sign-in cannot identify a tenant from email alone
 
@@ -219,11 +265,8 @@ Phase 10 rather than a silent one.
 
 ### 6.5 Operational
 
-- No Docker daemon here, so `docker compose up` is unverified.
-- CI has never run. Someone with push access should confirm the six jobs go
-  green before Phase 3 relies on them.
-
----
+- **CI has still never run.** Someone with push access should confirm the seven
+  jobs go green before Phase 3 relies on them. This is now the only item here.
 
 ## 7. A note on tool output
 
