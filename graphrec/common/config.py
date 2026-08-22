@@ -62,10 +62,18 @@ class Settings(BaseSettings):
     postgres_app_password: SecretStr = SecretStr("graphrec_app_local_only")
     postgres_owner_user: str = "graphrec_owner"
     postgres_owner_password: SecretStr = SecretStr("graphrec_owner_local_only")
+    # A third role, for `/v1/platform/*`. It is granted only the tables the
+    # platform console renders, so a platform administrator cannot read a
+    # tenant's catalogue or its customers' behaviour even by mistake — there is
+    # no privilege to misuse (migration 0002).
+    postgres_platform_user: str = "graphrec_platform"
+    postgres_platform_password: SecretStr = SecretStr("graphrec_platform_local_only")
 
     db_pool_size: int = 10
     db_max_overflow: int = 5
     db_pool_timeout_seconds: int = 30
+    # Bounds how long a pooled connection carrying stale session state can live.
+    db_pool_recycle_seconds: int = 1_800
     db_statement_timeout_ms: int = 15_000
 
     # ------------------------------------------------------------ redis
@@ -102,6 +110,12 @@ class Settings(BaseSettings):
     jwt_issuer: str = "https://api.graphrec.example"
     access_token_ttl_seconds: int = 900
     refresh_token_ttl_seconds: int = 604_800
+    # Neither the SRS nor the prototype names a validity period for an
+    # invitation, so seven days is a derived default (ADR-0007). It is a setting
+    # rather than a literal because it is the kind of number an operator will
+    # want to shorten, and because "the earlier link stops working" (dc.html
+    # L1247) is a promise about revocation, not about expiry.
+    invitation_ttl_seconds: int = 604_800
 
     # ------------------------------------------------------------ credentials
 
@@ -224,6 +238,20 @@ class Settings(BaseSettings):
         )
 
     @computed_field  # type: ignore[prop-decorator]
+    @property
+    def platform_database_url(self) -> str:
+        """The `/v1/platform/*` connection. See `postgres_platform_user`."""
+        return str(
+            PostgresDsn.build(
+                scheme="postgresql+psycopg",
+                username=self.postgres_platform_user,
+                password=self.postgres_platform_password.get_secret_value(),
+                host=self.postgres_host,
+                port=self.postgres_port,
+                path=self.postgres_db,
+            )
+        )
+
     @property
     def owner_database_url(self) -> str:
         """Migration URL — the owner role. Never used to serve a request."""

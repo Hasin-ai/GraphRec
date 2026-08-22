@@ -67,13 +67,16 @@ yarn-error.log*
 *.h5
 *.pkl
 *.pickle
-data/
-datasets/
-snapshots/
-artifacts/
-models/
-checkpoints/
-exports/
+# Anchored to the repository root, every one of them. An unanchored `models/`
+# also matches `graphrec/db/models/`, which silently excludes the ORM layer from
+# every commit — found the hard way at the end of Phase 2.
+/data/
+/datasets/
+/snapshots/
+/artifacts/
+/models/
+/checkpoints/
+/exports/
 
 # ==========================================
 # Environment Variables & Secrets

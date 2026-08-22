@@ -7,7 +7,14 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastapi>=0.115,<0.116",
     "uvicorn[standard]>=0.32,<0.33",
-    "pydantic>=2.9,<3",
+    # `[email]` pulls in email-validator: an email is the account identifier here,
+    # and `EmailStr` normalises and validates it rather than each caller inventing
+    # its own regex.
+    "pydantic[email]>=2.9,<3",
+    # SQLAlchemy's async layer runs the sync DBAPI inside a greenlet. It is an
+    # optional extra of SQLAlchemy but a hard requirement for `create_async_engine`,
+    # so it is pinned here rather than acquired by luck.
+    "greenlet>=3.0",
     "pydantic-settings>=2.6,<3",
     "sqlalchemy>=2.0.36,<2.1",
     "alembic>=1.14,<1.15",
@@ -60,6 +67,17 @@ ignore = [
 known-first-party = ["graphrec", "apps"]
 
 [tool.ruff.lint.per-file-ignores]
+# Pydantic and FastAPI both resolve annotations at runtime — Pydantic to build a
+# model's validators, FastAPI to tell an async-generator dependency from a plain
+# coroutine. Names used in those annotations must be real imports; moving them
+# into a type-checking block raises `NameError` at import time.
+"apps/control_api/deps.py" = ["TCH001", "TCH002", "TCH003"]
+"apps/control_api/schemas.py" = ["TCH001", "TCH002", "TCH003"]
+"apps/control_api/routers/*" = ["TCH001", "TCH002", "TCH003"]
+# SQLAlchemy resolves `Mapped[...]` annotations at runtime against
+# `type_annotation_map`, so `datetime` and `uuid` must be real imports rather
+# than type-checking-only ones. Moving them breaks mapper configuration.
+"graphrec/db/models/*" = ["TCH003"]
 "tests/*" = ["S101"]
 # A test that pins a bound to the prototype reads better as one assertion with a
 # message naming the drift than as three anonymous ones.

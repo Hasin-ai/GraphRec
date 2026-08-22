@@ -1,6 +1,6 @@
 # The merge gate.
 #
-# Two jobs that are not negotiable, and are named so a red run says which
+# Four jobs that are not negotiable, and are named so a red run says which
 # promise broke:
 #
 #   * `parity` — the generated enums and the error catalogue still match the
@@ -8,10 +8,12 @@
 #     specification; this is the only thing that makes that literally true.
 #   * `migrations` — the baseline applies *and* reverses against a real
 #     PostgreSQL, and the runtime role still cannot bypass row-level security.
+#   * `isolation` — the runtime role cannot escape its tenant.
+#   * `authz` — the five authorization gates fire in order, and the tenant and
+#     platform realms cannot be crossed.
 #
-# `pytest -m isolation` is a required check from Phase 2 onward. It is wired up
-# now, while there is nothing for it to run, so that adding the first isolation
-# test does not also require someone to remember to add the gate.
+# The last two are required checks from Phase 2 onward, and are separate jobs
+# rather than part of `test` so that a red run says which promise broke.
 
 name: CI
 
@@ -150,6 +152,44 @@ jobs:
         # debate. Phase 1 covers the role privileges the policies rest on; the
         # cross-tenant row tests join it from Phase 2.
         run: pytest -m isolation -q
+
+  authz:
+    name: Authorization matrix (required)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: graphrec_owner
+          POSTGRES_PASSWORD: graphrec_owner_local_only
+          POSTGRES_DB: graphrec
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      GRAPHREC_POSTGRES_HOST: localhost
+      GRAPHREC_OWNER_DATABASE_URL: postgresql+psycopg://graphrec_owner:graphrec_owner_local_only@localhost:5432/graphrec
+      GRAPHREC_REQUIRE_DB: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - name: Signing keypair
+        run: python scripts/gen_jwt_keys.py --kid ci-1
+      - run: alembic upgrade head
+      - name: The five gates run in order, and the realms do not meet
+        # Separated from `test` for the same reason `isolation` is: a red run
+        # here names the broken promise. Isolation says a tenant cannot reach
+        # another tenant's rows; this says the gates in front of those rows fire
+        # in the right order — identity, tenant state, role, ownership, resource
+        # state — and that a foreign resource is a 404 and never a 403.
+        run: pytest -m authz -q
 
   migrations:
     name: Migrations apply and reverse
