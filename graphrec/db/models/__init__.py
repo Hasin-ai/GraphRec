@@ -8,6 +8,7 @@ two ever disagree, the migration is right and the model is the bug.
 from __future__ import annotations
 
 from graphrec.db.models.base import Base, TenantOwned
+from graphrec.db.models.credentials import ApiKey
 from graphrec.db.models.identity import (
     Invitation,
     PlatformUser,
@@ -25,6 +26,7 @@ from graphrec.db.models.subscription import (
 )
 
 __all__ = [
+    "ApiKey",
     "Base",
     "Invitation",
     "PlatformUser",

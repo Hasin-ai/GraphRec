@@ -19,7 +19,15 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from apps.control_api.errors import install_error_handlers
 from apps.control_api.middleware import BodyLimitMiddleware, RequestContextMiddleware
-from apps.control_api.routers import auth, health, platform_auth, tenants, users, well_known
+from apps.control_api.routers import (
+    api_keys,
+    auth,
+    health,
+    platform_auth,
+    tenants,
+    users,
+    well_known,
+)
 from graphrec.auth.tokens import TokenService
 from graphrec.common.config import Settings, get_settings
 from graphrec.common.logging import configure_logging, get_logger
@@ -127,6 +135,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     v1.include_router(auth.router)
     v1.include_router(tenants.router)
     v1.include_router(users.router)
+    v1.include_router(api_keys.router)
     v1.include_router(platform_auth.router)
     app.include_router(v1)
 

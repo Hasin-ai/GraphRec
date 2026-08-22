@@ -12,10 +12,11 @@ from __future__ import annotations
 
 import datetime as dt
 import uuid
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
-from graphrec.common.enums import TenantRole, UserStatus
+from graphrec.common.enums import CredentialScope, CredentialState, TenantRole, UserStatus
 
 
 class _Body(BaseModel):
@@ -173,3 +174,93 @@ class ChangeStatusRequest(_Body):
 
 class UserListResponse(BaseModel):
     users: list[UserResponse]
+
+
+# ------------------------------------------------------------- credentials
+
+
+class CreateCredentialRequest(_Body):
+    """The create dialog's three fields (dc.html L1134)."""
+
+    # No `min_length` on either field, deliberately. Pydantic would refuse an
+    # empty name or an empty scope list with its own generic wording ("List
+    # should have at least 1 item"), which would replace the prototype's copy
+    # at L1136 and L1137. Those strings are a requirement, so the emptiness
+    # checks belong in the service where the catalogue is reachable. The
+    # `max_length` bounds stay here: they are abuse limits, not product copy.
+    name: str = Field(max_length=100)
+    scopes: list[CredentialScope] = Field(max_length=12)
+    expires_in_days: Literal[90, 180, 365]
+
+
+class RotateCredentialRequest(_Body):
+    """The rotate dialog offers scopes only; grace is an API-only affordance.
+
+    `grace_seconds` defaults to 0, which is what makes the console's promise
+    that the old secret stops working literally true for every rotation the
+    console performs (dc.html L1145). ADR 0010.
+    """
+
+    scopes: list[CredentialScope] | None = Field(default=None, max_length=12)
+    grace_seconds: int = Field(default=0, ge=0, le=86_400)
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class CredentialResponse(BaseModel):
+    """One row of the credentials table. Carries no secret and no digest.
+
+    `state` is computed server-side against server time. The prototype derives
+    it client-side (L1107); a real client must not, because its clock is not
+    the one the expiry is measured against.
+    """
+
+    key_id: uuid.UUID
+    name: str
+    visible_prefix: str
+    scopes: list[CredentialScope]
+    state: CredentialState
+    expires_at: dt.datetime
+    revoked_at: dt.datetime | None
+    last_used_at: dt.datetime | None
+    created_at: dt.datetime
+    #: Gate-5 preconditions, so the console disables a control and shows the
+    #: server's reason rather than deciding for itself.
+    can_rotate: bool
+    can_revoke: bool
+    blocked_reason: str | None
+    #: Present only while a rotation grace window is open.
+    grace_expires_at: dt.datetime | None
+
+
+class IssuedCredentialResponse(BaseModel):
+    """The one-time secret payload, returned at creation and at rotation only.
+
+    This is the only response model in the system with a `secret` field. It is
+    never returned by a read route, and no other model may carry one — the
+    parity test in tests/isolation scans for exactly that.
+    """
+
+    credential: CredentialResponse
+    secret: str
+    #: Reproduced from the prototype's modal so the console does not restate it
+    #: (dc.html L561) and the API is self-describing for non-console callers.
+    notice: str = (
+        "This value is shown once. GraphRec does not retain it — "
+        "if it is lost, rotate the credential to obtain a new one."
+    )
+
+
+class CredentialListResponse(BaseModel):
+    credentials: list[CredentialResponse]
+
+
+class ScopeDescriptor(BaseModel):
+    """One entry of the scope catalogue behind `GET /v1/scopes`."""
+
+    scope: CredentialScope
+    label: str
+    short_label: str
+
+
+class ScopeListResponse(BaseModel):
+    scopes: list[ScopeDescriptor]

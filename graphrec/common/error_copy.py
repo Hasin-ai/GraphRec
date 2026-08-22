@@ -91,6 +91,10 @@ ERROR_COPY: dict[str, str] = {
     "user_already_disabled": "A disabled user is already unable to authenticate.",
     # ---------------------------------------------------------- credentials
     # L1137
+    # L1136
+    "credential_name_required": (
+        "Give the credential a name so it can be told apart in this list."
+    ),
     "credential_requires_scope": (
         "Select at least one integration operation. "
         "A credential with no scope cannot authorize anything."

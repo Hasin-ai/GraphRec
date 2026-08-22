@@ -24,7 +24,7 @@ handler holds an identifier and must turn "no row" into the right 404.
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator, Callable, Coroutine
+from collections.abc import AsyncIterator, Callable, Coroutine, Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, Any, TypeVar
 
@@ -34,11 +34,17 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from graphrec.auth.tokens import PlatformClaims, TenantClaims, TokenError, TokenService
-from graphrec.common.enums import PlatformPermission, TenantRole, TenantStatus
+from graphrec.common.enums import (
+    CredentialScope,
+    PlatformPermission,
+    TenantRole,
+    TenantStatus,
+)
 from graphrec.common.errors import AuthError, ErrorClass, GraphRecError, NotFoundError
 from graphrec.common.logging import actor_id_var, tenant_id_var
-from graphrec.db.models import PlatformUser, Tenant, TenantUser
+from graphrec.db.models import ApiKey, PlatformUser, Tenant, TenantUser
 from graphrec.db.tenant_context import bind_tenant
+from graphrec.domain.credentials import CredentialService
 
 if TYPE_CHECKING:
     from graphrec.common.config import Settings
@@ -96,6 +102,35 @@ class TenantPrincipal:
     @property
     def is_administrator(self) -> bool:
         return self.role == TenantRole.TENANT_ADMINISTRATOR.value
+
+
+@dataclass(frozen=True, slots=True)
+class CredentialPrincipal:
+    """An application authenticated by an API credential, not by a session.
+
+    A third realm, alongside tenant users and platform operators. It carries a
+    `tenant_id` like a tenant user does, but it carries **scopes instead of a
+    role**, and the two are not interchangeable: a role says which screens a
+    person may open, a scope says which operations a program may perform. There
+    is deliberately no `role` property here, so a handler cannot accidentally
+    treat a credential as an administrator.
+    """
+
+    api_key: ApiKey
+    scopes: frozenset[CredentialScope]
+    session: AsyncSession
+    used_grace_secret: bool
+
+    @property
+    def tenant_id(self) -> uuid.UUID:
+        return self.api_key.tenant_id
+
+    @property
+    def key_id(self) -> uuid.UUID:
+        return self.api_key.key_id
+
+    def has(self, scope: CredentialScope) -> bool:
+        return scope in self.scopes
 
 
 @dataclass(frozen=True, slots=True)
@@ -216,6 +251,62 @@ async def current_tenant_principal(
         yield TenantPrincipal(claims=claims, user=user, tenant=tenant, session=bound)
 
 
+# --------------------------------------- gate 1: identity, credential realm
+
+
+async def current_credential_principal(
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
+    settings: Annotated[Settings, Depends(get_settings_dep)],
+) -> AsyncIterator[CredentialPrincipal]:
+    """Gates 1 and 2 for the credential realm.
+
+    Same shape as the tenant realm and the same ordering guarantee: nothing
+    tenant-owned is read until the context is bound, and the context is bound
+    from the credential rather than from anything the caller asserted. The
+    difference is that the binding happens *inside* `CredentialService.verify`,
+    because resolving a prefix to a tenant is itself a pre-credential lookup.
+
+    A session token presented here is refused, exactly as an API credential
+    presented to a session route is refused. The realms do not meet.
+    """
+    presented = _bearer_token(credentials, "invalid_credentials")
+
+    service = CredentialService(
+        pepper=settings.api_key_hmac_pepper.get_secret_value(),
+        hash_version=settings.api_key_hash_version,
+        max_active_per_tenant=settings.max_active_api_keys_per_tenant,
+        max_scopes=settings.max_api_key_scopes,
+        max_name_length=settings.max_api_key_name_length,
+        max_grace_seconds=settings.max_api_key_grace_seconds,
+    )
+
+    sessionmaker = request.app.state.sessionmaker
+    async with sessionmaker() as bound, bound.begin():
+        verified = await service.verify(bound, presented=presented)
+
+        tenant = await bound.scalar(select(Tenant).where(Tenant.tenant_id == verified.tenant_id))
+        if tenant is None:
+            raise AuthError("invalid_credentials")
+
+        # ----------------------------------------- gate 2: tenant state
+        if not tenant.is_operable:
+            raise ForbiddenError("tenant_not_active")
+
+        tenant_id_var.set(str(verified.tenant_id))
+        # The credential, not a person, is the actor. Recorded as the key id so
+        # the audit trail names which credential acted — never the secret and
+        # never the prefix, which would put a live identifier into every log.
+        actor_id_var.set(str(verified.api_key.key_id))
+
+        yield CredentialPrincipal(
+            api_key=verified.api_key,
+            scopes=verified.scopes,
+            session=bound,
+            used_grace_secret=verified.used_grace_secret,
+        )
+
+
 async def current_platform_principal(
     request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
@@ -265,6 +356,7 @@ async def current_platform_principal(
 
 CurrentTenant = Annotated[TenantPrincipal, Depends(current_tenant_principal)]
 CurrentPlatform = Annotated[PlatformPrincipal, Depends(current_platform_principal)]
+CurrentCredential = Annotated[CredentialPrincipal, Depends(current_credential_principal)]
 
 
 # ------------------------------------------------- gate 3: role / permission
@@ -288,6 +380,58 @@ def require_role(
         return principal
 
     return _guard
+
+
+def require_scope(
+    *scopes: CredentialScope,
+) -> Callable[[CredentialPrincipal], Coroutine[Any, Any, CredentialPrincipal]]:
+    """Require **all** the named scopes. Gate 3 for the credential realm.
+
+    All rather than any, for the same reason `require_permission` intersects: a
+    route that declares two scopes is stating that it performs two kinds of
+    operation, and a credential holding one of them is not entitled to the
+    other. "Any of" would let a read-only credential reach a route that also
+    writes.
+
+    The refusal is the prototype's, at dc.html L1170: "Only the operations
+    granted to a credential may be performed with it. Anything else is rejected
+    before the operation is accepted." *Before it is accepted* is a promise
+    about ordering — the check runs ahead of the work, so a refused call has no
+    side effects and consumes no quota.
+    """
+    required = frozenset(scopes)
+
+    async def _guard(principal: CurrentCredential) -> CredentialPrincipal:
+        if not required.issubset(principal.scopes):
+            raise ForbiddenError("insufficient_scope")
+        return principal
+
+    return _guard
+
+
+def refuse_scope_delegation(
+    granted: frozenset[CredentialScope], requested: Iterable[CredentialScope]
+) -> None:
+    """A credential may never issue authority it does not itself hold.
+
+    This is the containment property that makes scopes worth having. Without
+    it, a credential holding only `events:write` could mint a second credential
+    holding `recommendations:read`, and the scope on the first one would be
+    advisory rather than binding — one compromised low-privilege credential
+    would escalate to every scope in the vocabulary.
+
+    In Phase 3 the credential-management routes are session-only, so no
+    credential reaches them and this function has no live call site on the
+    request path. It is written and tested now because the moment a
+    machine-to-machine provisioning route is added — and BACKEND_PLAN §12.3
+    anticipates one — the check has to already exist. A guard introduced at the
+    same time as the route it guards is a guard nobody reviews.
+    """
+    escalation = frozenset(requested) - granted
+    if escalation:
+        # The refusal never names which scope was over-reached. Naming it would
+        # confirm the vocabulary to a caller probing what else exists.
+        raise ForbiddenError("insufficient_scope")
 
 
 def require_permission(

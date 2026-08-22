@@ -9,17 +9,21 @@ gate that depends on it.
 | # | Decision | Status | Confirm before |
 |---|---|---|---|
 | D1 | Resource model: SRS-native vs AWS Personalize | **Confirmed — SRS-native** | Phase 2 |
-| D2 | Job queue: PostgreSQL `SKIP LOCKED` | Accepted | Phase 5 |
-| D3 | Serving: Compose + `ServingDriver` port | Accepted | Phase 10 |
+| D2 | Job queue: PostgreSQL `SKIP LOCKED` | Accepted | Phase 4 |
+| D3 | Serving: Compose + `ServingDriver` port | Accepted | Phase 11 |
 | D4 | Candidates: in-process exact top-K behind `CandidateIndex` | Accepted | Phase 10 |
 | D5 | Token signing: EdDSA + published JWKS | **Confirmed** (ADR 0009) | Phase 3 |
 | D6 | Versioning: `/v1` and `/v1/platform/*` | **Confirmed** | Phase 2 |
 | D7 | Body limits: per-endpoint, not global | **Proposed — built to** | Phase 1 |
-| D8 | Model lifecycle: seven states | Accepted | Phase 8 |
-| D9 | Product writes: POST + PUT + PATCH | Accepted | Phase 6 |
-| D10 | Pagination: limit/offset for console, cursor for volume | Accepted | Phase 6 |
-| D11 | Plans: STARTER / GROWTH / SCALE | **Confirmed** | Phase 4 |
+| D8 | Model lifecycle: seven states | Accepted | Phase 10 |
+| D9 | Product writes: POST + PUT + PATCH | Accepted | Phase 5 |
+| D10 | Pagination: limit/offset for console, cursor for volume | Accepted | Phase 5 |
+| D11 | Plans: STARTER / GROWTH / SCALE | **Confirmed** | Phase 2 |
 | D12 | Wire casing: snake_case | **Confirmed** | Phase 2 |
+
+The confirm-before column above was re-read against BUILD_PROMPT's appendix
+on 2026-08-22 and six rows were corrected; it had drifted, and D2's gate in
+particular was recorded a phase later than BUILD_PROMPT places it.
 
 D1 (SRS-native), D5, D6, D11 and D12 have been confirmed. Phase 2 was built on
 D1; D5, D6, D11 and D12 were built to ahead of confirmation and each matched
@@ -48,6 +52,15 @@ There is also a conflict the authorities do not resolve between them: the SRS
 specifies a Qdrant Vector Store Contract (§6.3), which outranks D4's in-process
 exact top-K. D4 is marked Accepted below on BACKEND_PLAN's authority, but the
 SRS is higher, so an explicit "defer Qdrant" decision is needed before Phase 10.
+
+## The next gate
+
+**D2 blocks Phase 4.** BUILD_PROMPT marks the phase 🛑 *"CONFIRM D2
+(Postgres queue) before starting"*, and Phase 4 **is** the queue — jobs
+claimed from a `jobs` table with `FOR UPDATE SKIP LOCKED` and fair-share
+ordering, rather than RabbitMQ and Celery behind a transactional outbox. D2 is
+marked Accepted above on BACKEND_PLAN's authority, but nobody has confirmed it,
+and §2 forbids building past the gate. Phase 4 is therefore not started.
 
 ## Open questions with no recommendation
 

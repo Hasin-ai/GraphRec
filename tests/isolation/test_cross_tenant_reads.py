@@ -27,6 +27,7 @@ TENANT_TABLES: tuple[str, ...] = (
     "quota_overrides",
     "refresh_sessions",
     "recovery_tokens",
+    "api_keys",
 )
 
 

@@ -1,9 +1,15 @@
-"""The two `SECURITY DEFINER` resolvers, and the blast radius they carry.
+"""The three `SECURITY DEFINER` resolvers, and the blast radius they carry.
 
-Migrations 0003 and 0004 punch two deliberate holes in default-deny: sign-in has
-to find a tenant from a code, and invitation acceptance has to find one from a
-token digest, and neither caller has a credential yet. Each hole is one function
-owned by a `NOLOGIN` role with column-level `SELECT` and a single `SELECT` policy.
+Migrations 0003, 0004 and 0005 punch three deliberate holes in default-deny:
+sign-in has to find a tenant from a code, invitation acceptance has to find one
+from a token digest, and API authentication has to find one from a credential
+prefix — and none of those callers has a verified credential yet. Each hole is
+one function owned by a `NOLOGIN` role with column-level `SELECT` and a single
+`SELECT` policy.
+
+The third is the widest, because it runs on every authenticated API request
+rather than once per sign-in, and it is therefore the one whose grants are worth
+re-reading.
 
 These tests pin the size of the hole. They are the reason a later "make it
 easier" edit — a table-level grant, a second policy, `EXECUTE` to `PUBLIC` —
@@ -25,6 +31,7 @@ LOOKUP_ROLE = "graphrec_lookup"
 RESOLVERS = (
     "tenant_lookup.resolve_tenant_code",
     "tenant_lookup.resolve_invitation",
+    "tenant_lookup.resolve_api_key_prefix",
 )
 
 
@@ -73,6 +80,14 @@ def test_the_lookup_role_holds_only_column_level_selects(owner_engine) -> None:
         ("tenants", "status", "SELECT"),
         ("invitations", "tenant_id", "SELECT"),
         ("invitations", "token_digest", "SELECT"),
+        # Three columns on `api_keys`, and `key_hash` is deliberately not among
+        # them. The resolver says which tenant owns a prefix; the secret is
+        # verified afterwards, inside that tenant's context, against the row
+        # read under its own policy. A resolver that could read the digest would
+        # be a resolver that could be made to leak it.
+        ("api_keys", "tenant_id", "SELECT"),
+        ("api_keys", "visible_prefix", "SELECT"),
+        ("api_keys", "previous_visible_prefix", "SELECT"),
     }
 
 
@@ -90,7 +105,11 @@ def test_the_lookup_policies_are_select_only(owner_engine) -> None:
                 {"r": LOOKUP_ROLE},
             )
         }
-    assert commands == {("tenants", "SELECT"), ("invitations", "SELECT")}
+    assert commands == {
+        ("tenants", "SELECT"),
+        ("invitations", "SELECT"),
+        ("api_keys", "SELECT"),
+    }
 
 
 def test_only_the_app_role_may_execute_a_resolver(owner_engine) -> None:
@@ -134,10 +153,16 @@ def test_the_resolvers_pin_their_search_path(owner_engine) -> None:
             assert any(entry.startswith("search_path=") for entry in config)
 
 
-def test_the_platform_role_cannot_call_a_resolver(app_engine, platform_engine) -> None:
-    """The hole is for the sign-in path, not for the platform realm."""
+@pytest.mark.parametrize("resolver", RESOLVERS)
+def test_the_platform_role_cannot_call_a_resolver(platform_engine, resolver: str) -> None:
+    """The holes are for the pre-credential paths, not for the platform realm.
+
+    Parametrised rather than looped so that a resolver added later without an
+    `EXECUTE` decision fails on its own line. A fresh connection per case
+    because the first refusal aborts the transaction.
+    """
     with platform_engine.connect() as conn, pytest.raises(sa.exc.ProgrammingError) as caught:
-        conn.execute(sa.text("SELECT tenant_lookup.resolve_tenant_code('ANY')"))
+        conn.execute(sa.text(f"SELECT {resolver}('anything')"))
     assert "permission denied" in str(caught.value).lower()
 
 
@@ -197,3 +222,89 @@ def test_the_resolver_reveals_nothing_for_an_unknown_digest(as_tenant, two_tenan
         d=f"digest-{uuid.uuid4().hex}",
     )
     assert result[0].tid is None
+
+
+# ------------------------------------------------------- the credential resolver
+
+
+def test_a_credential_is_unreadable_without_a_bound_context(
+    as_tenant, two_tenants, owner_engine
+) -> None:
+    """The same shape as the invitation case, on the hottest of the three paths.
+
+    An unbound `SELECT` on `api_keys` is the shortcut the resolver replaces. If
+    it ever returns a row, the resolver has stopped being the only way in and
+    every authenticated request has become a cross-tenant read waiting to
+    happen.
+    """
+    key_id = uuid.uuid4()
+    prefix = f"gr_live_{key_id.hex[:4].upper()}"
+    as_tenant(
+        two_tenants["alpha"],
+        "INSERT INTO api_keys (key_id, tenant_id, name, visible_prefix, key_hash, "
+        "hash_version, scopes, expires_at) VALUES (:k, :t, 'Isolation probe', :p, "
+        "'\\x00'::bytea, 1, ARRAY['events:write'], now() + interval '90 days') "
+        "RETURNING key_id",
+        k=key_id,
+        t=two_tenants["alpha"],
+        p=prefix,
+    )
+    try:
+        assert as_tenant(None, "SELECT key_id FROM api_keys") == []
+        assert (
+            as_tenant(
+                two_tenants["beta"],
+                "SELECT key_id FROM api_keys WHERE visible_prefix = :p",
+                p=prefix,
+            )
+            == []
+        )
+        # The resolver answers, and answers with the owning tenant rather than
+        # the caller's. The prefix is not a secret — it is printed in the
+        # console and in logs — so answering discloses nothing; what it must not
+        # do is answer with more than the tenant.
+        resolved = as_tenant(
+            two_tenants["beta"],
+            "SELECT tenant_lookup.resolve_api_key_prefix(:p) AS tid",
+            p=prefix,
+        )[0].tid
+        assert resolved == two_tenants["alpha"]
+    finally:
+        # No role holds DELETE on `api_keys` either, for the same reason: a
+        # credential that acted is part of the audit trail.
+        with owner_engine.begin() as conn, _force_lifted(conn, "api_keys"):
+            conn.execute(sa.text("DELETE FROM api_keys WHERE key_id = :k"), {"k": key_id})
+
+
+def test_the_credential_resolver_reveals_nothing_for_an_unknown_prefix(
+    as_tenant, two_tenants
+) -> None:
+    result = as_tenant(
+        two_tenants["alpha"],
+        "SELECT tenant_lookup.resolve_api_key_prefix(:p) AS tid",
+        p=f"gr_live_{uuid.uuid4().hex[:4].upper()}",
+    )
+    assert result[0].tid is None
+
+
+def test_no_role_may_delete_a_credential(owner_engine) -> None:
+    """BUILD_PROMPT, verbatim: *"`api_keys` gets no `DELETE`."*
+
+    Asserted against the grant rather than against behaviour, because a
+    behavioural test passes for as long as nothing happens to try it. Revocation
+    is `revoked_at`; a row that can be deleted is a row that can be deleted to
+    hide something.
+    """
+    with owner_engine.connect() as conn:
+        holders = {
+            row.grantee
+            for row in conn.execute(
+                sa.text(
+                    "SELECT grantee FROM information_schema.table_privileges "
+                    "WHERE table_name = 'api_keys' AND privilege_type = 'DELETE'"
+                )
+            )
+        }
+    # The owner holds it implicitly and is never in the request path; no granted
+    # role may.
+    assert holders - {"graphrec_owner"} == set(), f"DELETE on api_keys granted to {holders}"
