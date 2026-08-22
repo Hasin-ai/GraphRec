@@ -57,6 +57,10 @@ VERBATIM_AT_LINE: list[tuple[str, int, str]] = [
     ),
     ("credential_revoked", 1118, "Revoked credentials cannot be rotated."),
     ("product_already_disabled", 1331, "This product is already disabled."),
+    ("external_id_required", 1602, "An external product identifier is required."),
+    ("title_required", 1605, "A title is required."),
+    ("business_name_required", 1581, "A business name is required."),
+    ("email_required", 1234, "An email is required — it is the account identifier."),
     (
         "sync_id_required",
         1611,
@@ -179,6 +183,13 @@ TEMPLATED_AT_LINE: list[tuple[str, int, dict[str, object], str]] = [
         "or ask your platform contact about a quota override.",
     ),
     (
+        "product_already_exists",
+        1604,
+        {"external_product_id": "SKU-4471"},
+        "A product with identifier SKU-4471 already exists. "
+        "Use a different identifier or update the existing product.",
+    ),
+    (
         "product_sync_oversize",
         1612,
         {"limit": 5000},
@@ -291,13 +302,17 @@ def test_field_copy_is_verbatim(prototype_lines: list[str]) -> None:
         "product_already_exists": (1604, "Already exists in this tenant."),
         "tenant_name_already_registered": (1582, "Business name already registered."),
         "negative_limit": (1635, "Must be zero or greater."),
-        "business_name_required": (1581, "A business name is required."),
-        "external_id_required": (1602, "An external product identifier is required."),
-        "title_required": (1605, "A title is required."),
+        "business_name_required": (1581, "Enter the registered business name."),
+        "external_id_required": (1602, "Required."),
+        "title_required": (1605, "Required."),
         "email_required": (1234, "An email is required — it is the account identifier."),
         "confirmation_mismatch": (1593, "The two entries do not match."),
         "current_material_required": (1598, "Required to make this change."),
     }
+    # The banner half of the same failure lives in `ERROR_COPY` and is a
+    # different sentence; `VERBATIM_AT_LINE` pins those separately. Asserting
+    # both halves against the same prototype line is what catches the two being
+    # swapped, which is the mistake this test was written after.
     for code, (line_number, text) in expected.items():
         assert FIELD_ERROR_COPY[code] == text
         assert (

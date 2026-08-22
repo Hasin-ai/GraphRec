@@ -38,6 +38,13 @@ ERROR_COPY: dict[str, str] = {
     "token_revoked": (  # (derived) — refresh reuse revokes the whole chain
         "This session is no longer valid. Sign in again."
     ),
+    # L1581. The prototype separates the two halves of a field failure: the
+    # banner carries the sentence and the input carries a short marker. These
+    # entries are the banner half; `FIELD_ERROR_COPY` holds the other.
+    "business_name_required": "A business name is required.",
+    # L1234. This form renders one string and no banner, so the same sentence
+    # serves both slots.
+    "email_required": "An email is required — it is the account identifier.",
     # L1592
     "recovery_token_invalid": "It has expired or is not valid. Request a new one and try again.",
     "invitation_invalid": "It has expired or is not valid. Request a new one and try again.",
@@ -106,8 +113,19 @@ ERROR_COPY: dict[str, str] = {
         "Revoke a credential you no longer use before issuing another."
     ),
     # ---------------------------------------------------------- catalog
-    # L1604 (field) / the banner form
-    "product_already_exists": "a product with identifier {external_product_id} already exists",
+    # L1604. This entry previously carried `API.md`'s shorter phrasing — "a
+    # product with identifier … already exists" — which is a paraphrase of the
+    # console's, and `API.md` is not binding (BUILD_PROMPT §0). Corrected to what
+    # the prototype actually renders, second sentence included: it is the half
+    # that tells the tenant what to do next.
+    "product_already_exists": (
+        "A product with identifier {external_product_id} already exists. "
+        "Use a different identifier or update the existing product."
+    ),
+    # L1602
+    "external_id_required": "An external product identifier is required.",
+    # L1605
+    "title_required": "A title is required.",
     # L1603
     "product_quota_exhausted": (
         "This tenant holds {used} of {limit} products on plan {plan_code}. "
@@ -241,14 +259,18 @@ ERROR_COPY: dict[str, str] = {
 
 
 #: Field-level copy, keyed by `code`. The console renders these beside the input
-#: rather than in the banner.
+#: rather than in the banner, and they are a **different string** from the
+#: banner's: `err({body:'An external product identifier is required.'},
+#: {id:'Required.'})` at L1602 puts the sentence in the banner and the marker in
+#: the input. Three entries here previously held the banner half, which would
+#: have rendered the whole sentence twice on one screen.
 FIELD_ERROR_COPY: dict[str, str] = {
     "product_already_exists": "Already exists in this tenant.",  # L1604
     "tenant_name_already_registered": "Business name already registered.",  # L1582
     "negative_limit": "Must be zero or greater.",  # L1635
-    "business_name_required": "A business name is required.",  # L1581
-    "external_id_required": "An external product identifier is required.",  # L1602
-    "title_required": "A title is required.",  # L1605
+    "business_name_required": "Enter the registered business name.",  # L1581
+    "external_id_required": "Required.",  # L1602
+    "title_required": "Required.",  # L1605
     "email_required": "An email is required — it is the account identifier.",  # L1234
     "confirmation_mismatch": "The two entries do not match.",  # L1593
     "current_material_required": "Required to make this change.",  # L1598

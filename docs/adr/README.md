@@ -16,8 +16,8 @@ gate that depends on it.
 | D6 | Versioning: `/v1` and `/v1/platform/*` | **Confirmed** | Phase 2 |
 | D7 | Body limits: per-endpoint, not global | **Proposed — built to** | Phase 1 |
 | D8 | Model lifecycle: seven states | Accepted | Phase 10 |
-| D9 | Product writes: POST + PUT + PATCH | Accepted | Phase 5 |
-| D10 | Pagination: limit/offset for console, cursor for volume | Accepted | Phase 5 |
+| D9 | Product writes: POST + PUT + PATCH | **Confirmed — by instruction** (ADR 0012) | Phase 5 |
+| D10 | Pagination: limit/offset for console, cursor for volume | **Confirmed — by instruction** (ADR 0013) | Phase 5 |
 | D11 | Plans: STARTER / GROWTH / SCALE | **Confirmed** | Phase 2 |
 | D12 | Wire casing: snake_case | **Confirmed** | Phase 2 |
 
@@ -64,12 +64,18 @@ outbox — and recorded in **ADR 0011** as *confirmed by instruction to proceed*
 That is a weaker confirmation than an explicit answer, and it is named as such
 here rather than dressed up as one.
 
-**D9 and D10 gate Phase 5** — 🛑 *"CONFIRM D9 (write model) and D10
-(pagination)"*. They are being treated the same way: built to the recommended
-option, recorded as ADRs marked *confirmed by instruction to proceed*. Both are
-cheaper to revisit than D2 was — D9 adds or removes a verb on one resource, D10
-adds or removes a parameter on a list — so if either answer differs from the
-recommendation, say so and it will be changed.
+**D9 and D10 are closed.** Both were treated the way D2 was: BUILD_PROMPT marks
+Phase 5 🛑 *"CONFIRM D9 (write model) and D10 (pagination)"*, the instruction to
+complete Phases 4–8 was given without separate answers, so both were built to
+BUILD_PROMPT's own recommendation and recorded as **ADR 0012** and **ADR 0013**,
+marked *confirmed by instruction to proceed*. As with D2 that is a weaker
+confirmation than an explicit answer and is named as such rather than dressed up
+as one. Both remain cheap to revisit — D9 adds or removes a verb on one
+resource, D10 a parameter on a list.
+
+**Nothing gates Phase 6.** BUILD_PROMPT marks no 🛑 on ingestion. The next gate
+after that is D4, before Phase 10, and it is the one with an unresolved conflict
+of authorities above.
 
 ## Open questions with no recommendation
 

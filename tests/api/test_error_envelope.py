@@ -101,8 +101,18 @@ def test_each_class_maps_to_its_status(error_client, path, status, error_class) 
 
 
 def test_reason_is_the_approved_copy(error_client) -> None:
+    """The console's sentence, not `API.md`'s shorter paraphrase of it.
+
+    This assertion previously held the paraphrase. `API.md` is not binding
+    (BUILD_PROMPT §0) and the prototype is; the second sentence is the half that
+    tells the tenant what to do next, and dropping it is exactly the drift the
+    copy catalogue exists to prevent. See dc.html L1604.
+    """
     body = error_client.get("/v1/_test/conflict").json()["error"]
-    assert body["reason"] == "a product with identifier SKU-4471 already exists"
+    assert body["reason"] == (
+        "A product with identifier SKU-4471 already exists. "
+        "Use a different identifier or update the existing product."
+    )
 
 
 def test_limit_error_names_the_numbers(error_client) -> None:

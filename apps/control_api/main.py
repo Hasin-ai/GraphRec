@@ -24,6 +24,7 @@ from apps.control_api.routers import (
     auth,
     health,
     platform_auth,
+    products,
     tenants,
     users,
     well_known,
@@ -136,6 +137,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     v1.include_router(tenants.router)
     v1.include_router(users.router)
     v1.include_router(api_keys.router)
+    v1.include_router(products.router)
     v1.include_router(platform_auth.router)
     app.include_router(v1)
 

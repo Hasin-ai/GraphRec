@@ -11,12 +11,19 @@ Field names are snake_case on the wire (D11). Two rules hold throughout:
 from __future__ import annotations
 
 import datetime as dt
+import decimal
 import uuid
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
-from graphrec.common.enums import CredentialScope, CredentialState, TenantRole, UserStatus
+from graphrec.common.enums import (
+    Availability,
+    CredentialScope,
+    CredentialState,
+    TenantRole,
+    UserStatus,
+)
 
 
 class _Body(BaseModel):
@@ -264,3 +271,107 @@ class ScopeDescriptor(BaseModel):
 
 class ScopeListResponse(BaseModel):
     scopes: list[ScopeDescriptor]
+
+
+# ----------------------------------------------------------------- catalog
+#
+# Field names follow the prototype's own catalogue payload (dc.html L1173):
+# `external_id`, `title`, `category`, `brand`, `price`, `active`,
+# `availability`. Not `external_product_id` / `is_active`, which are the column
+# names — the wire vocabulary is the one the integration page publishes, and
+# Phase 6's bulk endpoint has to accept the same words as this one.
+
+
+class ProductBody(_Body):
+    """The writable fields. Used by `PUT` and, with everything omitted, `PATCH`.
+
+    No `min_length` on `title`, deliberately, and none on `external_id` below:
+    Pydantic would refuse an empty value with its own generic wording, which
+    would replace the prototype's copy at L1602 and L1605. Those strings are a
+    requirement, so emptiness is checked in the service where the approved
+    catalogue is reachable. The `max_length` bounds stay here — they are abuse
+    limits, not product copy.
+
+    `price` is a `Decimal`, and is carried on the wire as a string ("8.40",
+    L1173). A float price is a price that cannot be represented exactly, and it
+    is the number a tenant is eventually billed against.
+    """
+
+    title: str | None = Field(default=None, max_length=500)
+    category: str | None = Field(default=None, max_length=120)
+    brand: str | None = Field(default=None, max_length=200)
+    price: decimal.Decimal | None = Field(default=None, max_digits=12, decimal_places=2)
+    active: bool | None = None
+    availability: Availability | None = None
+    description: str | None = Field(default=None, max_length=8000)
+    attributes: dict[str, Any] | None = Field(default=None)
+
+
+class CreateProductRequest(ProductBody):
+    """`POST /v1/products` — the Add product form (L1319-L1324)."""
+
+    external_id: str = Field(default="", max_length=120)
+
+
+class DisableProductRequest(_Body):
+    """The disable dialog's one field (L1341).
+
+    Unbounded below for the same reason as above: the four-character floor is
+    enforced in the service so the refusal is L1342's sentence.
+    """
+
+    reason: str = Field(default="", max_length=500)
+
+
+class ProductResponse(BaseModel):
+    """One product, as both the table row and the detail page need it.
+
+    `eligible` and `exclusion_reason` are computed by the database, not by the
+    console: the prototype derives its `served` / `ineligible` badge client-side
+    (L1307) and a real client must not, because the rule that decides it is the
+    same one the serving path applies and the two must never disagree.
+    """
+
+    external_id: str
+    title: str
+    category: str | None
+    brand: str | None
+    price: decimal.Decimal | None
+    active: bool
+    availability: Availability
+    description: str | None
+    attributes: dict[str, Any]
+
+    #: L1307's badge: `served` when true, `ineligible` when false.
+    eligible: bool
+    #: The machine-readable reason — `product_out_of_stock`, `product_inactive`,
+    #: `product_removed` — or null when the product serves.
+    ineligibility: str | None
+    #: L1302's `sub`: the sentence rendered under the title, or null. A client
+    #: must not assemble this from `ineligibility`; that would be a second copy
+    #: of the wording.
+    exclusion_reason: str | None
+
+    #: Gate-5 precondition for the Disable action, with the prototype's own
+    #: reason for the disabled control (L1332).
+    can_disable: bool
+    blocked_reason: str | None
+
+    disabled_reason: str | None
+    disabled_at: dt.datetime | None
+    created_at: dt.datetime
+    updated_at: dt.datetime
+
+
+class ProductListResponse(BaseModel):
+    """D10: limit/offset with a **total**.
+
+    The total is not optional. The catalogue table renders "8 of 12"
+    (`count: list.length + ' of ' + s.products.length`, L1316), and a cursor
+    cannot produce the second number.
+    """
+
+    products: list[ProductResponse]
+    total: int
+    limit: int
+    offset: int
