@@ -13,7 +13,7 @@ gate that depends on it.
 | D3 | Serving: Compose + `ServingDriver` port | Accepted | Phase 10 |
 | D4 | Candidates: in-process exact top-K behind `CandidateIndex` | Accepted | Phase 10 |
 | D5 | Token signing: EdDSA + published JWKS | **Confirmed** (ADR 0009) | Phase 3 |
-| D6 | Versioning: `/v1` and `/v1/platform/*` | **Proposed — built to** | Phase 2 |
+| D6 | Versioning: `/v1` and `/v1/platform/*` | **Confirmed** | Phase 2 |
 | D7 | Body limits: per-endpoint, not global | **Proposed — built to** | Phase 1 |
 | D8 | Model lifecycle: seven states | Accepted | Phase 8 |
 | D9 | Product writes: POST + PUT + PATCH | Accepted | Phase 6 |
@@ -21,15 +21,28 @@ gate that depends on it.
 | D11 | Plans: STARTER / GROWTH / SCALE | **Confirmed** | Phase 4 |
 | D12 | Wire casing: snake_case | **Confirmed** | Phase 2 |
 
-D1 (SRS-native), D5, D11 and D12 have been confirmed. Phase 2 was built on
-D1, and D5/D11/D12 were built to ahead of confirmation and matched what was
-confirmed, so no rework followed.
+D1 (SRS-native), D5, D6, D11 and D12 have been confirmed. Phase 2 was built on
+D1; D5, D6, D11 and D12 were built to ahead of confirmation and each matched
+what was later confirmed, so no rework followed.
 
-**D6 remains unconfirmed and has been built to.** Every route under `/v1` and
-`/v1/platform/*` assumes it. This is a departure from BUILD_PROMPT §2, which
-says not to build past a gate on an unconfirmed decision; it is reported rather
-than assumed. The rework is mechanical but wide — router prefixes and every
-test URL — and it gets more expensive with each phase.
+**No decision is now being built past unconfirmed.** That closes the departure
+from BUILD_PROMPT §2 that Phases 1 and 2 carried. D7 is still marked *Proposed
+— built to*, but its confirm-before was Phase 1 and it constrains request
+handling rather than any interface, so it is recorded here rather than blocking.
+
+D6 was confirmed as the recommendation: everything under `/v1`, platform-realm
+endpoints under `/v1/platform/*`. It answers both problems in the recovered
+inventory — unversioned paths, and two same-named resources in different realms.
+The second is the one that matters and the one a later change could not undo
+cheaply: `GET /tenants` means "every tenant on the platform" to an operator and
+"my own tenant" to a customer, and the prefix is what keeps those apart. That
+collision first becomes real in Phase 4, with platform tenant management.
+
+The versioning half, by contrast, was measured rather than estimated: stripping
+the prefix is one constant in `apps/control_api/main.py` plus one substitution
+across the 97 `/v1` literals in six test files, and the suite passes unchanged.
+It is reversible at any phase, so the earlier claim that it grew more expensive
+over time was wrong.
 
 There is also a conflict the authorities do not resolve between them: the SRS
 specifies a Qdrant Vector Store Contract (§6.3), which outranks D4's in-process

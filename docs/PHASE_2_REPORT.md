@@ -1,7 +1,7 @@
 # Phase 2 report — Identity, tenancy and authorization
 
 **Date:** 2026-08-22
-**Status:** Complete. **D5, D11 and D12 were confirmed on 2026-08-22, all three as built, so no rework followed.** Four items still require a human (§6): the D6 route-prefix decision, two authority conflicts, and a CI run.
+**Status:** Complete. **D5, D6, D11 and D12 were all confirmed on 2026-08-22, each as built, so no rework followed — no decision is being built past unconfirmed any longer.** Three items still require a human (§6): two authority conflicts, and a CI run.
 
 ---
 
@@ -211,23 +211,34 @@ simply would not have been in the Phase 2 commit. It was found only by reading
 
 ## 6. Open items requiring a human
 
-### 6.1 One decision still taken by default — a departure from BUILD_PROMPT §2
+### 6.1 The gate departure is closed
 
-BUILD_PROMPT says: *"Do not build past a gate on an unconfirmed decision."* Phase
-2 built past four of them. **Three have since been confirmed** (2026-08-22), and
-each was confirmed as built, so no rework followed:
+BUILD_PROMPT §2 says: *"Do not build past a gate on an unconfirmed decision."*
+Phases 1 and 2 built past four. **All four have now been confirmed (2026-08-22),
+and every one was confirmed as built**, so no rework followed:
 
-| # | Confirmed as | Status |
+| # | Confirmed as | Consequence |
 |---|---|---|
-| D5 | EdDSA (Ed25519) + published JWKS | Confirmed. ADR 0009 moved to Accepted. |
-| D11 | `STARTER` / `GROWTH` / `SCALE` | Confirmed. The `pricing_plans` seed in `0002` already carried these. |
-| D12 | snake_case on the wire | Confirmed. No schema change. |
+| D5 | EdDSA (Ed25519) + published JWKS | ADR 0009 moved to Accepted. No code change. |
+| D6 | `/v1`, platform under `/v1/platform/*` | No code change. |
+| D11 | `STARTER` / `GROWTH` / `SCALE` | The `pricing_plans` seed in `0002` already carried these. |
+| D12 | snake_case on the wire | No schema change. |
 
-**D6 remains unconfirmed and has been built to.**
+Phase 3 therefore starts with no decision outstanding — the first phase of which
+that is true.
 
-| # | Taken as | Rework cost if answered differently |
-|---|---|---|
-| D6 | `/v1` and `/v1/platform/*` | Router prefixes and every test URL. Mechanical, but it widens with every phase, and Phase 3 adds the whole ingest surface. **This is the cheapest it will ever be.** |
+**A correction belongs here.** Phase 2's report said the D6 rework "gets more
+expensive with each phase." That was wrong for the versioning half, and the
+claim was never measured. It has been now: `API_PREFIX` is a single constant in
+`apps/control_api/main.py`, the 97 `/v1` literals live in six test files, and
+one substitution across both leaves all 199 tests passing. That cost does not
+grow. What genuinely could not have been undone cheaply is the realm split —
+`GET /tenants` means "every tenant" to an operator and "my own tenant" to a
+customer, and the prefix is what separates them, from Phase 4 onward.
+
+D7 (per-endpoint body limits) remains *Proposed — built to*. Its confirm-before
+was Phase 1 and it constrains request handling rather than any interface, so it
+is recorded rather than treated as blocking.
 
 ### 6.2 Conflict: sign-in cannot identify a tenant from email alone
 
