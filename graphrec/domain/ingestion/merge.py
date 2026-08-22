@@ -326,6 +326,21 @@ _WINNERS = f"""
 """
 
 
+async def count_staged(session: AsyncSession, *, submission_id: uuid.UUID) -> int:
+    """How many items survived validation and are waiting to be merged.
+
+    The event quota is checked against this rather than against the submitted
+    count: an item the validator already rejected will never become a row, and
+    charging a tenant's allowance for it would mean a malformed file costs the
+    same as a good one.
+    """
+    total = await session.scalar(
+        sa.text("SELECT count(*) FROM ingest_staging_items WHERE submission_id = :submission_id"),
+        {"submission_id": submission_id},
+    )
+    return int(total or 0)
+
+
 async def count_new_products(session: AsyncSession, *, submission_id: uuid.UUID) -> int:
     """How many staged winners name a product that does not exist yet.
 

@@ -46,6 +46,9 @@ from graphrec.domain.ingestion.validation import (
     normalise_product,
     reference_for,
 )
+from graphrec.domain.metering import counters as counter_ops
+from graphrec.domain.metering import ledger, quota
+from graphrec.domain.metering.periods import current_period
 from graphrec.jobs.failures import JobCancelled, PermanentJobError, classify
 
 if TYPE_CHECKING:
@@ -250,13 +253,16 @@ async def _merge(
     await ctx.stage(SubmissionStatus.APPLYING.value, submission_id=str(submission.submission_id))
 
     if kind is SubmissionKind.EVENT_BATCH:
-        return await merges.merge_events(
+        await _assert_event_quota(ctx, submission=submission, now=now)
+        counts = await merges.merge_events(
             ctx.session,
             tenant_id=ctx.tenant_id,
             submission_id=submission.submission_id,
             now=now,
             recorder=recorder,
         )
+        await _meter_events(ctx, submission=submission, counts=counts, now=now)
+        return counts
 
     await _assert_product_quota(ctx, submission=submission, now=now)
     return await merges.merge_products(
@@ -269,6 +275,63 @@ async def _merge(
         == SYNC_MODE_UPSERT_AND_DISABLE_MISSING,
         recorder=recorder,
     )
+
+
+async def _assert_event_quota(ctx: JobContext, *, submission: Submission, now: dt.datetime) -> None:
+    """Refuse a batch that would take the tenant past their event allowance.
+
+    Measured against the staged items rather than the submitted count, so items
+    already rejected by validation are not charged for. As with products, the
+    batch fails **whole**: applying the first n events and refusing the rest
+    would leave a tenant unable to say which of their events we hold.
+
+    A repeat of a batch we already merged never reaches here — `submissions`
+    confirms the duplicate before a job is enqueued (L1355) — so this cannot
+    refuse a retry on the strength of the usage that same retry produced.
+    """
+    await quota.assert_within(
+        ctx.session,
+        ctx.counters,
+        tenant_id=ctx.tenant_id,
+        usage_type=UsageType.EVENTS,
+        requested=await merges.count_staged(ctx.session, submission_id=submission.submission_id),
+        now=now,
+    )
+
+
+async def _meter_events(
+    ctx: JobContext, *, submission: Submission, counts: MergeCounts, now: dt.datetime
+) -> None:
+    """Charge for the events that became rows, and nothing else.
+
+    `accepted` only. A skipped duplicate created no row and is not billable —
+    the submission reports it as a success to the tenant (L1175), but a success
+    that consumed no capacity. A failed item is not charged for the same reason.
+
+    Written on the merge's own transaction, keyed by the submission, so a job
+    that crashes after the merge and is retried re-attempts one grant rather
+    than adding a second.
+    """
+    if counts.accepted <= 0:
+        return
+
+    written = await ledger.grant(
+        ctx.session,
+        tenant_id=ctx.tenant_id,
+        usage_type=UsageType.EVENTS,
+        quantity=counts.accepted,
+        idempotency_key=f"submission:{submission.submission_id}",
+        occurred_at=now,
+        source_ref=str(submission.submission_id),
+    )
+    if written:
+        await counter_ops.note_granted(
+            ctx.counters,
+            tenant_id=ctx.tenant_id,
+            usage_type=UsageType.EVENTS,
+            period=current_period(now),
+            quantity=counts.accepted,
+        )
 
 
 async def _assert_product_quota(

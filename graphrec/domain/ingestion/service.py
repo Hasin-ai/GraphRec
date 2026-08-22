@@ -32,12 +32,15 @@ from typing import TYPE_CHECKING, Any
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 
-from graphrec.common.enums import SubmissionKind, SubmissionStatus
+from graphrec.common.enums import SubmissionKind, SubmissionStatus, UsageType
 from graphrec.common.error_copy import resolve_field_copy, resolve_item_copy
 from graphrec.common.errors import NotFoundError, ValidationError
 from graphrec.common.ids import uuid7
 from graphrec.db.models import Customer, InteractionEvent, Product, Submission, SubmissionError
 from graphrec.domain.ingestion.validation import ItemInvalid, normalise_event
+from graphrec.domain.metering import counters as counter_ops
+from graphrec.domain.metering import ledger, quota
+from graphrec.domain.metering.periods import current_period
 from graphrec.jobs.queue import JobQueue
 from graphrec.jobs.states import JobType
 
@@ -48,6 +51,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from graphrec.db.models import Job
+    from graphrec.domain.metering.counters import UsageCounters
 
 #: A bounded collection that is too large is a `413`, not a `422`. The
 #: distinction matters to a client: a 422 says "this request is wrong", a 413
@@ -153,6 +157,7 @@ class IngestionService:
     async def record_event(
         self,
         session: AsyncSession,
+        counters: UsageCounters,
         *,
         tenant_id: uuid.UUID,
         raw: dict[str, Any],
@@ -186,6 +191,20 @@ class IngestionService:
             return EventOutcome(
                 event=existing, duplicate=True, first_received_at=existing.received_at
             )
+
+        # After the duplicate check, deliberately. A tenant at their limit
+        # retrying an event we already hold must get the same confirmation as
+        # before, not a 429 — the retry consumes nothing, so there is nothing to
+        # refuse. Before the insert, equally deliberately: the check and the row
+        # it guards share this transaction (ER-F-11, BUILD_PROMPT 7.5).
+        await quota.assert_within(
+            session,
+            counters,
+            tenant_id=tenant_id,
+            usage_type=UsageType.EVENTS,
+            requested=1,
+            now=now,
+        )
 
         occurred_at = dt.datetime.fromisoformat(item["occurred_at"])
         customer = await self._customer(session, tenant_id=tenant_id, item=item, when=occurred_at)
@@ -226,7 +245,52 @@ class IngestionService:
             return EventOutcome(
                 event=settled, duplicate=True, first_received_at=settled.received_at
             )
+
+        # Metered on the same transaction that wrote the event. The key is the
+        # tenant's own event identifier, so a retry that lands here after a
+        # rollback re-attempts the same grant and the ledger absorbs it.
+        await self._meter_events(
+            session,
+            counters,
+            tenant_id=tenant_id,
+            quantity=1,
+            key=f"event:{item['external_event_id']}",
+            source_ref=item["external_event_id"],
+            now=now,
+        )
         return EventOutcome(event=event, duplicate=False)
+
+    @staticmethod
+    async def _meter_events(
+        session: AsyncSession,
+        counters: UsageCounters,
+        *,
+        tenant_id: uuid.UUID,
+        quantity: int,
+        key: str,
+        source_ref: str | None,
+        now: dt.datetime,
+    ) -> None:
+        """Grant event usage, and move the counter only if the grant was new."""
+        if quantity <= 0:
+            return
+        written = await ledger.grant(
+            session,
+            tenant_id=tenant_id,
+            usage_type=UsageType.EVENTS,
+            quantity=quantity,
+            idempotency_key=key,
+            occurred_at=now,
+            source_ref=source_ref,
+        )
+        if written:
+            await counter_ops.note_granted(
+                counters,
+                tenant_id=tenant_id,
+                usage_type=UsageType.EVENTS,
+                period=current_period(now),
+                quantity=quantity,
+            )
 
     def _validate_single(self, raw: dict[str, Any], *, now: dt.datetime) -> dict[str, Any]:
         """Turn a per-item verdict into a request-level 422.

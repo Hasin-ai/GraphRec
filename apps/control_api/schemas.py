@@ -24,6 +24,7 @@ from graphrec.common.enums import (
     SubmissionKind,
     SubmissionStatus,
     TenantRole,
+    UsageType,
     UserStatus,
 )
 
@@ -511,3 +512,99 @@ class SubmissionResponse(BaseModel):
     #: Set only when the submission itself failed, as opposed to individual
     #: items failing within a submission that completed.
     failure_code: str | None = None
+
+
+# ------------------------------------------------------------------- metering
+
+
+class UsagePeriodBody(BaseModel):
+    """The window the usage table is reporting on (BACKEND_PLAN L1186)."""
+
+    start: dt.date
+    end: dt.date
+    #: "monthly · resets 2026-09-01" — the same string the accumulated rows
+    #: carry in their own `reset` field, hoisted so the page header can say it
+    #: once (dc.html L710).
+    label: str
+
+
+class UsageItemBody(BaseModel):
+    """One row of the usage table.
+
+    Three fields are nullable and all three are nullable for the same reason.
+    `measured` is `null` when we could not measure; `remaining` is `null` when
+    either side of the subtraction is unknown; `effective_limit` is `null` when
+    the type is not bounded at all. The console renders each as a phrase — "not
+    calculable", "unavailable" — never as a zero (L1806, footnote L1824).
+
+    A client that coalesces any of these to `0` has reintroduced exactly the
+    defect this contract exists to prevent.
+    """
+
+    usage_type: UsageType
+    measured: decimal.Decimal | None
+    effective_limit: int | None
+    remaining: int | None
+    #: "monthly · resets 2026-09-01" / "no reset · standing limit" / "continuous".
+    reset: str
+    #: `measured` | `measurement delayed` | `unavailable` — the label, not the
+    #: enum name, because it is rendered directly into a tag (L1818).
+    measurement_status: str
+    #: `plan` or `override`. The console needs to say which, because a tenant
+    #: looking at a number above their plan's figure should see why (L1195).
+    limit_source: Literal["plan", "override"]
+
+
+class UsageResponse(BaseModel):
+    period: UsagePeriodBody
+    items: list[UsageItemBody]
+    #: Present only when some row is not measured. Approved copy (L1824), sent
+    #: by the server so the console does not compose its own explanation of a
+    #: gap it cannot see the cause of.
+    footnote: str | None = None
+
+
+class UsageTrendRowBody(BaseModel):
+    """One period of the trend panel (L1818).
+
+    `quantities` is keyed by usage type rather than being four named columns, so
+    a fifth trended type does not become a wire change. Values are nullable for
+    the usual reason: a period that was never rolled up has no number, and
+    saying so is the point.
+    """
+
+    period: str
+    #: "2026-08 (current)" for the open period, "2026-07" for a closed one.
+    label: str
+    quantities: dict[UsageType, decimal.Decimal | None]
+
+
+class UsageTrendsResponse(BaseModel):
+    rows: list[UsageTrendRowBody]
+
+
+class EntitlementBody(BaseModel):
+    """What one usage type is allowed, and what the plan alone would allow.
+
+    Both numbers, because an override is otherwise invisible: a tenant sees a
+    limit that does not match the plan they are on and has no way to tell
+    whether the plan is wrong or an exception is in force (L1450, L1459).
+    """
+
+    usage_type: UsageType
+    plan_limit: int | None
+    effective_limit: int | None
+    limit_source: Literal["plan", "override"]
+
+
+class SubscriptionResponse(BaseModel):
+    """The plan, read-only.
+
+    There is no write counterpart and there will not be one. ROUTES L178: plan
+    assignment is UC-28, a platform action; "Plan appears read-only on /usage."
+    """
+
+    plan_code: str
+    plan_name: str
+    description: str | None
+    entitlements: list[EntitlementBody]

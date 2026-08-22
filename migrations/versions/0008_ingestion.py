@@ -53,7 +53,7 @@ TENANT_GUC = "app.tenant_id"
 
 #: `graphrec/common/enums.py::EventType`, generated from the prototype's event
 #: form (dc.html L1370). Repeated because a migration cannot import application
-#: code, and pinned by a contract test that compares the two.
+#: code, and pinned by `tests/contract/test_migration_literals.py`.
 EVENT_TYPES = ("view", "add_to_cart", "purchase", "remove_from_cart")
 
 #: `SubmissionKind`. The console labels these "product sync" and "event batch";

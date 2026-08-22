@@ -28,6 +28,7 @@ from graphrec.db.models.ingestion import (
     SubmissionError,
 )
 from graphrec.db.models.jobs import Job
+from graphrec.db.models.metering import MonthlyUsageAggregate, UsageEvent
 from graphrec.db.models.subscription import (
     QuotaOverride,
     TenantResourceQuota,
@@ -42,6 +43,7 @@ __all__ = [
     "InteractionEvent",
     "Invitation",
     "Job",
+    "MonthlyUsageAggregate",
     "PlatformUser",
     "PlatformUserPermission",
     "PricingPlan",
@@ -57,4 +59,5 @@ __all__ = [
     "TenantResourceQuota",
     "TenantSubscription",
     "TenantUser",
+    "UsageEvent",
 ]

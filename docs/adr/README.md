@@ -73,9 +73,9 @@ confirmation than an explicit answer and is named as such rather than dressed up
 as one. Both remain cheap to revisit — D9 adds or removes a verb on one
 resource, D10 a parameter on a list.
 
-**Phase 6 is built and nothing gated it.** BUILD_PROMPT marks no 🛑 on ingestion. The next gate
-after that is D4, before Phase 10, and it is the one with an unresolved conflict
-of authorities above.
+**Phases 6 and 7 are built and nothing gated either.** BUILD_PROMPT marks no 🛑
+on ingestion or metering. The next gate is D4, before Phase 10, and it is the one
+with an unresolved conflict of authorities above.
 
 ## Open questions with no recommendation
 
@@ -84,10 +84,19 @@ These have no proposed answer, only a stated need for one.
 1. **Email delivery.** SMTP, or an administrator CLI that prints the recovery
    link? Affects account recovery and invitation, and therefore Phase 3.
 2. **The 15-minute training cooldown.** Is it a real product rule or an artefact
-   of the prototype? Affects Phase 7.
+   of the prototype? Affects Phase 9 — Phase 7 meters training usage but does not
+   admit training jobs, so the cooldown is not yet enforced anywhere.
 3. **The last-active-administrator rule.** The prototype forbids demoting or
    disabling the last one. Does that extend to deletion, and to the platform
    realm? Affects Phase 4.
 4. **Customer data lifecycle.** How long are raw interaction events retained,
    and what does tenant deletion actually erase? Affects Phase 5 and the
    reconciler.
+5. **Who schedules reconciliation?** `reconcile_recent` is written and called by
+   nothing. A periodic sweep needs either a scheduler process or a `JobType` with
+   something to enqueue it; Phase 7 introduced neither. Affects Phase 7's own
+   correctness over time, and the first closed period nobody rolls up.
+6. **Does a ledger outlive the tenant it belongs to?** `usage_events` is
+   immutable and billing-adjacent, and tenant deletion has no semantics yet. The
+   `ON DELETE CASCADE` on `usage_events.tenant_id` currently answers "no", which
+   is a default rather than a decision.

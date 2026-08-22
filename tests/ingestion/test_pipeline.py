@@ -22,6 +22,7 @@ import sqlalchemy as sa
 from graphrec.common.enums import SubmissionKind, SubmissionStatus
 from graphrec.common.errors import GraphRecError
 from graphrec.domain.ingestion import IngestionService
+from graphrec.domain.metering.counters import InMemoryUsageCounters
 
 pytestmark = [pytest.mark.db, pytest.mark.anyio]
 
@@ -30,6 +31,11 @@ NOW = dt.datetime(2026, 8, 14, 9, 41, 2, tzinfo=dt.UTC)
 
 def _service() -> IngestionService:
     return IngestionService(job_lease_seconds=60, job_max_attempts=3)
+
+
+def _counters() -> InMemoryUsageCounters:
+    """A fresh pair per call, so no test inherits another's warm counter."""
+    return InMemoryUsageCounters()
 
 
 def _event(event_id: str, product: str = "SKU-6002", **overrides) -> dict:
@@ -93,11 +99,11 @@ async def test_the_same_event_id_twice_yields_one_row_and_two_successes(
 
     async with bound(tenant) as session:
         first = await service.record_event(
-            session, tenant_id=tenant, raw=_event("ev-33810"), now=NOW
+            session, _counters(), tenant_id=tenant, raw=_event("ev-33810"), now=NOW
         )
     async with bound(tenant) as session:
         second = await service.record_event(
-            session, tenant_id=tenant, raw=_event("ev-33810"), now=NOW
+            session, _counters(), tenant_id=tenant, raw=_event("ev-33810"), now=NOW
         )
 
     assert first.status == "accepted"
@@ -123,10 +129,12 @@ async def test_a_duplicate_confirmation_says_when_it_was_first_received(
     await seed_products(tenant, "SKU-6002")
     service = _service()
     async with bound(tenant) as session:
-        await service.record_event(session, tenant_id=tenant, raw=_event("ev-33810"), now=NOW)
+        await service.record_event(
+            session, _counters(), tenant_id=tenant, raw=_event("ev-33810"), now=NOW
+        )
     async with bound(tenant) as session:
         repeat = await service.record_event(
-            session, tenant_id=tenant, raw=_event("ev-33810"), now=NOW
+            session, _counters(), tenant_id=tenant, raw=_event("ev-33810"), now=NOW
         )
     assert repeat.first_received_at == NOW
 

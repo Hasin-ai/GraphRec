@@ -16,6 +16,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from redis.asyncio import ConnectionPool, Redis
 
 from apps.control_api.errors import install_error_handlers
 from apps.control_api.middleware import BodyLimitMiddleware, RequestContextMiddleware
@@ -27,6 +28,7 @@ from apps.control_api.routers import (
     platform_auth,
     products,
     tenants,
+    usage,
     users,
     well_known,
 )
@@ -34,6 +36,7 @@ from graphrec.auth.tokens import TokenService
 from graphrec.common.config import Settings, get_settings
 from graphrec.common.logging import configure_logging, get_logger
 from graphrec.db.engine import create_app_engine, create_platform_engine, create_sessionmaker
+from graphrec.domain.metering.counters import RedisUsageCounters, ResilientUsageCounters
 
 logger = get_logger(__name__)
 
@@ -68,6 +71,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # quota rows.
     await app.state.engine.dispose()
     await app.state.platform_engine.dispose()
+    await app.state.redis.aclose()
     logger.info("api_stopping")
 
 
@@ -120,6 +124,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.sessionmaker = create_sessionmaker(app.state.engine)
     app.state.platform_sessionmaker = create_sessionmaker(app.state.platform_engine)
 
+    # The metering cache. Wrapped so that Redis being unreachable costs a
+    # ledger query rather than a failed request — a measurement is never allowed
+    # to depend on a cache being up (`domain/metering/counters.py`).
+    app.state.redis = Redis(connection_pool=ConnectionPool.from_url(str(settings.redis_url)))
+    app.state.usage_counters = ResilientUsageCounters(RedisUsageCounters(app.state.redis))
+
     app.state.tokens = TokenService(
         private_key_path=settings.jwt_private_key_path,
         public_key_path=settings.jwt_public_key_path,
@@ -140,6 +150,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     v1.include_router(api_keys.router)
     v1.include_router(products.router)
     v1.include_router(ingestion.router)
+    v1.include_router(usage.router)
     v1.include_router(platform_auth.router)
     app.include_router(v1)
 

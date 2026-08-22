@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from graphrec.db.models.jobs import Job
+    from graphrec.domain.metering.counters import UsageCounters
     from graphrec.jobs.queue import JobQueue
     from graphrec.jobs.states import JobType
 
@@ -43,6 +44,7 @@ class JobContext:
         session: AsyncSession,
         control: AsyncSession,
         queue: JobQueue,
+        counters: UsageCounters,
     ) -> None:
         self.job = job
         #: Bound to the job's tenant, inside the handler's transaction. Every
@@ -56,6 +58,11 @@ class JobContext:
         #: see a stale `lease_expires_at` and steal a job that is working fine.
         self._control = control
         self._queue = queue
+        #: The metering cache. A handler meters inside `session`'s transaction
+        #: and moves this afterwards, exactly as a request handler does — the
+        #: worker is not exempt from a tenant's quota just because nobody is
+        #: waiting on the response.
+        self.counters = counters
         self._stage: str | None = None
 
     @property

@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING
 
 from graphrec.common.logging import get_logger
 from graphrec.db.tenant_context import bind_tenant
+from graphrec.domain.metering.counters import InMemoryUsageCounters, UsageCounters
 from graphrec.jobs.failures import JobCancelled, classify
 from graphrec.jobs.handlers import JobContext
 from graphrec.jobs.queue import JobLeaseLost, JobQueue
@@ -67,12 +68,19 @@ class Worker:
         sessionmaker: async_sessionmaker[AsyncSession],
         registry: HandlerRegistry,
         settings: Settings,
+        counters: UsageCounters | None = None,
     ) -> None:
         self.name = name
         self.identity = worker_identity(name)
         self.sessionmaker = sessionmaker
         self.registry = registry
         self.settings = settings
+        #: Metering's fast counters. Defaulted to a process-local pair rather
+        #: than to nothing: a worker with no counters would still be *correct*
+        #: — `counters.current` repairs from the ledger on every miss — but it
+        #: would sum a month of events on every merge. The default keeps a test
+        #: or a one-off invocation from needing Redis to run at all.
+        self.counters = counters if counters is not None else InMemoryUsageCounters()
         self.queue = JobQueue(
             lease_seconds=settings.job_lease_seconds,
             max_attempts=settings.job_max_attempts,
@@ -203,7 +211,13 @@ class Worker:
                 if handler is None:  # pragma: no cover - the claim filter prevents it
                     raise RuntimeError(f"no handler for job type {job.job_type!r}")
 
-                ctx = JobContext(job=job, session=work, control=control, queue=self.queue)
+                ctx = JobContext(
+                    job=job,
+                    session=work,
+                    control=control,
+                    queue=self.queue,
+                    counters=self.counters,
+                )
 
                 # A job cancelled before it was ever picked up should not do any
                 # work at all, so the first boundary is before the handler runs.

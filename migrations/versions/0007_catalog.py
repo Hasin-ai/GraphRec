@@ -48,7 +48,7 @@ TENANT_GUC = "app.tenant_id"
 
 #: `graphrec/common/enums.py::Availability`, generated from the prototype's
 #: `seed()` products[].avail. Repeated here because a migration cannot import
-#: application code, and pinned by a contract test that compares the two.
+#: application code, and pinned by `tests/contract/test_migration_literals.py`.
 AVAILABILITY = ("in_stock", "low_stock", "out_of_stock")
 
 #: The ineligibility codes the function can return. `graphrec/catalog/eligibility.py`

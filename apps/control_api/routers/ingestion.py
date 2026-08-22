@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import APIRouter, Depends, Request, Response, status
 
-from apps.control_api.deps import IngestPrincipal, require_ingest
+from apps.control_api.deps import IngestPrincipal, UsageCountersDep, require_ingest
 from apps.control_api.schemas import (
     BulkUpsertProductsRequest,
     SubmissionCounts,
@@ -151,7 +151,10 @@ def _accepted(
     summary="Submit one interaction event",
 )
 async def submit_event(
-    body: SubmitEventRequest, principal: WriteEvents, service: Service
+    body: SubmitEventRequest,
+    principal: WriteEvents,
+    service: Service,
+    counters: UsageCountersDep,
 ) -> SubmitEventResponse:
     """`200` whether it was new or a repeat (L1178).
 
@@ -162,6 +165,7 @@ async def submit_event(
     """
     outcome = await service.record_event(
         principal.session,
+        counters,
         tenant_id=principal.tenant_id,
         raw=body.model_dump(exclude_unset=True),
     )

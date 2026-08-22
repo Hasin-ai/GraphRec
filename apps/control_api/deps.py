@@ -48,6 +48,7 @@ from graphrec.common.logging import actor_id_var, tenant_id_var
 from graphrec.db.models import ApiKey, PlatformUser, Tenant, TenantUser
 from graphrec.db.tenant_context import bind_tenant
 from graphrec.domain.credentials import CredentialService
+from graphrec.domain.metering.counters import UsageCounters
 
 T = TypeVar("T")
 
@@ -169,6 +170,17 @@ def get_settings_dep(request: Request) -> Settings:
 def get_token_service(request: Request) -> TokenService:
     service: TokenService = request.app.state.tokens
     return service
+
+
+def get_usage_counters(request: Request) -> UsageCounters:
+    """The fast counters, built once at startup.
+
+    Wrapped in `ResilientUsageCounters` there, so a handler never has to think
+    about Redis being down: a failed read is a miss, and a miss is recomputed
+    from the ledger.
+    """
+    counters: UsageCounters = request.app.state.usage_counters
+    return counters
 
 
 async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
@@ -353,6 +365,8 @@ async def current_platform_principal(
             session=session,
         )
 
+
+UsageCountersDep = Annotated[UsageCounters, Depends(get_usage_counters)]
 
 CurrentTenant = Annotated[TenantPrincipal, Depends(current_tenant_principal)]
 CurrentPlatform = Annotated[PlatformPrincipal, Depends(current_platform_principal)]

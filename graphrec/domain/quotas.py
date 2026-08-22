@@ -15,13 +15,15 @@ special case, because the second caller is a fortnight away and a second
 implementation is how the console comes to quote a number the enforcement does
 not use.
 
-Metering (Phase 7) adds the *usage* half. This is only the limit.
+Metering (Phase 7) adds the *usage* half — `graphrec.domain.metering.quota`.
+This module is only the limit.
 """
 
 from __future__ import annotations
 
 import datetime as dt
-from typing import TYPE_CHECKING
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Literal
 
 import sqlalchemy as sa
 
@@ -43,15 +45,35 @@ PLAN_LIMIT_COLUMN: dict[UsageType, str] = {
 }
 
 
-async def effective_limit(
-    session: AsyncSession, *, tenant_id: uuid.UUID, usage_type: UsageType, now: dt.datetime
-) -> int | None:
-    """The limit in force, or `None` when the usage type is not bounded.
+#: The wire vocabulary for where a limit came from (BACKEND_PLAN L1195).
+#: Only two values, and `tenant_resource_quotas` reports as `override` rather
+#: than earning a third. A standing per-tenant quota is, from the tenant's side,
+#: exactly what an override is: a limit that is not the one their plan says.
+#: Splitting them on the wire would ask the console to explain a distinction
+#: that exists only in our schema.
+LimitSource = Literal["plan", "override"]
 
-    Runs inside the caller's tenant-bound session, so `quota_overrides` and
-    `tenant_resource_quotas` are filtered by the tenant's own policy and the
-    `tenant_id` argument is only used to read the plan — which is not
-    tenant-owned and is joined through `tenants`.
+
+@dataclass(frozen=True, slots=True)
+class Limit:
+    """A resolved limit and the reason it is that number.
+
+    `value is None` means the usage type is not bounded — `service_capacity` has
+    no plan column, so there is nothing to be within.
+    """
+
+    value: int | None
+    source: LimitSource
+
+
+async def resolve(
+    session: AsyncSession, *, tenant_id: uuid.UUID, usage_type: UsageType, now: dt.datetime
+) -> Limit:
+    """`effective_limit`, plus what the console needs to label it.
+
+    Precedence is the module docstring's: an active override, then a standing
+    tenant quota, then the plan. The first two are tenant-owned and read under
+    the tenant's own policy; the plan is joined through `tenants`.
     """
     override = await session.scalar(
         sa.text(
@@ -65,7 +87,7 @@ async def effective_limit(
         {"usage_type": usage_type.value, "now": now},
     )
     if override is not None:
-        return int(override)
+        return Limit(int(override), "override")
 
     standing = await session.scalar(
         sa.text(
@@ -78,11 +100,11 @@ async def effective_limit(
         {"usage_type": usage_type.value, "now": now},
     )
     if standing is not None:
-        return int(standing)
+        return Limit(int(standing), "override")
 
     column = PLAN_LIMIT_COLUMN.get(usage_type)
     if column is None:
-        return None
+        return Limit(None, "plan")
 
     # `column` is a value of PLAN_LIMIT_COLUMN, never caller input.
     plan_limit = await session.scalar(
@@ -93,7 +115,19 @@ async def effective_limit(
         ),
         {"tenant_id": tenant_id},
     )
-    return None if plan_limit is None else int(plan_limit)
+    return Limit(None if plan_limit is None else int(plan_limit), "plan")
+
+
+async def effective_limit(
+    session: AsyncSession, *, tenant_id: uuid.UUID, usage_type: UsageType, now: dt.datetime
+) -> int | None:
+    """The limit in force, or `None` when the usage type is not bounded.
+
+    The bare number, for callers that only enforce. `resolve` is the same
+    lookup for callers that also have to say where it came from.
+    """
+    limit = await resolve(session, tenant_id=tenant_id, usage_type=usage_type, now=now)
+    return limit.value
 
 
 async def plan_code(session: AsyncSession, *, tenant_id: uuid.UUID) -> str:
@@ -113,4 +147,12 @@ def utcnow() -> dt.datetime:
     return dt.datetime.now(dt.UTC)
 
 
-__all__ = ["PLAN_LIMIT_COLUMN", "effective_limit", "plan_code", "utcnow"]
+__all__ = [
+    "PLAN_LIMIT_COLUMN",
+    "Limit",
+    "LimitSource",
+    "effective_limit",
+    "plan_code",
+    "resolve",
+    "utcnow",
+]

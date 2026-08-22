@@ -80,6 +80,11 @@ def _wipe(owner_engine) -> None:
     the escape hatch is the isolation working.
     """
     for table in (
+        # Metering first: ingestion now writes `usage_events`, and a ledger row
+        # left behind is a tenant that starts the next test part-way through
+        # their month.
+        "usage_events",
+        "monthly_usage_aggregates",
         "ingest_staging_items",
         "submission_errors",
         "interaction_events",

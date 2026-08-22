@@ -186,6 +186,34 @@ ERROR_COPY: dict[str, str] = {
     "training_quota_exhausted": (
         "The training quota for this period is exhausted. It resets on {resets_on}."
     ),
+    # ---------------------------------------------------------- usage quotas
+    # (derived) — the prototype's integration reference names this failure but
+    # renders no sentence for it: "limit / 429 / A plan or quota limit is
+    # exhausted / event quota exhausted for the period" (L1637). The wording
+    # follows `training_quota_exhausted` above, which is the verbatim member of
+    # this family, and adds the counts `product_quota_exhausted` sets the
+    # precedent for (L1603) — BACKEND_PLAN L1840 requires a rejection to name
+    # limit, usage and reset.
+    "event_quota_exhausted": (
+        "This tenant has used {used} of {limit} events on plan {plan_code}. "
+        "The quota resets on {resets_on}, "
+        "or ask your platform contact about a quota override."
+    ),
+    # (derived) — the same sentence for the serving side. Phase 11 is the first
+    # caller; the copy lives here so both halves of metering refuse alike.
+    "recommendation_quota_exhausted": (
+        "This tenant has used {used} of {limit} recommendations on plan {plan_code}. "
+        "The quota resets on {resets_on}, "
+        "or ask your platform contact about a quota override."
+    ),
+    # (derived) — the fallback for a bounded usage type with no sentence of its
+    # own. Reaching it means a new type was given a plan limit without being
+    # given copy, which is a gap worth reading as one.
+    "usage_quota_exhausted": (
+        "This tenant has used {used} of {limit} on plan {plan_code}. "
+        "The quota resets on {resets_on}, "
+        "or ask your platform contact about a quota override."
+    ),
     # L697 — the terminal reason a failed job carries
     "training_insufficient_data": (
         "Dataset snapshot held fewer than {minimum:,} eligible interaction sequences."
