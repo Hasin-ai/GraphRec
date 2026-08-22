@@ -13,6 +13,7 @@ tenant's data in a state somebody could describe.
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any, Protocol
 
 from graphrec.common.logging import get_logger
@@ -21,7 +22,7 @@ from graphrec.jobs.failures import JobCancelled
 
 if TYPE_CHECKING:
     import uuid
-    from collections.abc import Awaitable, Callable
+    from collections.abc import AsyncIterator, Awaitable, Callable
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -73,6 +74,26 @@ class JobContext:
     def current_stage(self) -> str | None:
         return self._stage
 
+    @asynccontextmanager
+    async def control(self) -> AsyncIterator[AsyncSession]:
+        """A transaction outside the handler's own, bound to the job's tenant.
+
+        For writes that must be visible *while* the handler is still running,
+        and for writes that must survive it failing. Progress is the obvious
+        one; a submission's stage rail is the other, because a console polling
+        `GET /v1/submissions/{id}` through a forty-second merge would otherwise
+        see `received` for forty seconds and then `completed`, with none of the
+        stages in between ever observable.
+
+        `SET LOCAL` dies with its transaction, so the binding happens here on
+        every entry rather than once when the session was opened. Forgetting
+        that is the failure where a write is silently denied by the tenant's own
+        policy and the caller is told it affected no rows.
+        """
+        async with self._control.begin():
+            await bind_tenant(self._control, self.tenant_id)
+            yield self._control
+
     async def stage(self, name: str, **detail: Any) -> None:
         """Enter a named stage: publish progress, renew the lease, and check for
         a cancellation request.
@@ -89,15 +110,9 @@ class JobContext:
         self._stage = name
         progress: dict[str, Any] = {"stage": name, **detail}
 
-        async with self._control.begin():
-            # `SET LOCAL` dies with its transaction, so the control session is
-            # bound here rather than once when it was opened. Without this the
-            # progress write is denied by the tenant's own policy, the guarded
-            # `UPDATE` matches nothing, and the handler is told it lost a lease
-            # it still holds.
-            await bind_tenant(self._control, self.tenant_id)
-            await self._queue.report_progress(self._control, job_id=self.job_id, progress=progress)
-            cancelled = await self._queue.cancellation_requested(self._control, job_id=self.job_id)
+        async with self.control() as control:
+            await self._queue.report_progress(control, job_id=self.job_id, progress=progress)
+            cancelled = await self._queue.cancellation_requested(control, job_id=self.job_id)
 
         if cancelled:
             raise JobCancelled(name)

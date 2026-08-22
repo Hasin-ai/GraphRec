@@ -20,6 +20,13 @@ from graphrec.db.models.identity import (
     Tenant,
     TenantUser,
 )
+from graphrec.db.models.ingestion import (
+    Customer,
+    IngestStagingItem,
+    InteractionEvent,
+    Submission,
+    SubmissionError,
+)
 from graphrec.db.models.jobs import Job
 from graphrec.db.models.subscription import (
     QuotaOverride,
@@ -30,6 +37,9 @@ from graphrec.db.models.subscription import (
 __all__ = [
     "ApiKey",
     "Base",
+    "Customer",
+    "IngestStagingItem",
+    "InteractionEvent",
     "Invitation",
     "Job",
     "PlatformUser",
@@ -40,6 +50,8 @@ __all__ = [
     "QuotaOverride",
     "RecoveryToken",
     "RefreshSession",
+    "Submission",
+    "SubmissionError",
     "Tenant",
     "TenantOwned",
     "TenantResourceQuota",

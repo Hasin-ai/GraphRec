@@ -73,7 +73,7 @@ confirmation than an explicit answer and is named as such rather than dressed up
 as one. Both remain cheap to revisit — D9 adds or removes a verb on one
 resource, D10 a parameter on a list.
 
-**Nothing gates Phase 6.** BUILD_PROMPT marks no 🛑 on ingestion. The next gate
+**Phase 6 is built and nothing gated it.** BUILD_PROMPT marks no 🛑 on ingestion. The next gate
 after that is D4, before Phase 10, and it is the one with an unresolved conflict
 of authorities above.
 

@@ -159,6 +159,24 @@ ERROR_COPY: dict[str, str] = {
     "batch_id_required": "A batch identifier is required.",
     # L1623
     "event_identifiers_required": "Customer and product identifiers are required.",
+    # (derived) — the batch and sync forms both carry a collection field with no
+    # message of its own in the prototype, because pasting nothing there is not
+    # one of the paths it demonstrates. The register follows its neighbours.
+    "event_collection_required": "A collection of events is required.",
+    "product_collection_required": "A collection of products is required.",
+    # (derived) — the single-event path has no batch to report a per-item
+    # failure through, so an unknown product has to be said in the banner.
+    # Identical whether the identifier belongs to another tenant or to nobody,
+    # so it discloses nothing (NR-NF-02).
+    "event_unknown_product": (
+        "No product in this catalog has that external identifier. "
+        "Add the product before submitting events against it."
+    ),
+    # (derived) — the submission page is reached from the submission that
+    # produced it (L1393), so a submission still being written has nothing to
+    # show yet. Distinct from `not_found`, which would be wrong: this one is
+    # the tenant's own.
+    "submission_not_ready": "This submission has been received and is not yet reportable.",
     # ---------------------------------------------------------- training
     # L1646. The job id is interpolated; concurrency is a setting.
     "training_already_running": (
@@ -270,6 +288,11 @@ FIELD_ERROR_COPY: dict[str, str] = {
     "negative_limit": "Must be zero or greater.",  # L1635
     "business_name_required": "Enter the registered business name.",  # L1581
     "external_id_required": "Required.",  # L1602
+    "sync_id_required": "Required.",  # L1611
+    "event_id_required": "Required.",  # L1621
+    "batch_id_required": "Required.",  # L1626
+    "event_identifiers_required": "Required.",  # L1623
+    "event_unknown_product": "Not found in this catalog.",  # (derived)
     "title_required": "Required.",  # L1605
     "email_required": "An email is required — it is the account identifier.",  # L1234
     "confirmation_mismatch": "The two entries do not match.",  # L1593
@@ -277,6 +300,59 @@ FIELD_ERROR_COPY: dict[str, str] = {
     "override_limit_non_negative": (  # L1462
         "The override limit must be a non-negative number."
     ),
+}
+
+
+#: code -> the reason a *single item* in a submission failed.
+#:
+#: A separate catalogue, because these are a different kind of sentence. An
+#: `ERROR_COPY` entry is a banner: it addresses the caller, it is capitalised and
+#: punctuated, and it says what to do next. An item reason is a table cell —
+#: lower case, no full stop, and it appears beside the identifier of the item it
+#: describes (dc.html L1391). Putting them in one dictionary would produce a
+#: submission page whose Reason column reads like a series of alerts.
+#:
+#: Every entry is short by construction, and `submission_errors.reason` is
+#: bounded at 300 characters in the database. Neither the submitted item nor any
+#: part of it is ever interpolated into one of these: "Raw payloads are never
+#: echoed back" (L1391) is a promise about this exact column.
+ITEM_ERROR_COPY: dict[str, str] = {
+    # --------------------------------------------------- verbatim, product sync
+    "item_price_not_positive_decimal": "price is not a positive decimal",  # L1614
+    "item_category_too_long": "category exceeds 120 characters",  # L1614
+    "item_product_disabled": "external identifier already disabled",  # L689
+    # ---------------------------------------------------- verbatim, event batch
+    "item_occurred_at_in_future": "occurred_at is in the future",  # L1180
+    "item_unknown_product": "unknown external product identifier",  # L1629
+    "item_batch_oversize": "batch exceeded the accepted payload size",  # L691
+    # ------------------------------------------------------------- (derived)
+    # The prototype demonstrates six item failures. A validator that only
+    # reported those six would have to accept everything else, so the rest are
+    # written here in the same register rather than invented at the call site.
+    "item_not_an_object": "item is not a JSON object",
+    "item_external_id_missing": "external identifier is missing",
+    "item_external_id_too_long": "external identifier exceeds 120 characters",
+    "item_title_missing": "title is missing",
+    "item_title_too_long": "title exceeds 500 characters",
+    "item_availability_unknown": "availability is not a recognised value",
+    "item_attributes_not_object": "attributes is not a JSON object",
+    "item_event_id_missing": "event identifier is missing",
+    "item_event_id_too_long": "event identifier exceeds 120 characters",
+    "item_customer_id_missing": "customer identifier is missing",
+    "item_customer_id_too_long": "customer identifier exceeds 120 characters",
+    # Distinct from `item_unknown_product` above, and the distinction is the
+    # point: these two say the item carried no usable product identifier,
+    # while that one says the identifier it carried names nothing in this
+    # catalog. A tenant fixes the first in their exporter and the second in
+    # their catalog, so telling them apart is the whole value of the row.
+    "item_product_id_missing": "product identifier is missing",
+    "item_product_id_too_long": "product identifier exceeds 120 characters",
+    "item_event_type_unknown": "event type is not a recognised value",
+    "item_occurred_at_missing": "occurred_at is missing",
+    "item_occurred_at_invalid": "occurred_at is not a valid timestamp",
+    "item_value_not_decimal": "value is not a non-negative decimal",
+    "item_context_not_an_object": "context is not a JSON object",
+    "item_repeated_in_submission": "the same identifier appears earlier in this submission",
 }
 
 
@@ -303,3 +379,18 @@ def resolve_copy(code: str, **kwargs: Any) -> str:
 
 def resolve_field_copy(code: str) -> str | None:
     return FIELD_ERROR_COPY.get(code)
+
+
+def resolve_item_copy(code: str) -> str:
+    """Resolve a per-item reason. Fatal on a miss, exactly like `resolve_copy`.
+
+    A submission error whose reason fell back to a generic string would be
+    indistinguishable from one whose reason was never written, and the tenant
+    reading the page would have no way to tell which item they need to fix.
+    """
+    try:
+        return ITEM_ERROR_COPY[code]
+    except KeyError as exc:
+        raise MissingErrorCopy(
+            f"no approved item reason for {code!r}; add it to ITEM_ERROR_COPY"
+        ) from exc

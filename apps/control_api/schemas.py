@@ -21,6 +21,8 @@ from graphrec.common.enums import (
     Availability,
     CredentialScope,
     CredentialState,
+    SubmissionKind,
+    SubmissionStatus,
     TenantRole,
     UserStatus,
 )
@@ -375,3 +377,137 @@ class ProductListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+# ------------------------------------------------------------------ ingestion
+#
+# The request models here are deliberately **permissive about content and
+# strict about shape**. `extra="forbid"` still holds, so a body carrying
+# `tenant_id` is refused; but every field is optional and loosely typed, and the
+# real verdict comes from `graphrec.domain.ingestion.validation`.
+#
+# That is not laziness. Pydantic's rejection is a framework 422 reading
+# "invalid_request", and the prototype approves specific copy for these forms —
+# "An event identifier is required — it is the idempotency key." (L1621),
+# "Customer and product identifiers are required." (L1623). If Pydantic
+# answered first, the tenant would never see either sentence. One validator
+# decides for the single event, the batch item and the sync item alike, which is
+# also the only way `POST /v1/events` and `POST /v1/events/batches` can honestly
+# claim to "share one event shape" (L1175).
+
+
+class SubmitEventRequest(_Body):
+    """One interaction event (L1176).
+
+    `event_id` is the idempotency key, and that is the whole design of this
+    route: a repeat is confirmed, not rejected and not applied twice.
+    """
+
+    event_id: str | None = None
+    customer_id: str | None = None
+    external_product_id: str | None = None
+    event_type: str | None = None
+    occurred_at: str | None = None
+    #: A string, never a float. `"129.00"` in the prototype's own snippet, and a
+    #: monetary value that cannot be represented exactly is one a tenant will
+    #: eventually be billed against.
+    value: str | None = None
+    context: dict[str, Any] | None = None
+
+
+class SubmitEventResponse(BaseModel):
+    """`{"event_id": ..., "status": "duplicate_confirmed"}` (L1178).
+
+    `status` is `accepted` or `duplicate_confirmed`. Both are 200 and both are
+    successes — "This is a success outcome, not an error." (L1622).
+    """
+
+    event_id: str
+    status: Literal["accepted", "duplicate_confirmed"]
+    #: Present only on a duplicate. The prototype shows "First received
+    #: 2026-08-14 09:41:02" beside the confirmation (L1622), which is what makes
+    #: the answer useful: it tells the caller *when* they already sent it.
+    first_received_at: dt.datetime | None = None
+
+
+class SubmitEventBatchRequest(_Body):
+    """`{"batch_id": ..., "events": [...]}` (L1177)."""
+
+    batch_id: str | None = None
+    events: list[Any] | None = None
+
+
+class BulkUpsertProductsRequest(_Body):
+    """`{"sync_id": ..., "products": [...]}` (L1173)."""
+
+    sync_id: str | None = None
+    products: list[Any] | None = None
+    #: L1357's two options, on the wire as the values the API takes. The
+    #: prototype's control shows "upsert" and "upsert and disable missing";
+    #: the second is `upsert_and_disable_missing` here, because a wire value
+    #: with spaces in it is a wire value somebody will quote wrongly.
+    mode: Literal["upsert", "upsert_and_disable_missing"] | None = None
+
+
+class SubmissionCounts(BaseModel):
+    """The partition, all five buckets, on every submission read.
+
+    `received = accepted + updated + skipped + failed`, always. The console
+    divides their sum by `received` to draw the progress rail (L1380), so a
+    count that appears in two buckets renders as a rail past 100%.
+
+    All five are sent for both kinds even though each kind only shows four:
+    a product sync labels the third stat "Updated" and an event batch labels it
+    "Duplicates" over `skipped` (L1389). Which label to use is the console's
+    decision; which numbers are true is this API's.
+    """
+
+    received: int
+    accepted: int
+    updated: int
+    skipped: int
+    failed: int
+
+
+class SubmissionErrorItem(BaseModel):
+    """One reported failure: "Item reference", "Reason" (L1391).
+
+    Two columns, and nothing else. "Errors identify the offending item and a
+    safe reason. Raw payloads are never echoed back." — so `ref` is an
+    identifier the tenant sent, truncated, and `reason` is resolved from the
+    approved catalogue by code. Neither is assembled from the item.
+    """
+
+    ref: str
+    reason: str
+
+
+class SubmissionResponse(BaseModel):
+    """One read for both kinds (L1179), and two vocabularies for where it is.
+
+    `status` is the coarse outcome the badge renders — `processing`,
+    `succeeded`, `failed`. `stage` is the rail position — `received`,
+    `validating`, `applying`, `completed` (L1382). They are not the same
+    question: the badge answers "is this finished, and did it work", the rail
+    answers "how far along". Deriving one from the other in the console would
+    put that mapping in the client, where it would drift.
+    """
+
+    submission_id: uuid.UUID
+    kind: SubmissionKind
+    status: Literal["processing", "succeeded", "failed"]
+    stage: SubmissionStatus
+    #: The identifier the tenant submitted under — `sync_id` or `batch_id`.
+    #: Named once, neutrally, because one read serves both kinds.
+    reference: str
+    submitted_at: dt.datetime
+    completed_at: dt.datetime | None
+    counts: SubmissionCounts
+    #: `failed_count` is every failure; `errors` is a capped sample of them.
+    #: Separate on purpose — a 5,000-item batch can fail 5,000 times, and a
+    #: tenant needs the true total alongside the first hundred rows.
+    error_count: int
+    errors: list[SubmissionErrorItem]
+    #: Set only when the submission itself failed, as opposed to individual
+    #: items failing within a submission that completed.
+    failure_code: str | None = None

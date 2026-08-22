@@ -23,6 +23,7 @@ from apps.control_api.routers import (
     api_keys,
     auth,
     health,
+    ingestion,
     platform_auth,
     products,
     tenants,
@@ -138,6 +139,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     v1.include_router(users.router)
     v1.include_router(api_keys.router)
     v1.include_router(products.router)
+    v1.include_router(ingestion.router)
     v1.include_router(platform_auth.router)
     app.include_router(v1)
 

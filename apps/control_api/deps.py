@@ -25,15 +25,18 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import AsyncIterator, Callable, Coroutine, Iterable
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated, Any, TypeVar
+from typing import Annotated, Any, TypeVar
 
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from graphrec.auth.api_keys import PREFIX_NAMESPACE
 from graphrec.auth.tokens import PlatformClaims, TenantClaims, TokenError, TokenService
+from graphrec.common.config import Settings
 from graphrec.common.enums import (
     CredentialScope,
     PlatformPermission,
@@ -45,9 +48,6 @@ from graphrec.common.logging import actor_id_var, tenant_id_var
 from graphrec.db.models import ApiKey, PlatformUser, Tenant, TenantUser
 from graphrec.db.tenant_context import bind_tenant
 from graphrec.domain.credentials import CredentialService
-
-if TYPE_CHECKING:
-    from graphrec.common.config import Settings
 
 T = TypeVar("T")
 
@@ -476,6 +476,107 @@ def require_owned(instance: T | None) -> T:
     return instance
 
 
+# ----------------------------------------------- the ingest realms, together
+#
+# Ingestion is the one surface both realms legitimately reach. A developer uses
+# the console's Test event form (dc.html L1621) and its bulk upload; an
+# integration uses a credential from the tenant's own backend. Both are the same
+# operation on the same data, so there is one route, not two.
+#
+# The realms are told apart by the shape of what was presented, not by a header
+# the caller chose and not by a query parameter. A credential secret begins with
+# `gr_live_`; a session access token is a JWT and cannot. This is a *routing*
+# decision only — it selects which verifier runs, and that verifier still has to
+# succeed. Presenting a string that starts with `gr_live_` skips nothing; it
+# merely guarantees the answer comes from `CredentialService.verify`.
+
+
+@dataclass(frozen=True, slots=True)
+class IngestPrincipal:
+    """Whoever is submitting, reduced to what an ingest handler may use.
+
+    Deliberately narrow. It carries a tenant, a bound session and the name of
+    the realm it came from — and no role and no scopes. A handler that reached
+    for one of those would be making an authorization decision below the gates,
+    which is where authorization decisions go wrong.
+
+    `tenant_id` came from a verified token's `tid` claim or from a verified
+    credential's own row. There is no third path.
+    """
+
+    tenant_id: uuid.UUID
+    session: AsyncSession
+    #: `"session"` or `"credential"`. For attribution, never for authority.
+    realm: str
+    #: The credential's key id, or `None` for a session. The audit trail has to
+    #: be able to name *which* credential submitted a batch, because revoking
+    #: one is the remedy when a submission turns out to be wrong.
+    key_id: uuid.UUID | None = None
+    actor_user_id: uuid.UUID | None = None
+
+
+#: Wrapped so that the delegation below both commits on success and rolls back
+#: on failure. An `async for` over the raw generator would do neither: the inner
+#: generator would be left suspended at its `yield`, inside an open transaction,
+#: waiting for a garbage collector to decide the tenant's data's fate.
+_tenant_realm = asynccontextmanager(current_tenant_principal)
+_credential_realm = asynccontextmanager(current_credential_principal)
+
+
+def require_ingest(
+    *scopes: CredentialScope,
+    roles: tuple[TenantRole, ...] = (TenantRole.TENANT_DEVELOPER,),
+) -> Callable[..., AsyncIterator[IngestPrincipal]]:
+    """Accept either realm, and apply gate 3 in whichever one answered.
+
+    The two gate-3 checks are not the same check and must not be collapsed into
+    one. A session is judged by **role**, because the prototype's route table
+    marks every ingest screen `[DEV]` and L1256 states an administrator has "no
+    event submission". A credential is judged by **scope**, because a program
+    holds operations rather than a job title. Mapping scopes onto roles — or
+    roles onto scopes — would mean an administrator's session could be described
+    as holding `events:write`, which the tenant never granted it.
+
+    Gates 1 and 2 are unchanged in both realms: this delegates to the existing
+    principals rather than re-implementing verification, so there is still
+    exactly one place in the codebase where a token becomes a tenant.
+    """
+    required = frozenset(scopes)
+    allowed = {role.value for role in roles}
+
+    async def _guard(
+        request: Request,
+        credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
+        tokens: Annotated[TokenService, Depends(get_token_service)],
+        settings: Annotated[Settings, Depends(get_settings_dep)],
+    ) -> AsyncIterator[IngestPrincipal]:
+        presented = _bearer_token(credentials, "invalid_credentials")
+
+        if presented.startswith(PREFIX_NAMESPACE):
+            async with _credential_realm(request, credentials, settings) as credential:
+                if not required.issubset(credential.scopes):
+                    raise ForbiddenError("insufficient_scope")
+                yield IngestPrincipal(
+                    tenant_id=credential.tenant_id,
+                    session=credential.session,
+                    realm="credential",
+                    key_id=credential.key_id,
+                )
+            return
+
+        async with _tenant_realm(request, credentials, tokens) as principal:
+            if principal.role not in allowed:
+                raise ForbiddenError("insufficient_role")
+            yield IngestPrincipal(
+                tenant_id=principal.tenant_id,
+                session=principal.session,
+                realm="session",
+                actor_user_id=principal.user_id,
+            )
+
+    return _guard
+
+
 # --------------------------------------------------- gate 5: resource state
 #
 # Gate 5 lives in the domain services rather than here: whether a version may be
@@ -490,6 +591,7 @@ __all__ = [
     "CurrentPlatform",
     "CurrentTenant",
     "ForbiddenError",
+    "IngestPrincipal",
     "PlatformPrincipal",
     "RequireAdministrator",
     "TenantPrincipal",
@@ -499,6 +601,7 @@ __all__ = [
     "get_session",
     "get_settings_dep",
     "get_token_service",
+    "require_ingest",
     "require_owned",
     "require_permission",
     "require_role",
