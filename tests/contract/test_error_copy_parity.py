@@ -70,7 +70,7 @@ VERBATIM_AT_LINE: list[tuple[str, int, str]] = [
         1681,
         "A request identifier is required so a repeated request is not applied twice.",
     ),
-    ("training_not_cancellable", 1706, "Only a job in an active state can be cancelled."),
+    ("job_not_cancellable", 1706, "Only a job in an active state can be cancelled."),
     ("version_already_active", 1768, "This version is already active."),
     ("version_not_eligible", 1733, "Only an eligible version can be activated."),
     (

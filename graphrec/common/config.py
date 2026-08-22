@@ -75,6 +75,8 @@ class Settings(BaseSettings):
     # Bounds how long a pooled connection carrying stale session state can live.
     db_pool_recycle_seconds: int = 1_800
     db_statement_timeout_ms: int = 15_000
+    #: Workers get their own bound. See `create_worker_engine`.
+    worker_statement_timeout_ms: int = 900_000
 
     # ------------------------------------------------------------ redis
     #
@@ -157,6 +159,13 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------ jobs
 
     worker_concurrency: int = 2
+    #: How long a claim loop waits before asking again when the queue is
+    #: empty. Polling, not listening: at tens of jobs a day (ASM-03) the
+    #: latency this costs is invisible and it removes a LISTEN/NOTIFY
+    #: dependency that would need its own reconnection handling.
+    job_poll_interval_seconds: float = 2.0
+    job_sweep_interval_seconds: float = 30.0
+    job_sweep_batch: int = 50
     job_lease_seconds: int = 120
     job_heartbeat_seconds: int = 30
     job_max_attempts: int = 3

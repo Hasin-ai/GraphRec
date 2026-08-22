@@ -44,7 +44,24 @@ def create_platform_engine(settings: Settings) -> AsyncEngine:
     return _engine(settings, settings.platform_database_url)
 
 
-def _engine(settings: Settings, url: str) -> AsyncEngine:
+def create_worker_engine(settings: Settings) -> AsyncEngine:
+    """The engine a background worker claims and works through.
+
+    Same role and therefore the same policies as `create_app_engine` — a worker
+    is not privileged, it is merely patient. What differs is the statement
+    timeout: 15 seconds is right for a request, whose caller is waiting, and
+    wrong for a merge over fifty thousand staged rows, whose caller went away an
+    hour ago. Bounding a batch job at request latency would make every large
+    ingestion fail at exactly the size it starts mattering.
+    """
+    return _engine(
+        settings, settings.database_url, statement_timeout_ms=settings.worker_statement_timeout_ms
+    )
+
+
+def _engine(
+    settings: Settings, url: str, *, statement_timeout_ms: int | None = None
+) -> AsyncEngine:
     # `postgresql+psycopg` is natively async under create_async_engine; there is
     # no separate async driver name to substitute.
     engine = create_async_engine(
@@ -62,7 +79,8 @@ def _engine(settings: Settings, url: str) -> AsyncEngine:
             # A runaway query holds a connection and, under RLS, a tenant
             # context. Bounding it server-side means a slow query fails rather
             # than exhausting the pool for every other tenant.
-            "options": f"-c statement_timeout={settings.db_statement_timeout_ms}",
+            "options": "-c statement_timeout="
+            f"{statement_timeout_ms or settings.db_statement_timeout_ms}",
         },
     )
     _forbid_leaked_tenant_context(engine)

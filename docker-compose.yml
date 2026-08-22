@@ -123,6 +123,47 @@ services:
       retries: 5
       start_period: 15s
 
+  # Behind a profile, so `docker compose up` does not start it.
+  #
+  # Not because it is optional — the platform does not work without it — but
+  # because a worker with an empty handler registry refuses to start, and until
+  # Phase 6 registers the ingestion handlers that is exactly what this is. A
+  # service that crash-loops on a fresh clone teaches everybody to ignore
+  # restarts, which is the one signal that has to keep meaning something.
+  #
+  # Start it with:  docker compose --profile workers up job_worker
+  job_worker:
+    profiles: ["workers"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      ENVIRONMENT: local
+      POSTGRES_HOST: postgres
+      POSTGRES_APP_USER: graphrec_app
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:-graphrec_app_local_only}
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT: http://minio:9000
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
+    env_file:
+      - path: .env
+        required: false
+    command: ["python", "-m", "apps.job_worker.main"]
+    # A worker holds leases. `SIGTERM` makes it stop claiming and drain what it
+    # already has, and the grace period has to outlast a job that is mid-stage —
+    # otherwise the kill leaves a `running` row for the sweeper to requeue, and
+    # every deploy manufactures retries. Longer than job_lease_seconds (120).
+    stop_grace_period: 150s
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   minio_data:

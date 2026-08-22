@@ -19,6 +19,7 @@ from graphrec.db.models.identity import (
     Tenant,
     TenantUser,
 )
+from graphrec.db.models.jobs import Job
 from graphrec.db.models.subscription import (
     QuotaOverride,
     TenantResourceQuota,
@@ -29,6 +30,7 @@ __all__ = [
     "ApiKey",
     "Base",
     "Invitation",
+    "Job",
     "PlatformUser",
     "PlatformUserPermission",
     "PricingPlan",

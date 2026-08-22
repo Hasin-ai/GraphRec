@@ -161,8 +161,26 @@ ERROR_COPY: dict[str, str] = {
     "training_cooldown": (  # (derived) — the cooldown is provisional, see config
         "A training request was made recently. The next request may be made in {seconds} seconds."
     ),
-    # L1706
-    "training_not_cancellable": "Only a job in an active state can be cancelled.",
+    # L1706. One code for every realm: the training route and the ingestion
+    # queue refuse cancellation for the same reason and must say so
+    # identically, and two codes carrying one string is how they drift apart.
+    "job_not_cancellable": "Only a job in an active state can be cancelled.",
+    # ---------------------------------------------------------------- jobs
+    # A job's terminal failure reason is rendered in the console (dc.html L1696,
+    # "Failure reason"). It is therefore approved copy, never an exception
+    # message: a traceback out of an ingestion worker can carry a row of a
+    # tenant's data in it, and NR-NF-06 forbids that reaching a body or a log.
+    "job_attempts_exhausted": (  # (derived)
+        "The job did not complete after {attempts} attempts and will not be retried."
+    ),
+    "job_interrupted": (  # (derived) — the last attempt was lost with its worker
+        "The worker running this job stopped responding, and no attempts remain."
+    ),
+    "job_failed": (  # (derived) — an unclassified handler failure
+        "The job stopped before completing. No partial result was kept."
+    ),
+    # L1714, the confirmation the console shows before requesting cancellation.
+    "job_cancelled": "Work already done is discarded.",
     # ---------------------------------------------------------- model versions
     # L1768
     "version_already_active": "This version is already active.",

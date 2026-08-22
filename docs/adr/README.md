@@ -9,7 +9,7 @@ gate that depends on it.
 | # | Decision | Status | Confirm before |
 |---|---|---|---|
 | D1 | Resource model: SRS-native vs AWS Personalize | **Confirmed — SRS-native** | Phase 2 |
-| D2 | Job queue: PostgreSQL `SKIP LOCKED` | Accepted | Phase 4 |
+| D2 | Job queue: PostgreSQL `SKIP LOCKED` | **Confirmed — by instruction** (ADR 0011) | Phase 4 |
 | D3 | Serving: Compose + `ServingDriver` port | Accepted | Phase 11 |
 | D4 | Candidates: in-process exact top-K behind `CandidateIndex` | Accepted | Phase 10 |
 | D5 | Token signing: EdDSA + published JWKS | **Confirmed** (ADR 0009) | Phase 3 |
@@ -55,12 +55,21 @@ SRS is higher, so an explicit "defer Qdrant" decision is needed before Phase 10.
 
 ## The next gate
 
-**D2 blocks Phase 4.** BUILD_PROMPT marks the phase 🛑 *"CONFIRM D2
-(Postgres queue) before starting"*, and Phase 4 **is** the queue — jobs
-claimed from a `jobs` table with `FOR UPDATE SKIP LOCKED` and fair-share
-ordering, rather than RabbitMQ and Celery behind a transactional outbox. D2 is
-marked Accepted above on BACKEND_PLAN's authority, but nobody has confirmed it,
-and §2 forbids building past the gate. Phase 4 is therefore not started.
+**D2 is closed.** BUILD_PROMPT marks Phase 4 🛑 *"CONFIRM D2 (Postgres queue)
+before starting"*. The instruction to complete Phases 4–8 was given without a
+separate answer to the gate, so Phase 4 was built to BUILD_PROMPT's own
+recommendation — a `jobs` table claimed with `FOR UPDATE SKIP LOCKED` and
+fair-share ordering, rather than RabbitMQ and Celery behind a transactional
+outbox — and recorded in **ADR 0011** as *confirmed by instruction to proceed*.
+That is a weaker confirmation than an explicit answer, and it is named as such
+here rather than dressed up as one.
+
+**D9 and D10 gate Phase 5** — 🛑 *"CONFIRM D9 (write model) and D10
+(pagination)"*. They are being treated the same way: built to the recommended
+option, recorded as ADRs marked *confirmed by instruction to proceed*. Both are
+cheaper to revisit than D2 was — D9 adds or removes a verb on one resource, D10
+adds or removes a parameter on a list — so if either answer differs from the
+recommendation, say so and it will be changed.
 
 ## Open questions with no recommendation
 
