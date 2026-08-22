@@ -1,0 +1,132 @@
+# ==========================================
+# Operating System Files
+# ==========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ==========================================
+# IDEs & Code Editors
+# ==========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-workspace
+*.sublime-project
+
+# ==========================================
+# Python & Virtual Environments
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# ==========================================
+# Node.js & Frontend (Vite / Next.js)
+# ==========================================
+node_modules/
+.next/
+out/
+.cache/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ==========================================
+# Machine Learning, Datasets & Models
+# ==========================================
+*.pt
+*.pth
+*.bin
+*.onnx
+*.safetensors
+*.ckpt
+*.h5
+*.pkl
+*.pickle
+data/
+datasets/
+snapshots/
+artifacts/
+models/
+checkpoints/
+exports/
+
+# ==========================================
+# Environment Variables & Secrets
+# ==========================================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+# `scripts/gen_jwt_keys.py` writes here. A committed signing key is a
+# published signing key, and every token ever issued under it is forgeable.
+secrets/
+
+# ==========================================
+# Logs, Databases & Storage Volumes
+# ==========================================
+*.log
+logs/
+*.sqlite
+*.sqlite3
+*.db
+postgres_data/
+minio_data/
+rustfs_data/
+redis_data/
+rabbitmq_data/
+
+# ==========================================
+# Temporary / Generated Binary Documents
+# ==========================================
+*.tmp
+*.temp
+
+# ==========================================
+# Documentation & Diagrams
+# ==========================================
+# `docs/` is NOT ignored. It holds the authority hierarchy itself — the SRS is
+# the highest source in the project, and a repository where nobody can read the
+# top specification cannot resolve a conflict about it. The ADRs and phase
+# reports live here too, and they are the record of why the code looks like it
+# does. Only build output is excluded.
+docs/_build/
+docs/_site/
+docs/.DS_Store
+diagrams/_build/
+
+
+# ==========================================
+# Local tooling state
+# ==========================================
+# Per-developer editor and agent configuration, and a symbol cache that is
+# rebuilt on demand. None of it describes the project.
+.claude/
+.serena/
+.DS_Store

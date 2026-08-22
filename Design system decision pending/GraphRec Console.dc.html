@@ -1,0 +1,1860 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/modernist-f5152206-d7ed-4d31-ac9c-0ef4a67864fd/styles.css">
+  <script src="_ds/modernist-f5152206-d7ed-4d31-ac9c-0ef4a67864fd/_ds_bundle.js"></script>
+  <style>
+    :root{
+      --ok:#3f6b4a; --ok-bg:#e7eee8;
+      --warn:#8a6414; --warn-bg:#f3ead6;
+      --danger:#ae1800; --danger-bg:#ffe0d9;
+      --info:#3d5a70; --info-bg:#e5eaee;
+      --neu:#605d5d; --neu-bg:#eae7e7;
+      --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    }
+    :root[data-theme="dark"]{
+      --color-bg:#1a1918; --color-surface:#232221; --color-text:#f2efec;
+      --color-divider:color-mix(in srgb,#f2efec 32%,transparent);
+      --color-accent:#ff5c3d;
+      --color-accent-100:#3b201a; --color-accent-200:#4d251c; --color-accent-600:#ff7a5f;
+      --color-accent-700:#ff9783; --color-accent-800:#ffc4b8;
+      --color-neutral-100:#2c2a29; --color-neutral-200:#333130; --color-neutral-800:#d7d3d3; --color-neutral-900:#efecec;
+      --ok:#9cc194; --ok-bg:#212a20;
+      --warn:#dcb469; --warn-bg:#332815;
+      --danger:#eb9c8c; --danger-bg:#3a201a;
+      --info:#a4c0d8; --info-bg:#1f2932;
+      --neu:#b0acac; --neu-bg:#2f2d2c;
+    }
+    body{margin:0;background:var(--color-bg);color:var(--color-text)}
+    a{color:var(--color-accent);text-decoration:none}
+    a:hover{color:var(--color-accent-600);text-decoration:underline}
+    @keyframes gr-pulse{0%,100%{opacity:.35}50%{opacity:.85}}
+    @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+  </style>
+</helmet>
+
+<div style="display:flex;min-height:100vh;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body);font-size:15px;line-height:1.55">
+
+  <sc-if value="{{ isApp }}" hint-placeholder-val="{{ true }}">
+    <aside style="{{ asideStyle }}">
+      <div style="padding:20px 20px 16px;border-bottom:2px solid var(--color-divider);display:flex;flex-direction:column;gap:4px">
+        <div style="font-family:var(--font-heading);font-weight:800;font-size:19px;letter-spacing:-.02em">GraphRec</div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--color-neutral-700)">{{ scopeLabel }}</div>
+      </div>
+
+      <sc-if value="{{ hasServiceBadges }}" hint-placeholder-val="{{ true }}">
+        <div style="padding:12px 20px;border-bottom:1px solid var(--color-divider);display:flex;flex-direction:column;gap:8px">
+          <sc-for list="{{ serviceBadges }}" as="s" hint-placeholder-count="2">
+            <div style="display:flex;align-items:baseline;gap:8px;justify-content:space-between">
+              <span style="font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--color-neutral-700)">{{ s.label }}</span>
+              <span class="tag" style="{{ s.badge.style }}">{{ s.badge.label }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <nav style="flex:1;overflow-y:auto;padding:8px 0">
+        <sc-for list="{{ navGroups }}" as="g" hint-placeholder-count="3">
+          <div style="padding:8px 0;border-bottom:1px solid var(--color-divider);display:flex;flex-direction:column">
+            <sc-for list="{{ g.items }}" as="n" hint-placeholder-count="3">
+              <a href="{{ n.hash }}" style="{{ n.style }}">
+                <span>{{ n.label }}</span>
+                <span style="font-family:var(--mono);font-size:10px;color:var(--color-neutral-600)">{{ n.mark }}</span>
+              </a>
+            </sc-for>
+          </div>
+        </sc-for>
+      </nav>
+
+      <div style="padding:14px 20px;border-top:2px solid var(--color-divider);display:flex;flex-direction:column;gap:6px">
+        <div style="font-size:13px;font-weight:600">{{ me.name }}</div>
+        <div style="font-family:var(--mono);font-size:10.5px;color:var(--color-neutral-700)">{{ me.role }}</div>
+        <div style="display:flex;gap:12px;margin-top:4px">
+          <sc-if value="{{ isTenant }}" hint-placeholder-val="{{ true }}">
+            <a href="#/account" style="font-size:12.5px">Account</a>
+          </sc-if>
+          <button type="button" onClick="{{ signOut }}" class="btn btn-ghost" style="font-size:12.5px;padding:0">Sign out</button>
+        </div>
+      </div>
+    </aside>
+  </sc-if>
+
+  <main style="{{ mainStyle }}">
+    <sc-if value="{{ page.hasCrumbs }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:12px;color:var(--color-neutral-700);margin-bottom:20px">
+        <sc-for list="{{ page.crumbs }}" as="c" hint-placeholder-count="3">
+          <span style="display:flex;align-items:center;gap:8px">
+            <a href="{{ c.hash }}" style="{{ c.style }}">{{ c.label }}</a>
+            <span style="color:var(--color-neutral-500)">{{ c.sep }}</span>
+          </span>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <header style="display:flex;flex-direction:column;gap:10px;padding-bottom:18px;border-bottom:2px solid var(--color-divider)">
+      <sc-if value="{{ page.kicker }}" hint-placeholder-val="{{ true }}">
+        <div style="font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--color-accent-700)">{{ page.kicker }}</div>
+      </sc-if>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:14px;row-gap:10px">
+        <h1 style="font-size:34px;letter-spacing:-.02em;margin:0">{{ page.title }}</h1>
+        <sc-if value="{{ page.badge }}" hint-placeholder-val="{{ true }}">
+          <span class="tag" style="{{ page.badge.style }}">{{ page.badge.label }}</span>
+        </sc-if>
+        <sc-if value="{{ page.hasActions }}" hint-placeholder-val="{{ true }}">
+          <div style="margin-left:auto;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+            <sc-for list="{{ page.actions }}" as="a" hint-placeholder-count="2">
+              <span style="display:flex;flex-direction:column;gap:3px;align-items:flex-start">
+                <button type="button" class="{{ a.cls }}" disabled="{{ a.disabled }}" onClick="{{ a.run }}" title="{{ a.reason }}">{{ a.label }}</button>
+                <sc-if value="{{ a.reason }}" hint-placeholder-val="{{ true }}">
+                  <span style="font-size:11px;color:var(--warn);max-width:260px">{{ a.reason }}</span>
+                </sc-if>
+              </span>
+            </sc-for>
+          </div>
+        </sc-if>
+      </div>
+      <sc-if value="{{ page.subtitle }}" hint-placeholder-val="{{ true }}">
+        <p style="margin:0;max-width:68ch;color:var(--color-neutral-800);text-wrap:pretty">{{ page.subtitle }}</p>
+      </sc-if>
+      <sc-if value="{{ page.updated }}" hint-placeholder-val="{{ true }}">
+        <div style="font-family:var(--mono);font-size:11px;color:var(--color-neutral-600);animation:gr-pulse 2.4s ease-in-out infinite">{{ page.updated }}</div>
+      </sc-if>
+    </header>
+
+    <div style="display:flex;flex-direction:column;gap:28px;padding-top:26px">
+
+      <sc-if value="{{ page.banner }}" hint-placeholder-val="{{ true }}">
+        <div style="{{ page.banner.style }}">
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <div style="font-family:var(--font-heading);font-weight:800;font-size:14px">{{ page.banner.title }}</div>
+            <div style="font-size:13.5px;max-width:78ch">{{ page.banner.body }}</div>
+          </div>
+          <sc-if value="{{ page.banner.dismissible }}" hint-placeholder-val="{{ true }}">
+            <button type="button" class="btn btn-secondary" style="font-size:12px;padding:4px 10px;align-self:flex-start" onClick="{{ dismissBanner }}">Dismiss</button>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ page.hasStats }}" hint-placeholder-val="{{ true }}">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:0;border-top:1px solid var(--color-divider);border-left:1px solid var(--color-divider)">
+          <sc-for list="{{ page.stats }}" as="s" hint-placeholder-count="4">
+            <div style="border-right:1px solid var(--color-divider);border-bottom:1px solid var(--color-divider);padding:14px 16px;display:flex;flex-direction:column;gap:6px">
+              <span style="font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--color-neutral-700)">{{ s.label }}</span>
+              <span style="{{ s.valueStyle }}">{{ s.value }}</span>
+              <span style="font-size:11.5px;color:var(--color-neutral-700)">{{ s.note }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ page.rail }}" hint-placeholder-val="{{ true }}">
+        <section style="display:flex;flex-direction:column;gap:14px">
+          <h2 style="font-size:15px;letter-spacing:.02em;margin:0">{{ page.rail.title }}</h2>
+          <div style="display:grid;grid-template-columns:repeat({{ page.rail.count }},1fr);gap:8px">
+            <sc-for list="{{ page.rail.stages }}" as="st" hint-placeholder-count="9">
+              <div style="display:flex;flex-direction:column;gap:7px;min-width:0">
+                <div style="{{ st.barStyle }}"></div>
+                <span style="{{ st.labelStyle }}">{{ st.label }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:12.5px;color:var(--color-neutral-700)">{{ page.rail.note }}</div>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{ page.hasTabs }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;gap:0;border-bottom:2px solid var(--color-divider)">
+          <sc-for list="{{ page.tabs }}" as="t" hint-placeholder-count="2">
+            <button type="button" onClick="{{ t.run }}" style="{{ t.style }}">{{ t.label }}</button>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ page.hasFilters }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;padding:14px 16px;background:var(--color-surface);border:1px solid var(--color-divider)">
+          <sc-for list="{{ page.filters }}" as="f" hint-placeholder-count="3">
+            <div class="field" style="min-width:172px">
+              <label for="{{ f.id }}">{{ f.label }}</label>
+              <sc-if value="{{ f.isSelect }}" hint-placeholder-val="{{ true }}">
+                <select class="input" id="{{ f.id }}" value="{{ f.value }}" onChange="{{ f.run }}">
+                  <sc-for list="{{ f.options }}" as="o" hint-placeholder-count="3">
+                    <option value="{{ o }}">{{ o }}</option>
+                  </sc-for>
+                </select>
+              </sc-if>
+              <sc-if value="{{ f.isText }}" hint-placeholder-val="{{ true }}">
+                <input class="input" id="{{ f.id }}" type="text" placeholder="{{ f.placeholder }}" value="{{ f.value }}" onChange="{{ f.run }}">
+              </sc-if>
+            </div>
+          </sc-for>
+          <button type="button" class="btn btn-secondary" onClick="{{ clearFilters }}">Clear</button>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ page.form }}" hint-placeholder-val="{{ true }}">
+        <form style="display:flex;flex-direction:column;gap:20px;max-width:{{ page.form.width }}" onSubmit="{{ submitForm }}">
+          <sc-if value="{{ page.form.error }}" hint-placeholder-val="{{ true }}">
+            <div style="{{ page.form.error.style }}">
+              <div style="display:flex;flex-direction:column;gap:4px">
+                <div style="font-family:var(--font-heading);font-weight:800;font-size:14px">{{ page.form.error.title }}</div>
+                <div style="font-size:13.5px;max-width:78ch">{{ page.form.error.body }}</div>
+              </div>
+            </div>
+          </sc-if>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px">
+            <sc-for list="{{ page.form.fields }}" as="f" hint-placeholder-count="4">
+              <div class="field" style="{{ f.wrapStyle }}">
+                <label for="{{ f.id }}">{{ f.label }}</label>
+                <sc-if value="{{ f.isSelect }}" hint-placeholder-val="{{ true }}">
+                  <select class="input" id="{{ f.id }}" value="{{ f.value }}" onChange="{{ f.run }}">
+                    <sc-for list="{{ f.options }}" as="o" hint-placeholder-count="2">
+                      <option value="{{ o }}">{{ o }}</option>
+                    </sc-for>
+                  </select>
+                </sc-if>
+                <sc-if value="{{ f.isArea }}" hint-placeholder-val="{{ true }}">
+                  <textarea class="input" id="{{ f.id }}" rows="{{ f.rows }}" placeholder="{{ f.placeholder }}" value="{{ f.value }}" onChange="{{ f.run }}" style="{{ f.inputStyle }}"></textarea>
+                </sc-if>
+                <sc-if value="{{ f.isInput }}" hint-placeholder-val="{{ true }}">
+                  <input class="input" id="{{ f.id }}" type="{{ f.type }}" placeholder="{{ f.placeholder }}" value="{{ f.value }}" onChange="{{ f.run }}" style="{{ f.inputStyle }}">
+                </sc-if>
+                <sc-if value="{{ f.error }}" hint-placeholder-val="{{ true }}">
+                  <div style="font-size:12px;color:var(--danger);margin-top:5px">{{ f.error }}</div>
+                </sc-if>
+                <sc-if value="{{ f.hint }}" hint-placeholder-val="{{ true }}">
+                  <div style="font-size:12px;color:var(--color-neutral-700);margin-top:5px">{{ f.hint }}</div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center">
+            <button type="submit" class="btn btn-primary" disabled="{{ page.form.busy }}">{{ page.form.submit }}</button>
+            <sc-if value="{{ page.form.secondary }}" hint-placeholder-val="{{ true }}">
+              <a href="{{ page.form.secondary.hash }}" class="btn btn-secondary">{{ page.form.secondary.label }}</a>
+            </sc-if>
+            <sc-if value="{{ page.form.note }}" hint-placeholder-val="{{ true }}">
+              <span style="font-size:12.5px;color:var(--color-neutral-700)">{{ page.form.note }}</span>
+            </sc-if>
+          </div>
+        </form>
+      </sc-if>
+
+      <sc-if value="{{ page.hasCards }}" hint-placeholder-val="{{ true }}">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(258px,1fr));gap:0;border-top:1px solid var(--color-divider);border-left:1px solid var(--color-divider)">
+          <sc-for list="{{ page.cards }}" as="c" hint-placeholder-count="4">
+            <a href="{{ c.hash }}" style="border-right:1px solid var(--color-divider);border-bottom:1px solid var(--color-divider);padding:20px;display:flex;flex-direction:column;gap:8px;color:inherit;text-decoration:none" style-hover="background:var(--color-surface)">
+              <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;color:var(--color-accent-700)">{{ c.route }}</span>
+              <span style="font-family:var(--font-heading);font-weight:800;font-size:17px">{{ c.title }}</span>
+              <span style="font-size:13px;color:var(--color-neutral-800)">{{ c.body }}</span>
+            </a>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ page.checklist }}" hint-placeholder-val="{{ true }}">
+        <section style="border:1px solid var(--color-divider);background:var(--color-surface);padding:20px">
+          <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+            <h2 style="font-size:17px;margin:0">{{ page.checklist.title }}</h2>
+            <span style="font-family:var(--mono);font-size:11.5px;color:var(--color-neutral-700)">{{ page.checklist.progress }}</span>
+            <button type="button" class="btn btn-secondary" style="margin-left:auto;font-size:12px;padding:4px 10px" onClick="{{ dismissChecklist }}">Dismiss</button>
+          </div>
+          <ol style="list-style:none;margin:16px 0 0;padding:0;display:flex;flex-direction:column">
+            <sc-for list="{{ page.checklist.steps }}" as="s" hint-placeholder-count="8">
+              <li style="display:flex;align-items:baseline;gap:14px;padding:11px 0;border-top:1px solid var(--color-divider)">
+                <span style="{{ s.markStyle }}">{{ s.mark }}</span>
+                <a href="{{ s.hash }}" style="{{ s.linkStyle }}">{{ s.label }}</a>
+                <span class="tag" style="{{ s.badge.style }}">{{ s.badge.label }}</span>
+                <span style="font-size:12.5px;color:var(--color-neutral-700);margin-left:auto;text-align:right">{{ s.note }}</span>
+              </li>
+            </sc-for>
+          </ol>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{ showSkeleton }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <sc-for list="{{ skeletonRows }}" as="k" hint-placeholder-count="5">
+            <div style="height:38px;background:var(--color-surface);border:1px solid var(--color-divider);animation:gr-pulse 1.4s ease-in-out infinite"></div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ showDl }}" hint-placeholder-val="{{ true }}">
+        <dl style="display:grid;grid-template-columns:repeat(auto-fit,minmax(272px,1fr));gap:0;margin:0;border-top:1px solid var(--color-divider);border-left:1px solid var(--color-divider)">
+          <sc-for list="{{ page.dl }}" as="d" hint-placeholder-count="6">
+            <div style="border-right:1px solid var(--color-divider);border-bottom:1px solid var(--color-divider);padding:13px 16px;display:flex;flex-direction:column;gap:5px;min-width:0">
+              <dt style="font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--color-neutral-700)">{{ d.label }}</dt>
+              <dd style="margin:0;display:flex;align-items:center;gap:10px;min-width:0">
+                <sc-if value="{{ d.badge }}" hint-placeholder-val="{{ false }}">
+                  <span class="tag" style="{{ d.badge.style }}">{{ d.badge.label }}</span>
+                </sc-if>
+                <sc-if value="{{ d.value }}" hint-placeholder-val="{{ true }}">
+                  <span style="{{ d.valueStyle }}">{{ d.value }}</span>
+                </sc-if>
+                <sc-if value="{{ d.copy }}" hint-placeholder-val="{{ false }}">
+                  <button type="button" class="btn btn-secondary" style="font-size:11px;padding:2px 8px" onClick="{{ d.run }}">Copy</button>
+                </sc-if>
+              </dd>
+            </div>
+          </sc-for>
+        </dl>
+      </sc-if>
+
+      <sc-if value="{{ showTable }}" hint-placeholder-val="{{ true }}">
+        <section style="display:flex;flex-direction:column;gap:10px">
+          <sc-if value="{{ page.table.title }}" hint-placeholder-val="{{ false }}">
+            <h2 style="font-size:17px;margin:0">{{ page.table.title }}</h2>
+          </sc-if>
+          <div style="overflow-x:auto;border:1px solid var(--color-divider);background:var(--color-surface)">
+            <table class="table" style="min-width:{{ page.table.minWidth }}">
+              <thead>
+                <tr>
+                  <sc-for list="{{ page.table.cols }}" as="col" hint-placeholder-count="5">
+                    <th style="{{ col.style }}">
+                      <button type="button" onClick="{{ col.run }}" style="{{ col.btnStyle }}">{{ col.label }}{{ col.arrow }}</button>
+                    </th>
+                  </sc-for>
+                </tr>
+              </thead>
+              <tbody>
+                <sc-for list="{{ page.table.rows }}" as="r" hint-placeholder-count="5">
+                  <tr>
+                    <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="5">
+                      <td style="{{ c.style }}">
+                        <sc-if value="{{ c.isBadge }}" hint-placeholder-val="{{ false }}">
+                          <span class="tag" style="{{ c.badge.style }}">{{ c.badge.label }}</span>
+                        </sc-if>
+                        <sc-if value="{{ c.isLink }}" hint-placeholder-val="{{ false }}">
+                          <a href="{{ c.hash }}" style="{{ c.linkStyle }}">{{ c.v }}</a>
+                        </sc-if>
+                        <sc-if value="{{ c.isText }}" hint-placeholder-val="{{ true }}">
+                          <span style="{{ c.textStyle }}">{{ c.v }}</span>
+                        </sc-if>
+                        <sc-if value="{{ c.isActions }}" hint-placeholder-val="{{ false }}">
+                          <span style="display:flex;gap:10px;justify-content:flex-end">
+                            <sc-for list="{{ c.actions }}" as="ra" hint-placeholder-count="2">
+                              <button type="button" class="{{ ra.cls }}" style="font-size:12px;padding:2px 6px" disabled="{{ ra.disabled }}" title="{{ ra.reason }}" onClick="{{ ra.run }}">{{ ra.label }}</button>
+                            </sc-for>
+                          </span>
+                        </sc-if>
+                        <sc-if value="{{ c.sub }}" hint-placeholder-val="{{ false }}">
+                          <div style="font-size:11.5px;color:var(--color-neutral-700);margin-top:2px">{{ c.sub }}</div>
+                        </sc-if>
+                      </td>
+                    </sc-for>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;font-size:12px;color:var(--color-neutral-700)">
+            <span style="font-family:var(--mono)">{{ page.table.count }}</span>
+            <span style="display:flex;gap:8px;margin-left:auto">
+              <button type="button" class="btn btn-secondary" style="font-size:12px;padding:3px 10px" disabled="{{ true }}">Previous</button>
+              <button type="button" class="btn btn-secondary" style="font-size:12px;padding:3px 10px" disabled="{{ true }}">Next</button>
+            </span>
+          </div>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{ showEmpty }}" hint-placeholder-val="{{ false }}">
+        <div style="border:1px solid var(--color-divider);background:var(--color-surface);padding:44px 24px;display:flex;flex-direction:column;gap:10px;align-items:flex-start">
+          <h2 style="font-size:20px;margin:0">{{ page.table.empty.title }}</h2>
+          <p style="margin:0;max-width:56ch;color:var(--color-neutral-800)">{{ page.table.empty.body }}</p>
+          <sc-if value="{{ page.table.empty.action }}" hint-placeholder-val="{{ false }}">
+            <button type="button" class="btn btn-primary" style="margin-top:6px" onClick="{{ page.table.empty.action.run }}">{{ page.table.empty.action.label }}</button>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ page.hasPanels }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:26px">
+          <sc-for list="{{ page.panels }}" as="p" hint-placeholder-count="2">
+            <section style="border:1px solid var(--color-divider);background:var(--color-surface);padding:20px;display:flex;flex-direction:column;gap:14px">
+              <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:12px;border-bottom:2px solid var(--color-divider);padding-bottom:10px">
+                <h2 style="font-size:17px;margin:0">{{ p.title }}</h2>
+                <sc-if value="{{ p.badge }}" hint-placeholder-val="{{ false }}">
+                  <span class="tag" style="{{ p.badge.style }}">{{ p.badge.label }}</span>
+                </sc-if>
+                <sc-if value="{{ p.note }}" hint-placeholder-val="{{ false }}">
+                  <span style="font-size:12px;color:var(--color-neutral-700);margin-left:auto;font-family:var(--mono)">{{ p.note }}</span>
+                </sc-if>
+              </div>
+              <sc-if value="{{ p.body }}" hint-placeholder-val="{{ false }}">
+                <p style="margin:0;max-width:76ch;font-size:13.5px;color:var(--color-neutral-800);text-wrap:pretty">{{ p.body }}</p>
+              </sc-if>
+              <sc-if value="{{ p.hasDl }}" hint-placeholder-val="{{ false }}">
+                <dl style="display:grid;grid-template-columns:repeat(auto-fit,minmax(252px,1fr));gap:14px 22px;margin:0">
+                  <sc-for list="{{ p.dl }}" as="d" hint-placeholder-count="4">
+                    <div style="display:flex;flex-direction:column;gap:4px;min-width:0">
+                      <dt style="font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--color-neutral-700)">{{ d.label }}</dt>
+                      <dd style="margin:0;display:flex;align-items:center;gap:10px;min-width:0">
+                        <sc-if value="{{ d.badge }}" hint-placeholder-val="{{ false }}">
+                          <span class="tag" style="{{ d.badge.style }}">{{ d.badge.label }}</span>
+                        </sc-if>
+                        <sc-if value="{{ d.value }}" hint-placeholder-val="{{ true }}">
+                          <span style="{{ d.valueStyle }}">{{ d.value }}</span>
+                        </sc-if>
+                        <sc-if value="{{ d.copy }}" hint-placeholder-val="{{ false }}">
+                          <button type="button" class="btn btn-secondary" style="font-size:11px;padding:2px 8px" onClick="{{ d.run }}">Copy</button>
+                        </sc-if>
+                      </dd>
+                    </div>
+                  </sc-for>
+                </dl>
+              </sc-if>
+              <sc-if value="{{ p.hasRows }}" hint-placeholder-val="{{ false }}">
+                <div style="overflow-x:auto">
+                  <table class="table">
+                    <thead>
+                      <tr>
+                        <sc-for list="{{ p.cols }}" as="col" hint-placeholder-count="4">
+                          <th style="{{ col.style }}">{{ col.label }}</th>
+                        </sc-for>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <sc-for list="{{ p.rows }}" as="r" hint-placeholder-count="3">
+                        <tr>
+                          <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="4">
+                            <td style="{{ c.style }}">
+                              <sc-if value="{{ c.isBadge }}" hint-placeholder-val="{{ false }}">
+                                <span class="tag" style="{{ c.badge.style }}">{{ c.badge.label }}</span>
+                              </sc-if>
+                              <sc-if value="{{ c.isLink }}" hint-placeholder-val="{{ false }}">
+                                <a href="{{ c.hash }}" style="{{ c.linkStyle }}">{{ c.v }}</a>
+                              </sc-if>
+                              <sc-if value="{{ c.isText }}" hint-placeholder-val="{{ true }}">
+                                <span style="{{ c.textStyle }}">{{ c.v }}</span>
+                              </sc-if>
+                              <sc-if value="{{ c.isActions }}" hint-placeholder-val="{{ false }}">
+                                <span style="display:flex;gap:10px;justify-content:flex-end">
+                                  <sc-for list="{{ c.actions }}" as="ra" hint-placeholder-count="2">
+                                    <button type="button" class="{{ ra.cls }}" style="font-size:12px;padding:2px 6px" disabled="{{ ra.disabled }}" title="{{ ra.reason }}" onClick="{{ ra.run }}">{{ ra.label }}</button>
+                                  </sc-for>
+                                </span>
+                              </sc-if>
+                            </td>
+                          </sc-for>
+                        </tr>
+                      </sc-for>
+                    </tbody>
+                  </table>
+                </div>
+              </sc-if>
+              <sc-if value="{{ p.hasSnippets }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;flex-direction:column;gap:16px">
+                  <sc-for list="{{ p.snippets }}" as="sn" hint-placeholder-count="2">
+                    <div style="display:flex;flex-direction:column;gap:6px">
+                      <div style="display:flex;align-items:baseline;gap:12px">
+                        <span style="font-family:var(--mono);font-size:11.5px;color:var(--color-accent-700)">{{ sn.label }}</span>
+                        <button type="button" class="btn btn-secondary" style="margin-left:auto;font-size:11px;padding:2px 8px" onClick="{{ sn.run }}">Copy</button>
+                      </div>
+                      <pre style="margin:0;padding:14px;background:var(--color-bg);border:1px solid var(--color-divider);overflow-x:auto;font-family:var(--mono);font-size:12.5px;line-height:1.6">{{ sn.code }}</pre>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{ p.hasActions }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;padding-top:4px">
+                  <sc-for list="{{ p.actions }}" as="a" hint-placeholder-count="2">
+                    <span style="display:flex;flex-direction:column;gap:3px">
+                      <button type="button" class="{{ a.cls }}" disabled="{{ a.disabled }}" title="{{ a.reason }}" onClick="{{ a.run }}">{{ a.label }}</button>
+                      <sc-if value="{{ a.reason }}" hint-placeholder-val="{{ false }}">
+                        <span style="font-size:11px;color:var(--warn);max-width:240px">{{ a.reason }}</span>
+                      </sc-if>
+                    </span>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </section>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ page.footnote }}" hint-placeholder-val="{{ false }}">
+        <p style="margin:0;font-size:12.5px;color:var(--color-neutral-700);max-width:76ch">{{ page.footnote }}</p>
+      </sc-if>
+    </div>
+  </main>
+
+  <sc-if value="{{ dialog }}" hint-placeholder-val="{{ false }}">
+    <div class="dialog-backdrop" style="z-index:80" onClick="{{ backdropClose }}">
+      <div class="dialog" role="dialog" aria-modal="true" style="width:min({{ dialog.width }},100%);background:var(--color-surface);border:1px solid var(--color-divider);gap:16px" onClick="{{ stop }}" ref="{{ dialogRef }}" onKeyDown="{{ dialogKeys }}">
+        <div class="dialog-title">{{ dialog.title }}</div>
+        <div class="dialog-body" style="display:flex;flex-direction:column;gap:12px">
+          <p style="margin:0">{{ dialog.body }}</p>
+          <sc-if value="{{ dialog.consequence }}" hint-placeholder-val="{{ false }}">
+            <p style="margin:0;color:var(--color-neutral-800)">{{ dialog.consequence }}</p>
+          </sc-if>
+          <sc-if value="{{ dialog.hasDl }}" hint-placeholder-val="{{ false }}">
+            <dl style="display:grid;grid-template-columns:1fr 1fr;gap:10px 18px;margin:0;padding:12px;background:var(--color-bg);border:1px solid var(--color-divider)">
+              <sc-for list="{{ dialog.dl }}" as="d" hint-placeholder-count="3">
+                <div style="display:flex;flex-direction:column;gap:3px">
+                  <dt style="font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--color-neutral-700)">{{ d.label }}</dt>
+                  <dd style="margin:0;font-family:var(--mono);font-size:12.5px">{{ d.value }}</dd>
+                </div>
+              </sc-for>
+            </dl>
+          </sc-if>
+          <sc-if value="{{ dialog.hasFields }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:14px">
+              <sc-for list="{{ dialog.fields }}" as="f" hint-placeholder-count="2">
+                <div class="field">
+                  <label for="{{ f.id }}">{{ f.label }}</label>
+                  <sc-if value="{{ f.isSelect }}" hint-placeholder-val="{{ false }}">
+                    <select class="input" id="{{ f.id }}" value="{{ f.value }}" onChange="{{ f.run }}">
+                      <sc-for list="{{ f.options }}" as="o" hint-placeholder-count="2">
+                        <option value="{{ o }}">{{ o }}</option>
+                      </sc-for>
+                    </select>
+                  </sc-if>
+                  <sc-if value="{{ f.isArea }}" hint-placeholder-val="{{ false }}">
+                    <textarea class="input" id="{{ f.id }}" rows="3" placeholder="{{ f.placeholder }}" value="{{ f.value }}" onChange="{{ f.run }}"></textarea>
+                  </sc-if>
+                  <sc-if value="{{ f.isCheckGroup }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;flex-direction:column;gap:8px;padding-top:2px">
+                      <sc-for list="{{ f.boxes }}" as="b" hint-placeholder-count="3">
+                        <label style="display:flex;align-items:flex-start;gap:9px;font-size:13px;cursor:pointer">
+                          <input type="checkbox" checked="{{ b.checked }}" onChange="{{ b.run }}" style="margin:3px 0 0;accent-color:var(--color-accent)">
+                          <span>{{ b.label }}</span>
+                        </label>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ f.isInput }}" hint-placeholder-val="{{ false }}">
+                    <input class="input" id="{{ f.id }}" type="{{ f.type }}" placeholder="{{ f.placeholder }}" value="{{ f.value }}" onChange="{{ f.run }}">
+                  </sc-if>
+                  <sc-if value="{{ f.error }}" hint-placeholder-val="{{ false }}">
+                    <div style="font-size:12px;color:var(--danger);margin-top:5px">{{ f.error }}</div>
+                  </sc-if>
+                  <sc-if value="{{ f.hint }}" hint-placeholder-val="{{ false }}">
+                    <div style="font-size:12px;color:var(--color-neutral-700);margin-top:5px">{{ f.hint }}</div>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+          <sc-if value="{{ dialog.error }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:12px 14px;background:var(--danger-bg);border-left:3px solid var(--danger);color:var(--danger);font-size:13px">{{ dialog.error }}</div>
+          </sc-if>
+        </div>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-secondary" onClick="{{ closeDialog }}">{{ dialog.cancelLabel }}</button>
+          <button type="button" class="{{ dialog.confirmCls }}" disabled="{{ dialog.confirmDisabled }}" onClick="{{ confirmDialog }}">{{ dialog.confirmLabel }}</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ secret }}" hint-placeholder-val="{{ false }}">
+    <div class="dialog-backdrop" style="z-index:90">
+      <div class="dialog" role="dialog" aria-modal="true" style="width:min(560px,100%);background:var(--color-surface);border:1px solid var(--color-divider);gap:16px">
+        <div class="dialog-title">{{ secret.title }}</div>
+        <div style="padding:12px 14px;background:var(--warn-bg);border-left:3px solid var(--warn);font-size:13px;color:var(--warn)">This value is shown once. GraphRec does not retain it — if it is lost, rotate the credential to obtain a new one.</div>
+        <pre style="margin:0;padding:16px;background:var(--color-bg);border:1px solid var(--color-divider);font-family:var(--mono);font-size:13px;word-break:break-all;white-space:pre-wrap">{{ secret.value }}</pre>
+        <div style="display:flex;flex-wrap:wrap;gap:16px;font-size:12.5px;color:var(--color-neutral-800)">
+          <span>Prefix <b style="font-family:var(--mono)">{{ secret.prefix }}</b></span>
+          <span>Scopes {{ secret.scopes }}</span>
+        </div>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-secondary" onClick="{{ copySecret }}">Copy secret</button>
+          <button type="button" class="btn btn-primary" onClick="{{ closeSecret }}">I have stored it</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+    <div role="status" style="position:fixed;right:24px;bottom:76px;z-index:70;max-width:360px;padding:14px 16px;background:var(--ok-bg);border-left:3px solid var(--ok);color:var(--ok);font-size:13.5px;box-shadow:var(--shadow-md)">{{ toast }}</div>
+  </sc-if>
+
+  <sc-if value="{{ showBar }}" hint-placeholder-val="{{ true }}">
+    <div style="position:fixed;left:0;right:0;bottom:0;z-index:60;background:var(--color-surface);border-top:2px solid var(--color-divider);padding:8px 16px;display:flex;flex-wrap:wrap;align-items:center;gap:14px;font-size:12px">
+      <span style="font-family:var(--mono);font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--color-accent-700)">Prototype controls</span>
+      <label style="display:flex;align-items:center;gap:6px">Identity
+        <select class="input" style="min-height:28px;padding:2px 6px;font-size:12px;width:auto" value="{{ identity }}" onChange="{{ setIdentity }}">
+          <sc-for list="{{ identityOptions }}" as="o" hint-placeholder-count="4">
+            <option value="{{ o.value }}">{{ o.label }}</option>
+          </sc-for>
+        </select>
+      </label>
+      <label style="display:flex;align-items:center;gap:6px">Tenant status
+        <select class="input" style="min-height:28px;padding:2px 6px;font-size:12px;width:auto" value="{{ tenantStatus }}" onChange="{{ setTenantStatus }}">
+          <sc-for list="{{ tenantStatusOptions }}" as="o" hint-placeholder-count="3">
+            <option value="{{ o }}">{{ o }}</option>
+          </sc-for>
+        </select>
+      </label>
+      <sc-if value="{{ isPlatform }}" hint-placeholder-val="{{ false }}">
+        <span style="display:flex;flex-wrap:wrap;align-items:center;gap:10px">
+          <span style="color:var(--color-neutral-700)">Permissions</span>
+          <sc-for list="{{ permBoxes }}" as="p" hint-placeholder-count="5">
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-family:var(--mono);font-size:11px">
+              <input type="checkbox" checked="{{ p.checked }}" onChange="{{ p.run }}" style="accent-color:var(--color-accent)">
+              <span>{{ p.label }}</span>
+            </label>
+          </sc-for>
+        </span>
+      </sc-if>
+      <span style="display:flex;align-items:center;gap:10px;margin-left:auto">
+        <span style="font-family:var(--mono);color:var(--color-neutral-700)">{{ routeLabel }}</span>
+        <a href="#/models/v-99" style="font-size:11.5px">gate 4 probe</a>
+        <a href="#/403" style="font-size:11.5px">403</a>
+        <a href="#/error" style="font-size:11.5px">error</a>
+        <button type="button" class="btn btn-secondary" style="font-size:11.5px;padding:3px 9px" onClick="{{ toggleTheme }}">{{ themeLabel }}</button>
+      </span>
+    </div>
+  </sc-if>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:940},&quot;initialIdentity&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;tenant_admin&quot;,&quot;tenant_dev&quot;,&quot;platform&quot;,&quot;none&quot;],&quot;default&quot;:&quot;tenant_admin&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Prototype&quot;},&quot;initialTheme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Prototype&quot;},&quot;showReviewBar&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Prototype&quot;}}">
+const MONO='var(--mono)';
+const TONES={ok:['var(--ok)','var(--ok-bg)'],warn:['var(--warn)','var(--warn-bg)'],danger:['var(--danger)','var(--danger-bg)'],info:['var(--info)','var(--info-bg)'],neu:['var(--neu)','var(--neu-bg)']};
+const GROUPS={
+  job:{queued:'neu',waiting_for_resources:'neu',preparing_data:'info',building_graph:'info',training:'info',evaluating:'info',indexing_embeddings:'info',registering:'info',cancelling:'warn',cancelled:'warn',failed:'danger',succeeded:'ok'},
+  model:{registered:'neu',archived:'neu',eligible:'info',retired:'warn',rejected:'warn',failed_deployment:'danger',active:'ok'},
+  deploy:{stopped:'neu',pending:'info',progressing:'info',degraded:'warn',rolling_back:'warn',available:'ok'},
+  tenant:{deleted:'neu',pending:'info',suspended:'warn',deleting:'warn',active:'ok'},
+  user:{invited:'info',locked:'warn',disabled:'danger',active:'ok'},
+  outcome:{cancelled:'neu',denied:'warn',failed:'danger',succeeded:'ok'},
+  sev:{info:'info',warning:'warn',error:'danger',critical:'danger'},
+  plain:{}
+};
+const JOB_STAGES=['queued','waiting_for_resources','preparing_data','building_graph','training','evaluating','indexing_embeddings','registering','succeeded'];
+const SCOPES=['catalog write & synchronization','event submission (single and batch)','recommendation requests','recommendation feedback','submission result read'];
+const SCOPE_SHORT={'catalog write & synchronization':'catalog write','event submission (single and batch)':'event submission','recommendation requests':'recommendations','recommendation feedback':'feedback','submission result read':'result read'};
+const PERMS=['platform permission','plan-management permission','authorized platform scope','monitoring access','audit permission'];
+const ADMIN='tenant administrator', DEV='tenant developer';
+
+const ROUTES=[
+  ['/register','register','public'],['/login','login','public'],['/recover','recover','public'],
+  ['/recover/confirm','recoverConfirm','public'],['/invite/accept','invite','public'],['/admin/login','adminLogin','public'],
+  ['/account/tenant-status','tenantStatus','gate'],
+  ['/home','home','tenant',[ADMIN,DEV]],['/credentials','credentials','tenant',[ADMIN,DEV]],
+  ['/integration','integration','tenant',[ADMIN,DEV]],['/account','account','tenant',[ADMIN,DEV]],
+  ['/users','users','tenant',[ADMIN]],['/users/:userId','user','tenant',[ADMIN]],['/audit','audit','tenant',[ADMIN]],
+  ['/products','products','tenant',[DEV]],['/products/new','productNew','tenant',[DEV]],
+  ['/products/sync','productSync','tenant',[DEV]],['/products/:productId','product','tenant',[DEV]],
+  ['/events/submit','events','tenant',[DEV]],['/submissions/:submissionId','submission','tenant',[DEV]],
+  ['/training','training','tenant',[ADMIN]],['/training/:jobId','job','tenant',[ADMIN]],
+  ['/models','models','tenant',[ADMIN]],['/models/:versionId','version','tenant',[ADMIN]],
+  ['/usage','usage','tenant',[ADMIN]],['/service-status','service','tenant',[ADMIN]],
+  ['/admin/tenants','pTenants','platform','platform permission'],
+  ['/admin/tenants/:tenantId','pTenant','platform','platform permission'],
+  ['/admin/plans','pPlans','platform','plan-management permission'],
+  ['/admin/plans/:planId','pPlan','platform','plan-management permission'],
+  ['/admin/usage','pUsage','platform','authorized platform scope'],
+  ['/admin/status','pStatus','platform','monitoring access'],
+  ['/admin/audit','pAudit','platform','audit permission'],
+  ['/403','e403','error'],['/404','e404','error'],['/error','e500','error']
+];
+const PERM_ROUTE={'platform permission':'/admin/tenants','plan-management permission':'/admin/plans','authorized platform scope':'/admin/usage','monitoring access':'/admin/status','audit permission':'/admin/audit'};
+
+function seed(){
+  return {
+    tenant:{code:'NGS-01',name:'Northgate Supply',status:'active',plan:'GROWTH',created:'2026-02-11'},
+    checklistDismissed:false,
+    users:[
+      {id:'u-1',name:'Dana Whitfield',email:'dana@northgate.example',role:ADMIN,status:'active',created:'2026-02-11',last:'2026-08-14 09:12'},
+      {id:'u-2',name:'Ruben Sato',email:'ruben@northgate.example',role:DEV,status:'active',created:'2026-03-02',last:'2026-08-14 08:40'},
+      {id:'u-3',name:'Priya Anand',email:'priya@northgate.example',role:DEV,status:'invited',created:'2026-08-12',last:'—'},
+      {id:'u-4',name:'Tom Iyer',email:'tom@northgate.example',role:DEV,status:'locked',created:'2026-04-19',last:'2026-07-30 14:03'}
+    ],
+    creds:[
+      {id:'k-1',name:'Storefront server',prefix:'gr_live_7Kq4',scopes:[SCOPES[2],SCOPES[3]],expires:'2026-12-01',revoked:null,created:'2026-03-02',last:'2026-08-14 09:58'},
+      {id:'k-2',name:'Event pipeline',prefix:'gr_live_2Mv8',scopes:[SCOPES[1],SCOPES[4]],expires:'2026-10-15',revoked:null,created:'2026-03-04',last:'2026-08-14 09:59'},
+      {id:'k-3',name:'Catalog loader',prefix:'gr_live_9Fd1',scopes:[SCOPES[0],SCOPES[4]],expires:'2026-09-30',revoked:null,created:'2026-04-11',last:'2026-08-13 22:04'},
+      {id:'k-4',name:'Legacy import',prefix:'gr_live_4Ax0',scopes:[SCOPES[0]],expires:'2026-11-01',revoked:'2026-06-01',created:'2025-12-08',last:'2026-05-29 11:20'},
+      {id:'k-5',name:'Staging bridge',prefix:'gr_live_1Ry7',scopes:[SCOPES[1]],expires:'2026-07-01',revoked:null,created:'2026-01-19',last:'2026-06-28 07:45'}
+    ],
+    products:[
+      {id:'SKU-4471',title:'Brass hinge, 75mm',cat:'Hardware',brand:'Northgate',price:'8.40',active:true,avail:'in_stock',updated:'2026-08-13 18:02',eligible:true},
+      {id:'SKU-4472',title:'Brass hinge, 100mm',cat:'Hardware',brand:'Northgate',price:'9.95',active:true,avail:'in_stock',updated:'2026-08-13 18:02',eligible:true},
+      {id:'SKU-5120',title:'Oak shelf board 1200',cat:'Timber',brand:'Fenwick',price:'22.00',active:true,avail:'low_stock',updated:'2026-08-12 09:41',eligible:true},
+      {id:'SKU-5121',title:'Oak shelf board 1800',cat:'Timber',brand:'Fenwick',price:'31.50',active:true,avail:'out_of_stock',updated:'2026-08-11 16:20',eligible:false,why:'Out of stock — excluded from serving'},
+      {id:'SKU-6002',title:'Cordless driver 18V',cat:'Power tools',brand:'Kelder',price:'129.00',active:true,avail:'in_stock',updated:'2026-08-14 07:15',eligible:true},
+      {id:'SKU-6003',title:'Driver bit set, 32pc',cat:'Power tools',brand:'Kelder',price:'24.75',active:true,avail:'in_stock',updated:'2026-08-14 07:15',eligible:true},
+      {id:'SKU-7310',title:'Workshop apron',cat:'Workwear',brand:'Northgate',price:'18.00',active:false,avail:'in_stock',updated:'2026-07-28 12:00',eligible:false,why:'Inactive — excluded from serving'},
+      {id:'SKU-7311',title:'Leather work gloves',cat:'Workwear',brand:'Northgate',price:'14.20',active:true,avail:'in_stock',updated:'2026-08-09 10:33',eligible:true}
+    ],
+    submissions:[
+      {id:'sub-8841',kind:'product sync',status:'succeeded',received:523,accepted:412,updated:96,skipped:12,failed:3,at:'2026-08-13 08:41',ref:'req-9d21',errors:[{ref:'SKU-9004',reason:'price is not a positive decimal'},{ref:'SKU-9007',reason:'category exceeds 120 characters'},{ref:'SKU-9012',reason:'external identifier already disabled'}]},
+      {id:'sub-9002',kind:'event batch',status:'processing',received:5000,accepted:4870,updated:0,skipped:118,failed:12,at:'2026-08-14 09:52',ref:'batch-4471',errors:[{ref:'ev-33810',reason:'occurred_at is in the future'}]},
+      {id:'sub-8790',kind:'event batch',status:'failed',received:5000,accepted:0,updated:0,skipped:0,failed:5000,at:'2026-08-10 04:12',ref:'batch-4102',errors:[{ref:'batch',reason:'batch exceeded the accepted payload size'}]}
+    ],
+    jobs:[
+      {id:'job-2292',state:'training',type:'DGSR',requested:'2026-08-14 09:30',completed:'—',by:'Dana Whitfield',reason:null,version:null,stageAt:4,progress:'epoch 6 of 20'},
+      {id:'job-2291',state:'succeeded',type:'DGSR',requested:'2026-08-13 09:02',completed:'2026-08-13 10:41',by:'Dana Whitfield',reason:null,version:'v-7',stageAt:8,progress:'complete'},
+      {id:'job-2288',state:'failed',type:'DGSR',requested:'2026-08-11 11:15',completed:'2026-08-11 11:39',by:'Dana Whitfield',reason:'Dataset snapshot held fewer than 1,000 eligible interaction sequences.',version:null,stageAt:2,progress:'stopped at preparing_data'},
+      {id:'job-2285',state:'cancelled',type:'DGSR',requested:'2026-08-09 14:02',completed:'2026-08-09 14:20',by:'Dana Whitfield',reason:'Cancelled by requester: superseded by a corrected catalog sync.',version:null,stageAt:3,progress:'stopped at building_graph'}
+    ],
+    versions:[
+      {id:'v-7',n:7,type:'DGSR',status:'active',created:'2026-08-13 10:41',job:'job-2291',recall:0.218,hr:0.341,ndcg:0.187,cov:0.62,digest:'sha256:4f21c8…9ad3',snap:'snap-7741',eligible:true},
+      {id:'v-6',n:6,type:'DGSR',status:'retired',created:'2026-08-06 11:02',job:'job-2270',recall:0.204,hr:0.322,ndcg:0.176,cov:0.59,digest:'sha256:1b8ae0…4c17',snap:'snap-7620',eligible:true},
+      {id:'v-5',n:5,type:'DGSR',status:'eligible',created:'2026-08-04 09:55',job:'job-2264',recall:0.211,hr:0.330,ndcg:0.181,cov:0.60,digest:'sha256:77de41…0bb9',snap:'snap-7588',eligible:true},
+      {id:'v-4',n:4,type:'DGSR',status:'failed_deployment',created:'2026-07-29 15:30',job:'job-2251',recall:0.199,hr:0.318,ndcg:0.170,cov:0.57,digest:'sha256:9cc012…7e42',snap:'snap-7501',eligible:false,failNote:'Activation failed on 2026-07-29 15:52 — embedding index rejected the feature contract. Version 6 remained active.'},
+      {id:'v-3',n:3,type:'DGSR',status:'archived',created:'2026-07-18 10:12',job:'job-2230',recall:0.191,hr:0.305,ndcg:0.164,cov:0.55,digest:'sha256:33ab7f…1d90',snap:'snap-7412',eligible:false},
+      {id:'v-2',n:2,type:'DGSR',status:'registered',created:'2026-07-09 12:44',job:'job-2216',recall:0.188,hr:0.301,ndcg:0.161,cov:0.54,digest:'sha256:5ef991…8a20',snap:'snap-7350',eligible:false},
+      {id:'v-1',n:1,type:'DGSR',status:'rejected',created:'2026-06-30 08:20',job:'job-2201',recall:0.142,hr:0.244,ndcg:0.121,cov:0.41,digest:'sha256:0aa471…33fe',snap:'snap-7290',eligible:false}
+    ],
+    usage:[
+      {type:'events',qty:'4,182,400',limit:'6,000,000',rem:'1,817,600',reset:'monthly · resets 2026-09-01',status:'measured'},
+      {type:'recommendations',qty:'11,904,077',limit:'15,000,000',rem:'3,095,923',reset:'monthly · resets 2026-09-01',status:'measured'},
+      {type:'training',qty:'6',limit:'8 jobs',rem:'2',reset:'monthly · resets 2026-09-01',status:'measured'},
+      {type:'products',qty:'48,210',limit:'50,000',rem:'1,790',reset:'no reset · standing limit',status:'measured'},
+      {type:'storage',qty:'61.4 GB',limit:'80 GB',rem:'18.6 GB',reset:'no reset · standing limit',status:'measured'},
+      {type:'service_capacity',qty:'unavailable',limit:'3 replicas',rem:'not calculable',reset:'continuous',status:'measurement delayed'}
+    ],
+    deployment:{state:'available',version:'v-7',desired:3,ready:3,transition:'2026-08-13 10:47',errors:'12 in the last 24 h',fallback:'0.7%',latency:'p95 41 ms'},
+    tenants:[
+      {id:'NGS-01',name:'Northgate Supply',status:'active',plan:'GROWTH',created:'2026-02-11'},
+      {id:'BRM-02',name:'Brambleworth Home',status:'active',plan:'STARTER',created:'2026-03-20'},
+      {id:'KLD-03',name:'Kelder Tools',status:'suspended',plan:'GROWTH',created:'2026-01-08'},
+      {id:'VNT-04',name:'Ventura Outfitters',status:'pending',plan:'STARTER',created:'2026-08-10'}
+    ],
+    plans:[
+      {id:'STARTER',name:'Starter',events:'1,000,000',recs:'2,000,000',training:'4 / month',products:'10,000',storage:'20 GB',open:true,tenants:['BRM-02','VNT-04']},
+      {id:'GROWTH',name:'Growth',events:'6,000,000',recs:'15,000,000',training:'8 / month',products:'50,000',storage:'80 GB',open:true,tenants:['NGS-01','KLD-03']},
+      {id:'SCALE',name:'Scale',events:'20,000,000',recs:'60,000,000',training:'20 / month',products:'250,000',storage:'400 GB',open:false,tenants:[]}
+    ],
+    audit:[
+      {at:'2026-08-14 09:30:12',actor:'tenant_user',action:'training',res:'job-2292',outcome:'succeeded',ref:'cor-8f21a',tenant:'NGS-01'},
+      {at:'2026-08-13 10:47:03',actor:'system_process',action:'activation',res:'v-7',outcome:'succeeded',ref:'cor-8e04c',tenant:'NGS-01'},
+      {at:'2026-08-13 10:41:55',actor:'system_process',action:'training',res:'job-2291',outcome:'succeeded',ref:'cor-8e011',tenant:'NGS-01'},
+      {at:'2026-08-13 08:12:40',actor:'tenant_application',action:'credential',res:'gr_live_9Fd1',outcome:'succeeded',ref:'cor-8dd90',tenant:'NGS-01'},
+      {at:'2026-08-12 15:03:19',actor:'tenant_user',action:'access',res:'/models/v-4',outcome:'denied',ref:'cor-8d5f2',tenant:'NGS-01'},
+      {at:'2026-08-11 11:39:02',actor:'system_process',action:'training',res:'job-2288',outcome:'failed',ref:'cor-8c771',tenant:'NGS-01'},
+      {at:'2026-08-10 04:12:48',actor:'tenant_application',action:'security',res:'batch-4102',outcome:'denied',ref:'cor-8b220',tenant:'NGS-01'},
+      {at:'2026-08-09 14:20:10',actor:'tenant_user',action:'training',res:'job-2285',outcome:'cancelled',ref:'cor-8a901',tenant:'NGS-01'},
+      {at:'2026-08-08 09:00:00',actor:'platform_administrator',action:'quota',res:'KLD-03',outcome:'succeeded',ref:'cor-89f40',tenant:'KLD-03'},
+      {at:'2026-08-07 17:42:31',actor:'platform_administrator',action:'tenant',res:'KLD-03',outcome:'succeeded',ref:'cor-89a12',tenant:'KLD-03'},
+      {at:'2026-07-29 15:52:07',actor:'system_process',action:'activation',res:'v-4',outcome:'failed',ref:'cor-8710d',tenant:'NGS-01'},
+      {at:'2026-07-29 15:10:44',actor:'tenant_user',action:'rollback',res:'v-6',outcome:'succeeded',ref:'cor-870aa',tenant:'NGS-01'}
+    ],
+    failures:[
+      {at:'2026-08-14 06:22:10',sev:'warning',area:'serving',ref:'err-3f81',summary:'Fallback strategy served 812 requests while replica 2 restarted.',tenant:'redacted'},
+      {at:'2026-08-13 21:04:55',sev:'error',area:'ingestion',ref:'err-3f42',summary:'Event batch rejected — payload exceeded the accepted size.',tenant:'redacted'},
+      {at:'2026-08-11 11:39:02',sev:'error',area:'training',ref:'err-3e90',summary:'Training job terminated — insufficient interaction sequences in snapshot.',tenant:'redacted'},
+      {at:'2026-07-29 15:52:07',sev:'critical',area:'activation',ref:'err-3b17',summary:'Model version activation rejected by the embedding index; previous version retained.',tenant:'redacted'},
+      {at:'2026-07-22 02:11:38',sev:'info',area:'capacity',ref:'err-39c4',summary:'Autoscaler raised desired capacity from 2 to 3 replicas.',tenant:'redacted'}
+    ]
+  };
+}
+
+class Component extends DCLogic {
+  constructor(p){
+    super(p);
+    this.state={
+      store:seed(),
+      identity:this.props.initialIdentity||'tenant_admin',
+      perms:PERMS.slice(),
+      theme:this.props.initialTheme||'light',
+      route:'/home', res:null,
+      loading:false, filters:{}, sort:{}, form:{}, errors:{}, formError:null,
+      dialog:null, dfields:{}, derror:null,
+      secret:null, toast:null, tab:{}, tick:0, syncResult:null, eventResult:null, bannerOff:{}
+    };
+    this._t=null;
+  }
+
+  componentDidMount(){
+    document.documentElement.setAttribute('data-theme',this.state.theme);
+    window.addEventListener('hashchange',()=>this.syncRoute());
+    this.syncRoute();
+    this._poll=setInterval(()=>this.advance(),2200);
+  }
+  componentWillUnmount(){ clearInterval(this._poll); if(this._t) clearTimeout(this._t); }
+
+  ctx(o){ const s=this.state; return Object.assign({identity:s.identity,perms:s.perms,tstatus:s.store.tenant.status},o||{}); }
+  me(c){
+    c=c||this.ctx();
+    if(c.identity==='tenant_admin') return {kind:'tenant',role:ADMIN,name:'Dana Whitfield',email:'dana@northgate.example',status:'active',uid:'u-1'};
+    if(c.identity==='tenant_dev') return {kind:'tenant',role:DEV,name:'Ruben Sato',email:'ruben@northgate.example',status:'active',uid:'u-2'};
+    if(c.identity==='tenant_locked') return {kind:'tenant',role:DEV,name:'Tom Iyer',email:'tom@northgate.example',status:'locked',uid:'u-4'};
+    if(c.identity==='platform') return {kind:'platform',role:'platform administrator',name:'A. Marek',email:'marek@graphrec.example',status:'active'};
+    return null;
+  }
+
+  path(){ const h=(location.hash||'').replace(/^#/,''); return h?h.split('?')[0]:'/'; }
+
+  match(p){
+    for(const r of ROUTES){
+      const pat=r[0].split('/'), seg=p.split('/');
+      if(pat.length!==seg.length) continue;
+      let ok=true, params={};
+      for(let i=0;i<pat.length;i++){
+        if(pat[i].startsWith(':')) params[pat[i].slice(1)]=decodeURIComponent(seg[i]);
+        else if(pat[i]!==seg[i]){ ok=false; break; }
+      }
+      if(ok) return {pattern:r[0],id:r[1],layout:r[2],access:r[3],params};
+    }
+    return null;
+  }
+
+  firstPerm(c){ for(const p of PERMS) if(c.perms.indexOf(p)>=0) return PERM_ROUTE[p]; return null; }
+
+  resolve(p,c){
+    const me=this.me(c);
+    if(p==='/'||p==='') return {redirect:me?(me.kind==='platform'?'/admin':'/home'):'/login'};
+    if(p==='/admin'){ const f=me&&me.kind==='platform'?this.firstPerm(c):null; return {redirect:f||(me&&me.kind==='platform'?'/403':'/login')}; }
+    const m=this.match(p);
+    if(!m) return {id:'e404',layout:me?(me.kind==='platform'?'platform':'tenant'):'public',params:{}};
+    if(m.layout==='public'||m.layout==='error') return m;
+    if(!me||me.status!=='active') return {redirect:'/login'};
+    if(me.kind==='tenant'){
+      if(c.tstatus!=='active') return m.id==='tenantStatus'?m:{redirect:'/account/tenant-status'};
+      if(m.layout==='gate') return {redirect:'/home'};
+      if(m.layout==='platform') return {id:'e403',layout:'tenant',params:{}};
+      if(m.access&&m.access.indexOf(me.role)<0) return {id:'e403',layout:'tenant',params:{}};
+    } else {
+      if(m.layout!=='platform') return {id:'e403',layout:'platform',params:{}};
+      if(c.perms.indexOf(m.access)<0) return {id:'e403',layout:'platform',params:{}};
+    }
+    const own=this.own(m);
+    if(own===false) return {id:'e404',layout:m.layout,params:{}};
+    return m;
+  }
+
+  own(m){
+    const s=this.state.store, pr=m.params;
+    if(m.id==='user') return !!s.users.find(u=>u.id===pr.userId);
+    if(m.id==='product') return !!s.products.find(x=>x.id===pr.productId);
+    if(m.id==='submission') return !!s.submissions.find(x=>x.id===pr.submissionId);
+    if(m.id==='job') return !!s.jobs.find(x=>x.id===pr.jobId);
+    if(m.id==='version') return !!s.versions.find(x=>x.id===pr.versionId);
+    if(m.id==='pTenant') return !!s.tenants.find(x=>x.id===pr.tenantId);
+    if(m.id==='pPlan') return !!s.plans.find(x=>x.id===pr.planId);
+    return null;
+  }
+
+  syncRoute(over){
+    const c=this.ctx(over), p=this.path(), r=this.resolve(p,c);
+    if(r.redirect){ location.replace('#'+r.redirect); return; }
+    const skel=['products','models','training','users','credentials','audit','pTenants','pPlans','pAudit','pUsage','usage'].indexOf(r.id)>=0;
+    this.setState({route:p,res:r,loading:skel,dialog:null,derror:null,formError:null,errors:{},form:{}});
+    if(this._t) clearTimeout(this._t);
+    if(skel) this._t=setTimeout(()=>this.setState({loading:false}),340);
+  }
+
+  go(p){ location.hash='#'+p; }
+
+  advance(){
+    const s=this.state.store, j=s.jobs.find(x=>x.id==='job-2292');
+    let dirty=false;
+    if(j&&['queued','waiting_for_resources','preparing_data','building_graph','training','evaluating','indexing_embeddings','registering'].indexOf(j.state)>=0){
+      const i=JOB_STAGES.indexOf(j.state);
+      if(j.state==='training'&&j.epoch===undefined) j.epoch=6;
+      if(j.state==='training'&&j.epoch<20){ j.epoch+=2; j.progress='epoch '+j.epoch+' of 20'; }
+      else { j.state=JOB_STAGES[i+1]; j.stageAt=i+1; j.progress=j.state==='succeeded'?'complete':'stage started'; if(j.state==='succeeded'){ j.completed='2026-08-14 10:'+(10+this.state.tick%40); j.version='v-8'; this.addVersion(); } }
+      dirty=true;
+    }
+    if(j&&j.state==='cancelling'){ j.state='cancelled'; j.progress='stopped at '+JOB_STAGES[j.stageAt]; dirty=true; }
+    const sub=s.submissions.find(x=>x.id==='sub-9002');
+    if(sub&&sub.status==='processing'){ sub.accepted=Math.min(4882,sub.accepted+3); if(sub.accepted>=4882){ sub.status='succeeded'; } dirty=true; }
+    this.setState({tick:this.state.tick+1,store:dirty?Object.assign({},s):s});
+  }
+
+  addVersion(){
+    const s=this.state.store;
+    if(s.versions.find(v=>v.id==='v-8')) return;
+    s.versions.unshift({id:'v-8',n:8,type:'DGSR',status:'eligible',created:'2026-08-14 10:12',job:'job-2292',recall:0.224,hr:0.348,ndcg:0.192,cov:0.63,digest:'sha256:c81a09…5fe1',snap:'snap-7812',eligible:true});
+  }
+
+  badge(g,v){ const t=(GROUPS[g]||{})[v]||'neu', c=TONES[t]; return {label:v,style:{background:c[1],color:c[0],fontFamily:MONO,fontSize:'11px',letterSpacing:'.02em',whiteSpace:'nowrap'}}; }
+  tag(label,tone){ const c=TONES[tone||'neu']; return {label:label,style:{background:c[1],color:c[0],fontSize:'11px',whiteSpace:'nowrap'}}; }
+  bannerStyle(tone){ const c=TONES[tone||'info']; return {display:'flex',gap:'16px',alignItems:'flex-start',justifyContent:'space-between',padding:'14px 16px',background:c[1],borderLeft:'3px solid '+c[0],color:c[0]}; }
+  monoStyle(){ return {fontFamily:MONO,fontSize:'13px',fontVariantNumeric:'tabular-nums',overflowWrap:'anywhere'}; }
+
+  cellText(v,o){ o=o||{}; return {isText:true,v:v,textStyle:o.mono?this.monoStyle():{fontSize:'14px',color:o.muted?'var(--color-neutral-700)':'inherit'},style:{padding:'12px 15px',textAlign:o.align||'left',verticalAlign:'top'},sub:o.sub||null}; }
+  cellLink(v,hash){ return {isLink:true,v:v,hash:'#'+hash,linkStyle:{fontFamily:MONO,fontSize:'13px',color:'var(--color-accent)'},style:{padding:'12px 15px',verticalAlign:'top'}}; }
+  cellBadge(g,v){ return {isBadge:true,badge:this.badge(g,v),style:{padding:'12px 15px',verticalAlign:'top'}}; }
+  cellTag(label,tone){ return {isBadge:true,badge:this.tag(label,tone),style:{padding:'12px 15px',verticalAlign:'top'}}; }
+  cellActions(acts){ return {isActions:true,actions:acts.map(a=>({label:a.label,cls:'btn '+(a.danger?'btn-secondary':'btn-ghost'),disabled:!!a.disabled,reason:a.reason||'',run:a.run})),style:{padding:'10px 15px',textAlign:'right',verticalAlign:'top',whiteSpace:'nowrap'}}; }
+
+  cols(list){ return list.map(c=>({label:typeof c==='string'?c:c.label,style:{padding:'11px 15px',textAlign:(c.align||'left'),background:'var(--color-bg)',position:'sticky',top:0,whiteSpace:'nowrap'},btnStyle:{background:'none',border:0,padding:0,font:'inherit',fontSize:'10.5px',letterSpacing:'.09em',textTransform:'uppercase',color:'var(--color-neutral-700)',cursor:'default'},arrow:'',run:null})); }
+
+  dlItem(label,value,o){ o=o||{}; const it={label:label,value:value,valueStyle:o.mono?this.monoStyle():{fontSize:'14px'},badge:o.badge||null,copy:!!o.copy}; if(o.copy) it.run=()=>this.copy(value); return it; }
+
+  copy(t){ try{ navigator.clipboard.writeText(String(t)); }catch(e){} this.flash('Copied to clipboard.'); }
+  flash(m){ this.setState({toast:m}); clearTimeout(this._tt); this._tt=setTimeout(()=>this.setState({toast:null}),2600); }
+
+  renderVals(){
+    const s=this.state, me=this.me(), res=s.res||{id:'home',layout:'tenant',params:{}};
+    const isApp=res.layout==='tenant'||res.layout==='platform'||(res.layout==='error'&&!!me)||res.layout==='gate';
+    const page=this.normalize(this.pageFor(res,me));
+    const showTable=!!page.table&&!s.loading&&page.table.rows.length>0;
+    const showEmpty=!!page.table&&!s.loading&&page.table.rows.length===0;
+    return {
+      asideStyle:{width:'246px',flex:'none',borderRight:'2px solid var(--color-divider)',position:'sticky',top:0,height:this.props.showReviewBar!==false?'calc(100vh - 46px)':'100vh',display:'flex',flexDirection:'column',background:'var(--color-bg)'},
+      isApp:isApp&&res.layout!=='gate', isTenant:!!me&&me.kind==='tenant', isPlatform:!!me&&me.kind==='platform',
+      me:me||{name:'—',role:'no session'},
+      scopeLabel:me?(me.kind==='platform'?'Platform scope':s.store.tenant.name+' · '+s.store.tenant.code):'',
+      serviceBadges:this.serviceBadges(me), hasServiceBadges:!!me&&me.kind==='tenant'&&me.role===ADMIN,
+      navGroups:this.nav(me,res), page:page,
+      mainStyle:{flex:1,minWidth:0,padding:res.layout==='public'||res.layout==='gate'?'72px 32px 96px':'34px 40px 96px',maxWidth:res.layout==='public'||res.layout==='gate'?'620px':'1180px',margin:res.layout==='public'||res.layout==='gate'?'0 auto':'0'},
+      showSkeleton:s.loading&&(!!page.table||!!page.dl), skeletonRows:[1,2,3,4,5],
+      showTable:showTable, showEmpty:showEmpty, showDl:!!page.dl&&page.dl.length>0&&!s.loading,
+      dialog:s.dialog?this.dialogVals(s.dialog):null, secret:s.secret, toast:s.toast,
+      submitForm:e=>{ e.preventDefault(); this.submit(res); },
+      closeDialog:()=>this.setState({dialog:null,derror:null}),
+      confirmDialog:()=>this.commit(),
+      backdropClose:()=>this.setState({dialog:null,derror:null}),
+      stop:e=>e.stopPropagation(),
+      dialogRef:el=>{ if(el&&this._lastDlg!==s.dialog.id){ this._lastDlg=s.dialog.id; const f=el.querySelector('input,select,textarea,button'); if(f) f.focus(); } },
+      dialogKeys:e=>{ if(e.key==='Escape') this.setState({dialog:null,derror:null}); if(e.key==='Tab'){ const n=e.currentTarget.querySelectorAll('button,input,select,textarea,a[href]'); if(!n.length) return; const f=n[0],l=n[n.length-1]; if(e.shiftKey&&document.activeElement===f){e.preventDefault();l.focus();} else if(!e.shiftKey&&document.activeElement===l){e.preventDefault();f.focus();} } },
+      copySecret:()=>this.copy(s.secret.value), closeSecret:()=>this.setState({secret:null}),
+      signOut:()=>{ this.setState({identity:'none'},()=>{ location.hash='#/login'; this.syncRoute({identity:'none'}); }); },
+      dismissChecklist:()=>{ const st=Object.assign({},s.store); st.checklistDismissed=true; this.setState({store:st}); },
+      dismissBanner:()=>{ const b=Object.assign({},s.bannerOff); b[res.id]=true; this.setState({bannerOff:b}); },
+      clearFilters:()=>this.setState({filters:{}}),
+      showBar:this.props.showReviewBar!==false, identity:s.identity, tenantStatus:s.store.tenant.status,
+      identityOptions:[{value:'tenant_admin',label:'Tenant Administrator'},{value:'tenant_dev',label:'Tenant Developer'},{value:'platform',label:'Platform Administrator'},{value:'tenant_locked',label:'Locked tenant user'},{value:'none',label:'Signed out'}],
+      tenantStatusOptions:['active','pending','suspended','deleting','deleted'],
+      setIdentity:e=>{ const v=e.target.value; this.setState({identity:v},()=>this.syncRoute({identity:v})); },
+      setTenantStatus:e=>{ const v=e.target.value, st=Object.assign({},s.store); st.tenant=Object.assign({},st.tenant,{status:v}); this.setState({store:st},()=>this.syncRoute({tstatus:v})); },
+      permBoxes:PERMS.map(p=>({label:p.replace(' permission','').replace('authorized platform scope','usage scope'),checked:s.perms.indexOf(p)>=0,run:()=>{ const n=s.perms.indexOf(p)>=0?s.perms.filter(x=>x!==p):s.perms.concat([p]); this.setState({perms:n},()=>this.syncRoute({perms:n})); }})),
+      routeLabel:s.route, themeLabel:s.theme==='light'?'Dark':'Light',
+      toggleTheme:()=>{ const t=s.theme==='light'?'dark':'light'; document.documentElement.setAttribute('data-theme',t); this.setState({theme:t}); }
+    };
+  }
+
+  normalize(p){
+    p=p||{};
+    p.hasActions=!!(p.actions&&p.actions.length); p.actions=(p.actions||[]).map(a=>({label:a.label,cls:'btn '+(a.variant==='primary'?'btn-primary':a.variant==='danger'?'btn-secondary':'btn-secondary'),disabled:!!a.disabled,reason:a.reason||'',run:a.run||(()=>{})}));
+    p.hasStats=!!(p.stats&&p.stats.length); p.stats=(p.stats||[]).map(x=>Object.assign({note:'',valueStyle:{fontFamily:MONO,fontSize:'21px',fontVariantNumeric:'tabular-nums',letterSpacing:'-.01em'}},x));
+    p.hasCards=!!(p.cards&&p.cards.length); p.hasPanels=!!(p.panels&&p.panels.length);
+    p.hasTabs=!!(p.tabs&&p.tabs.length); p.hasFilters=!!(p.filters&&p.filters.length);
+    p.hasCrumbs=!!(p.crumbs&&p.crumbs.length);
+    (p.panels||[]).forEach(pn=>{ pn.hasDl=!!(pn.dl&&pn.dl.length); pn.hasRows=!!(pn.rows&&pn.rows.length); pn.hasSnippets=!!(pn.snippets&&pn.snippets.length); pn.hasActions=!!(pn.actions&&pn.actions.length); pn.actions=(pn.actions||[]).map(a=>({label:a.label,cls:'btn '+(a.variant==='primary'?'btn-primary':'btn-secondary'),disabled:!!a.disabled,reason:a.reason||'',run:a.run||(()=>{})})); pn.cols=pn.cols?this.cols(pn.cols):[]; });
+    if(p.table){ p.table.minWidth=p.table.minWidth||'760px'; p.table.count=p.table.count||(p.table.rows.length+' of '+p.table.rows.length); p.table.cols=this.cols(p.table.cols); }
+    if(p.rail) p.rail.count=p.rail.stages.length;
+    return p;
+  }
+
+  serviceBadges(me){
+    if(!me||me.kind!=='tenant'||me.role!==ADMIN) return [];
+    const s=this.state.store, act=s.versions.find(v=>v.status==='active');
+    return [{label:'Active model',badge:this.tag(act?'v'+act.n:'none','neu')},{label:'Serving',badge:this.badge('deploy',s.deployment.state)}];
+  }
+
+  nav(me,res){
+    if(!me) return [];
+    const cur=this.state.route, mk=(label,hash,mark)=>({label:label,hash:'#'+hash,mark:mark||'',style:{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'8px',padding:'8px 20px',fontSize:'13.5px',textDecoration:'none',color:cur===hash?'var(--color-accent)':'var(--color-text)',background:cur===hash?'var(--color-accent-100)':'transparent',borderLeft:cur===hash?'3px solid var(--color-accent)':'3px solid transparent',fontWeight:cur===hash?600:400}});
+    if(me.kind==='platform'){
+      const g=[], p=this.state.perms;
+      if(p.indexOf('monitoring access')>=0) g.push(mk('Platform Status','/admin/status'));
+      if(p.indexOf('platform permission')>=0) g.push(mk('Tenants','/admin/tenants'));
+      if(p.indexOf('plan-management permission')>=0) g.push(mk('Plans & Quotas','/admin/plans'));
+      if(p.indexOf('authorized platform scope')>=0) g.push(mk('Tenant Usage','/admin/usage'));
+      if(p.indexOf('audit permission')>=0) g.push(mk('Failures & Audit','/admin/audit'));
+      return [{items:g}];
+    }
+    if(me.role===ADMIN) return [
+      {items:[mk('Home','/home'),mk('API Credentials','/credentials'),mk('Integration','/integration','‡'),mk('Users','/users','†')]},
+      {items:[mk('Training','/training'),mk('Model Versions','/models')]},
+      {items:[mk('Usage & Quotas','/usage'),mk('Service Status','/service-status'),mk('Audit','/audit','‡')]}
+    ];
+    return [
+      {items:[mk('Home','/home'),mk('API Credentials','/credentials'),mk('Integration','/integration','‡')]},
+      {items:[mk('Products','/products'),mk('Synchronize Catalog','/products/sync'),mk('Submit Events','/events/submit')]}
+    ];
+  }
+
+  crumbs(parts){
+    return parts.map((p,i)=>({label:p.label,hash:p.hash?'#'+p.hash:'#'+this.state.route,sep:i<parts.length-1?'›':'',style:{color:i===parts.length-1?'var(--color-text)':'var(--color-neutral-700)',textDecoration:'none',fontFamily:p.mono?MONO:'inherit',pointerEvents:p.hash?'auto':'none'}}));
+  }
+  tRoot(){ return {label:this.state.store.tenant.name,hash:'/home'}; }
+
+  f(key,def){ const v=this.state.filters[this.state.res.id+':'+key]; return v===undefined?(def||'all'):v; }
+  filter(key,label,options){ const id=this.state.res.id+':'+key; return {id:'f-'+key,label:label,isSelect:true,options:options,value:this.f(key,options[0]),run:e=>{ const n=Object.assign({},this.state.filters); n[id]=e.target.value; this.setState({filters:n}); }}; }
+  search(key,label,ph){ const id=this.state.res.id+':'+key; return {id:'f-'+key,label:label,isText:true,placeholder:ph,value:this.f(key,''),run:e=>{ const n=Object.assign({},this.state.filters); n[id]=e.target.value; this.setState({filters:n}); }}; }
+
+  fld(name,label,o){
+    o=o||{}; const v=this.state.form[name]===undefined?(o.value||''):this.state.form[name];
+    const base={id:'i-'+name,label:label,hint:o.hint||'',error:this.state.errors[name]||'',wrapStyle:{gridColumn:o.wide?'1 / -1':'auto'},value:v,run:e=>{ const f=Object.assign({},this.state.form); f[name]=e.target.value; this.setState({form:f}); },inputStyle:o.mono?{fontFamily:MONO}:{}};
+    if(o.options) return Object.assign(base,{isSelect:true,options:o.options});
+    if(o.area) return Object.assign(base,{isArea:true,rows:o.rows||5});
+    return Object.assign(base,{isInput:true,type:o.type||'text',placeholder:o.placeholder||''});
+  }
+  dfld(name,label,o){
+    o=o||{}; const v=this.state.dfields[name]===undefined?(o.value||''):this.state.dfields[name];
+    const set=nv=>{ const f=Object.assign({},this.state.dfields); f[name]=nv; this.setState({dfields:f}); };
+    const base={id:'d-'+name,label:label,hint:o.hint||'',error:'',value:v,run:e=>set(e.target.value)};
+    if(o.boxes) return Object.assign(base,{isCheckGroup:true,boxes:o.boxes.map(b=>({label:b,checked:(v||[]).indexOf(b)>=0,run:()=>{ const cur=v||[]; set(cur.indexOf(b)>=0?cur.filter(x=>x!==b):cur.concat([b])); }}))});
+    if(o.options) return Object.assign(base,{isSelect:true,options:o.options});
+    if(o.area) return Object.assign(base,{isArea:true,placeholder:o.placeholder||''});
+    return Object.assign(base,{isInput:true,type:o.type||'text',placeholder:o.placeholder||''});
+  }
+
+  openDialog(d){ this.setState({dialog:d,dfields:d.initial||{},derror:null}); }
+  dialogVals(d){
+    const spec=Object.assign({width:d.form?'640px':'480px',cancelLabel:'Cancel',confirmLabel:'Confirm',danger:false},d);
+    const fields=spec.fields?spec.fields():[];
+    return {id:spec.id,title:spec.title,body:spec.body,consequence:spec.consequence||'',width:spec.width,
+      dl:spec.dl||[],hasDl:!!(spec.dl&&spec.dl.length),fields:fields,hasFields:fields.length>0,
+      error:this.state.derror||'',cancelLabel:spec.cancelLabel,confirmLabel:spec.confirmLabel,
+      confirmCls:'btn '+(spec.danger?'btn-primary':'btn-primary'),confirmDisabled:false};
+  }
+  commit(){ const d=this.state.dialog; if(!d) return; const r=d.commit?d.commit(this.state.dfields):true; if(r&&r.error){ this.setState({derror:r.error}); return; } this.setState({dialog:null,dfields:{},derror:null}); }
+  mutate(fn,msg,nav){ const st=Object.assign({},this.state.store); fn(st); this.setState({store:st},()=>{ if(msg) this.flash(msg); if(nav) this.go(nav); }); }
+
+  pageFor(res,me){
+    const fn=this['pg_'+res.id];
+    if(fn) return fn.call(this,res.params||{},me);
+    return {title:'Not built',subtitle:'Route id '+res.id};
+  }
+
+  // ─── public ───────────────────────────────────────────────
+  pg_login(){
+    return {kicker:'GraphRec',title:'Sign in',subtitle:'Tenant users sign in here. Platform operators use the separate platform realm.',
+      form:{width:'420px',submit:'Sign in',fields:[this.fld('email','Email',{wide:true,type:'email',placeholder:'you@company.example'}),this.fld('pw','Authentication material',{wide:true,type:'password'})],
+        error:this.state.formError,secondary:{label:'Recover access',hash:'#/recover'},note:''},
+      panels:[{title:'Realms',body:'This form resolves a tenant from the session. Platform administrators authenticate at /admin/login and resolve no tenant scope.',dl:[this.dlItem('Platform sign-in','/admin/login',{mono:true}),this.dlItem('Register a tenant','/register',{mono:true})]}],
+      footnote:'Invalid, inactive and rate-limited attempts return the same message and never reveal whether an account exists.'};
+  }
+  pg_register(){
+    return {kicker:'GraphRec',title:'Register a tenant',subtitle:'Creates the tenant account and its initial administrator. The registrant becomes that administrator.',
+      form:{width:'520px',submit:'Create tenant',error:this.state.formError,
+        fields:[this.fld('biz','Business name',{wide:true,placeholder:'Northgate Supply'}),this.fld('admin','Administrator email',{wide:true,type:'email'}),this.fld('name','Administrator display name'),this.fld('contact','Contact telephone'),this.fld('pw','Authentication material',{type:'password'}),this.fld('pw2','Confirm authentication material',{type:'password'})],
+        secondary:{label:'Sign in instead',hash:'#/login'}},
+      footnote:'Try the business name “Kelder Tools” to see a duplicate-registration conflict reported inline with the form still filled.'};
+  }
+  pg_recover(){
+    return {kicker:'GraphRec',title:'Recover access',subtitle:'Step 1 of 2. Supply the account identifier used to sign in.',
+      form:{width:'420px',submit:'Send recovery instructions',error:this.state.formError,fields:[this.fld('email','Account identifier',{wide:true,type:'email'})],secondary:{label:'Back to sign in',hash:'#/login'}},
+      footnote:'The response states the next action without confirming whether an account exists.'};
+  }
+  pg_recoverConfirm(){
+    return {kicker:'GraphRec',title:'Set new authentication material',subtitle:'Step 2 of 2. Supply the recovery proof you received.',
+      form:{width:'440px',submit:'Set and return to sign in',error:this.state.formError,
+        fields:[this.fld('proof','Recovery proof',{wide:true,mono:true,placeholder:'rec_…'}),this.fld('pw','New authentication material',{type:'password'}),this.fld('pw2','Confirm',{type:'password'})]},
+      footnote:'Expired or invalid proof is rejected without disclosing account details. Enter “expired” as the proof to see that state.'};
+  }
+  pg_invite(){
+    return {kicker:'GraphRec · invitation',title:'Accept invitation',subtitle:'Set your own authentication material to activate the account. This moves the user from invited to active.',
+      form:{width:'440px',submit:'Activate account',error:this.state.formError,
+        fields:[this.fld('token','Invitation token',{wide:true,mono:true,placeholder:'inv_…'}),this.fld('pw','Authentication material',{type:'password'}),this.fld('pw2','Confirm',{type:'password'})]},
+      footnote:'Expired or invalid tokens are rejected without disclosing account details. Enter “expired” to see that state.'};
+  }
+  pg_adminLogin(){
+    return {kicker:'GraphRec · platform',title:'Platform sign-in',subtitle:'A separate authentication realm. A platform operator is not a tenant user and resolves no tenant scope.',
+      form:{width:'420px',submit:'Sign in',error:this.state.formError,fields:[this.fld('email','Operator identifier',{wide:true,type:'email'}),this.fld('pw','Authentication material',{wide:true,type:'password'})]},
+      footnote:'Errors are non-disclosing. Named permissions are carried by the platform identity, not chosen here.'};
+  }
+  pg_tenantStatus(){
+    const t=this.state.store.tenant;
+    return {kicker:'Account',title:'This tenant is not active',badge:this.badge('tenant',t.status),
+      subtitle:'Tenant '+t.code+' is '+t.status+'. Platform services are withheld until a Platform Administrator transitions the account back to active. No tenant screens are reachable in this state.',
+      dl:[this.dlItem('Tenant',t.name),this.dlItem('Tenant code',t.code,{mono:true}),this.dlItem('Status','',{badge:this.badge('tenant',t.status)}),this.dlItem('Registered',t.created,{mono:true})],
+      actions:[{label:'Sign out',run:()=>{ this.setState({identity:'none'},()=>{location.hash='#/login';this.syncRoute({identity:'none'});}); }}],
+      footnote:'The transition is controlled by a Platform Administrator; there is no tenant-side action that changes it.'};
+  }
+
+  // ─── errors ───────────────────────────────────────────────
+  pg_e403(){ return {kicker:'Gate 3',title:'Not permitted',subtitle:'Your role or named permission does not include this operation. There is nothing to retry here.',footnote:'Permission errors are terminal by design. Choose a permitted destination from the navigation.'}; }
+  pg_e404(){ return {kicker:'Gate 4',title:'Not found',subtitle:'No such resource.',footnote:'A resource belonging to another tenant is indistinguishable from one that does not exist.'}; }
+  pg_e500(){ return {kicker:'Failure',title:'Something went wrong',subtitle:'The request could not be completed. Quote the reference below if you contact platform support.',
+    dl:[this.dlItem('Error reference','err-3f81-7a20c',{mono:true,copy:true}),this.dlItem('Occurred at','2026-08-14 10:04:22',{mono:true})],
+    footnote:'No credentials, payloads or other tenants’ information appear in an error reference.'}; }
+
+  // ─── tenant · shared ──────────────────────────────────────
+  pg_home(p,me){
+    const s=this.state.store, admin=me.role===ADMIN;
+    const cards=admin?[
+      {route:'/credentials',title:'API Credentials',body:'Create, rotate and revoke the credentials your integration authenticates with.',hash:'#/credentials'},
+      {route:'/users',title:'Users',body:'Invite tenant users and manage roles, locks and status.',hash:'#/users'},
+      {route:'/training',title:'Training',body:'Request a training job and follow it through the pipeline.',hash:'#/training'},
+      {route:'/models',title:'Model Versions',body:'Review quality, activate, roll back and archive versions.',hash:'#/models'},
+      {route:'/usage',title:'Usage & Quotas',body:'Measured quantities against effective limits, by period.',hash:'#/usage'},
+      {route:'/service-status',title:'Service Status',body:'Availability, capacity and recent serving errors.',hash:'#/service-status'},
+      {route:'/audit',title:'Audit',body:'Tenant-scoped, redacted action history.',hash:'#/audit'},
+      {route:'/integration',title:'Integration',body:'The API contract: endpoints, shapes, errors and your credential scopes.',hash:'#/integration'}
+    ]:[
+      {route:'/products',title:'Products',body:'The catalog GraphRec serves from. Add, update and disable products.',hash:'#/products'},
+      {route:'/products/sync',title:'Synchronize Catalog',body:'Bulk upsert a bounded product collection and read the result counts.',hash:'#/products/sync'},
+      {route:'/events/submit',title:'Submit Events',body:'Single event or bounded batch, with duplicate confirmation.',hash:'#/events/submit'},
+      {route:'/credentials',title:'API Credentials',body:'Create, rotate and revoke the credentials your integration authenticates with.',hash:'#/credentials'},
+      {route:'/integration',title:'Integration',body:'The API contract: endpoints, shapes, errors and your credential scopes.',hash:'#/integration'}
+    ];
+    const hasProducts=s.products.length>0, hasEvents=s.submissions.some(x=>x.kind==='event batch'), okJob=s.jobs.some(j=>j.state==='succeeded'), act=s.versions.find(v=>v.status==='active');
+    const steps=[
+      {label:'Configure users',hash:'#/users',done:s.users.length>1,note:s.users.length+' users'},
+      {label:'Create a credential',hash:'#/credentials',done:s.creds.some(c=>!c.revoked),note:s.creds.filter(c=>!c.revoked).length+' usable'},
+      {label:'Synchronize the catalog',hash:'#/products/sync',done:hasProducts,note:s.products.length+' products'},
+      {label:'Submit interaction events',hash:'#/events/submit',done:hasEvents,note:'4.18 M this period'},
+      {label:'Request training',hash:'#/training',done:s.jobs.length>0,note:s.jobs.length+' jobs'},
+      {label:'Review model quality',hash:'#/models',done:okJob,note:okJob?'job-2291 succeeded':'no succeeded job'},
+      {label:'Activate a version',hash:'#/models',done:!!act,note:act?'v'+act.n+' active':'none active'},
+      {label:'Monitor the service',hash:'#/service-status',done:!!act,note:s.deployment.state}
+    ].map(st=>({label:st.label,hash:st.hash,note:st.note,mark:st.done?'✓':'—',markStyle:{fontFamily:MONO,fontSize:'13px',width:'14px',color:st.done?'var(--ok)':'var(--color-neutral-600)'},linkStyle:{fontSize:'14px',color:st.done?'var(--color-neutral-700)':'var(--color-accent)',textDecoration:'none'},badge:st.done?this.tag('done','ok'):this.tag('to do','info')}));
+    const done=steps.filter(x=>x.mark==='✓').length;
+    return {kicker:me.role,title:'Home',subtitle:'The services this role may enter. An administrator and a developer see materially different pages.',
+      cards:cards,
+      checklist:(admin&&!s.store2&&!s.checklistDismissed)?{title:'Getting to first recommendations',progress:done+' of 8 complete',steps:steps}:null};
+  }
+
+  pg_credentials(p,me){
+    const s=this.state.store;
+    const state=c=>c.revoked?'revoked':(c.expires<'2026-08-14'?'expired':'usable');
+    const rows=s.creds.map(c=>{ const st=state(c);
+      return {cells:[
+        this.cellText(c.name),
+        this.cellText(c.prefix+'…',{mono:true,sub:st==='usable'?'':'cannot authorize'}),
+        this.cellText(c.scopes.length+' operations',{muted:true,sub:c.scopes.map(x=>SCOPE_SHORT[x]||x).join(' · ')}),
+        this.cellText(c.expires,{mono:true}),
+        this.cellText(c.revoked||'—',{mono:true}),
+        this.cellText(c.last,{mono:true}),
+        this.cellTag(st,st==='usable'?'ok':st==='expired'?'warn':'danger'),
+        this.cellActions([
+          {label:'Rotate',disabled:st==='revoked',reason:st==='revoked'?'Revoked credentials cannot be rotated.':'',run:()=>this.dlgRotate(c)},
+          {label:'Revoke',disabled:st==='revoked',reason:'',run:()=>this.dlgRevoke(c)}
+        ])
+      ]};
+    });
+    return {crumbs:this.crumbs([this.tRoot(),{label:'API Credentials'}]),kicker:'Integration identity',title:'API Credentials',
+      subtitle:'Credentials authenticate your e-commerce application server-to-server. The secret is displayed once, at creation or rotation, and is not retained.',
+      actions:[{label:'Create credential',variant:'primary',run:()=>this.dlgCreateCred()}],
+      table:{minWidth:'1080px',cols:['Name','Prefix','Allowed operations','Expires','Revoked at','Last used',{label:'Authorizes'},{label:'',align:'right'}],rows:rows,
+        empty:{title:'No credentials yet',body:'Create a credential so your application can authenticate.',action:{label:'Create credential',run:()=>this.dlgCreateCred()}}}};
+  }
+  credScopeBoxes(){ return SCOPES; }
+  dlgCreateCred(){
+    this.openDialog({id:'cred-create',title:'Create credential',width:'640px',form:true,confirmLabel:'Create credential',
+      body:'The secret is shown once on the next screen and is never retained by GraphRec.',
+      initial:{scopes:[SCOPES[0]]},
+      fields:()=>[this.dfld('name','Credential name',{placeholder:'Storefront server'}),this.dfld('expires','Expiry',{options:['90 days','180 days','365 days']}),this.dfld('scopes','Allowed integration operations',{boxes:this.credScopeBoxes()})],
+      commit:f=>{
+        if(!f.name) return {error:'Give the credential a name so it can be told apart in this list.'};
+        if(!f.scopes||!f.scopes.length) return {error:'Select at least one integration operation. A credential with no scope cannot authorize anything.'};
+        const pre='gr_live_'+Math.random().toString(36).slice(2,6).toUpperCase();
+        this.mutate(st=>{ st.creds=[{id:'k-'+(st.creds.length+1),name:f.name,prefix:pre,scopes:f.scopes,expires:'2027-02-10',revoked:null,created:'2026-08-14',last:'—'}].concat(st.creds); });
+        this.setState({secret:{title:'Credential created',value:pre+'.'+Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2),prefix:pre,scopes:f.scopes.length+' operations'}});
+      }});
+  }
+  dlgRotate(c){
+    this.openDialog({id:'cred-rotate',title:'Rotate '+c.name,width:'640px',form:true,confirmLabel:'Rotate credential',
+      body:'Rotation issues a new secret and invalidates the current one. Requests still using the old secret will fail authentication.',
+      initial:{scopes:c.scopes.slice()},
+      fields:()=>[this.dfld('scopes','Allowed integration operations',{boxes:this.credScopeBoxes()})],
+      commit:f=>{
+        if(!f.scopes||!f.scopes.length) return {error:'Select at least one integration operation.'};
+        const pre='gr_live_'+Math.random().toString(36).slice(2,6).toUpperCase();
+        this.mutate(st=>{ st.creds=st.creds.map(x=>x.id===c.id?Object.assign({},x,{prefix:pre,scopes:f.scopes,last:'—'}):x); });
+        this.setState({secret:{title:'Credential rotated',value:pre+'.'+Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2),prefix:pre,scopes:f.scopes.length+' operations'}});
+      }});
+  }
+  dlgRevoke(c){
+    this.openDialog({id:'cred-revoke',title:'Revoke '+c.name,danger:true,confirmLabel:'Revoke',
+      body:'Revocation takes effect immediately and cannot be undone.',
+      consequence:'Any request presenting this credential will fail authentication. Issue a replacement before revoking if the integration is live.',
+      dl:[{label:'Prefix',value:c.prefix+'…'},{label:'Last used',value:c.last}],
+      commit:()=>this.mutate(st=>{ st.creds=st.creds.map(x=>x.id===c.id?Object.assign({},x,{revoked:'2026-08-14'}):x); },'Credential '+c.name+' revoked.')});
+  }
+
+  pg_integration(p,me){
+    const s=this.state.store, usable=s.creds.filter(c=>!c.revoked&&c.expires>'2026-08-14');
+    const sn=(label,code)=>({label:label,code:code,run:()=>this.copy(code)});
+    return {crumbs:this.crumbs([this.tRoot(),{label:'Integration'}]),kicker:'Reference',title:'Integration',
+      subtitle:'The API contract in one place: base URL, authentication, request and response shapes, the error vocabulary and your own credential scopes. This page issues no requests.',
+      dl:[this.dlItem('Base URL','https://api.graphrec.example',{mono:true,copy:true}),this.dlItem('Authentication','Authorization: Bearer <credential secret>',{mono:true,copy:true}),this.dlItem('Content type','application/json',{mono:true}),this.dlItem('Idempotency','External identifiers are the idempotency key',{})],
+      panels:[
+        {title:'Your active credentials',note:usable.length+' usable',body:'Only the operations granted to a credential may be performed with it. Anything else is rejected before the operation is accepted.',
+          cols:['Prefix','Granted operations','Expires'],rows:usable.map(c=>({cells:[this.cellText(c.prefix+'…',{mono:true}),this.cellText(c.scopes.join(' · '),{muted:true}),this.cellText(c.expires,{mono:true})]}))},
+        {title:'Catalog synchronization',body:'Bulk upsert is bounded. Oversized collections are rejected; individual invalid items are reported as failures without discarding the accepted remainder.',
+          snippets:[sn('POST /v1/products:bulk-upsert','{\n  "sync_id": "req-9d21",\n  "products": [\n    {\n      "external_id": "SKU-4471",\n      "title": "Brass hinge, 75mm",\n      "category": "Hardware",\n      "brand": "Northgate",\n      "price": "8.40",\n      "active": true,\n      "availability": "in_stock"\n    }\n  ]\n}'),
+            sn('202 Accepted','{\n  "submission_id": "sub-8841",\n  "status": "processing",\n  "counts": { "accepted": 0, "updated": 0, "skipped": 0, "failed": 0 }\n}')]},
+        {title:'Event submission',body:'Single and batch share one event shape. A repeated event identifier is confirmed as a duplicate — a success outcome, not an error.',
+          snippets:[sn('POST /v1/events','{\n  "event_id": "ev-33810",\n  "customer_id": "cus-9931",\n  "external_product_id": "SKU-6002",\n  "event_type": "purchase",\n  "occurred_at": "2026-08-14T09:41:02Z",\n  "value": "129.00",\n  "context": { "surface": "product_page" }\n}'),
+            sn('POST /v1/events/batches','{\n  "batch_id": "batch-4471",\n  "events": [ /* bounded collection */ ]\n}'),
+            sn('200 OK · duplicate confirmed','{\n  "event_id": "ev-33810",\n  "status": "duplicate_confirmed"\n}')]},
+        {title:'Submission result',body:'One read covers both product-sync and event-batch submissions.',
+          snippets:[sn('GET /v1/events/batches/{batch_id}','{\n  "submission_id": "sub-9002",\n  "kind": "event_batch",\n  "status": "processing",\n  "counts": { "received": 5000, "accepted": 4870, "skipped": 118, "failed": 12 },\n  "errors": [ { "ref": "ev-33810", "reason": "occurred_at is in the future" } ]\n}')]},
+        {title:'Recommendation request and feedback',body:'Server-to-server only. These operations have no screen in this console; the fallback rate and recent errors on Service Status are their only trace here.',
+          snippets:[sn('POST /v1/recommendations','{\n  "customer_id": "cus-9931",\n  "session_id": "ses-2211",\n  "top_n": 10,\n  "context": { "surface": "cart" }\n}'),
+            sn('POST /v1/feedback/impressions','{\n  "request_id": "rec-77120",\n  "impressions": [ { "external_product_id": "SKU-6002", "position": 1 } ]\n}')]},
+        {title:'Error vocabulary',body:'Every failure carries a traceable reference. Payloads and credentials never appear in an error body.',
+          cols:['Class','HTTP','Meaning','Example reason'],
+          rows:[
+            {cells:[this.cellText('validation',{mono:true}),this.cellText('422',{mono:true}),this.cellText('Supplied information cannot be accepted'),this.cellText('price is not a positive decimal',{muted:true})]},
+            {cells:[this.cellText('conflict',{mono:true}),this.cellText('409',{mono:true}),this.cellText('State or uniqueness prevents the operation'),this.cellText('external identifier already exists',{muted:true})]},
+            {cells:[this.cellText('limit',{mono:true}),this.cellText('429',{mono:true}),this.cellText('A plan or quota limit is exhausted'),this.cellText('event quota exhausted for the period',{muted:true})]},
+            {cells:[this.cellText('unavailable',{mono:true}),this.cellText('503',{mono:true}),this.cellText('Serving is degraded; a fallback may apply'),this.cellText('model version not ready',{muted:true})]}
+          ],
+          snippets:[sn('Error body','{\n  "error": {\n    "class": "conflict",\n    "reason": "a product with identifier SKU-4471 already exists",\n    "reference": "err-3f81-7a20c"\n  }\n}')]}
+      ]};
+  }
+
+  pg_account(p,me){
+    const s=this.state.store;
+    return {crumbs:this.crumbs([this.tRoot(),{label:'Account'}]),kicker:'Your record',title:'Account',
+      subtitle:'Your own record only. Other users are managed from Users by a tenant administrator.',
+      dl:[this.dlItem('Role',me.role,{mono:true}),this.dlItem('Tenant',s.tenant.name+' · '+s.tenant.code),this.dlItem('Account status','',{badge:this.badge('user','active')}),this.dlItem('Last authenticated','2026-08-14 09:12',{mono:true})],
+      form:{width:'560px',submit:'Save changes',error:this.state.formError,
+        fields:[this.fld('display','Display name',{wide:true,value:me.name}),this.fld('cur','Current authentication material',{type:'password'}),this.fld('new','New authentication material',{type:'password'}),this.fld('conf','Confirm new material',{type:'password'})]}};
+  }
+
+  pg_users(p,me){
+    const s=this.state.store, role=this.f('role',['all roles',ADMIN,DEV][0]), stat=this.f('status','all statuses');
+    let list=s.users.slice();
+    if(role!=='all roles') list=list.filter(u=>u.role===role);
+    if(stat!=='all statuses') list=list.filter(u=>u.status===stat);
+    const lastAdmin=s.users.filter(u=>u.role===ADMIN&&u.status==='active').length<=1;
+    const rows=list.map(u=>({cells:[
+      this.cellLink(u.name,'/users/'+u.id),
+      this.cellText(u.email,{mono:true}),
+      this.cellText(u.role,{mono:true}),
+      this.cellBadge('user',u.status),
+      this.cellText(u.created,{mono:true}),
+      this.cellText(u.last,{mono:true}),
+      this.cellActions([{label:'Open',run:()=>this.go('/users/'+u.id)}])
+    ]}));
+    return {crumbs:this.crumbs([this.tRoot(),{label:'Users'}]),kicker:'Tenant users †',title:'Users',
+      subtitle:'Tenant users hold one of exactly two roles. A tenant administrator cannot write to the catalog; a tenant developer cannot request training.',
+      actions:[{label:'Invite user',variant:'primary',run:()=>this.dlgInvite()}],
+      filters:[this.filter('role','Role',['all roles',ADMIN,DEV]),this.filter('status','Status',['all statuses','invited','active','locked','disabled']),this.search('q','Search','email or name')],
+      table:{minWidth:'980px',cols:['Display name','Email','Role','Status','Created','Last authenticated',{label:'',align:'right'}],rows:rows,
+        empty:{title:'No users match this filter',body:'Clear the filter, or invite a user to this tenant.',action:{label:'Invite user',run:()=>this.dlgInvite()}},count:list.length+' of '+s.users.length},
+      footnote:lastAdmin?'One active administrator remains. The last active administrator cannot be demoted or disabled.':''};
+  }
+  dlgInvite(){
+    this.openDialog({id:'user-invite',title:'Invite user',width:'640px',form:true,confirmLabel:'Send invitation',
+      body:'The invited person sets their own authentication material at /invite/accept, which moves them from invited to active.',
+      initial:{role:DEV},
+      fields:()=>[this.dfld('email','Email',{type:'email',placeholder:'name@company.example'}),this.dfld('name','Display name'),this.dfld('role','Role',{options:[DEV,ADMIN]})],
+      commit:f=>{
+        if(!f.email) return {error:'An email is required — it is the account identifier.'};
+        if(this.state.store.users.some(u=>u.email===f.email)) return {error:'A user with this email already exists in this tenant. Email is unique per tenant, so this is a conflict rather than a validation error.'};
+        this.mutate(st=>{ st.users=st.users.concat([{id:'u-'+(st.users.length+1),name:f.name||f.email.split('@')[0],email:f.email,role:f.role||DEV,status:'invited',created:'2026-08-14',last:'—'}]); },'Invitation sent to '+f.email+'.');
+      }});
+  }
+
+  pg_user(p){
+    const s=this.state.store, u=s.users.find(x=>x.id===p.userId);
+    const activeAdmins=s.users.filter(x=>x.role===ADMIN&&x.status==='active').length;
+    const isLast=u.role===ADMIN&&u.status==='active'&&activeAdmins<=1;
+    const lastReason='The last active administrator cannot be demoted or disabled.';
+    const acts=[
+      {label:'Change role',disabled:isLast,reason:isLast?lastReason:'',run:()=>this.dlgRole(u)},
+      u.status==='invited'?{label:'Resend invitation',run:()=>this.dlgSimple('user-resend','Resend invitation to '+u.email,'A new invitation replaces the previous one. The earlier link stops working.','Resend',()=>this.flash('Invitation resent to '+u.email+'.'))}:null,
+      u.status==='locked'?{label:'Unlock',run:()=>this.dlgUserStatus(u,'active','Unlock '+u.name,'The user regains the ability to authenticate.','Unlock')}
+        :{label:'Lock',disabled:u.status==='disabled',reason:u.status==='disabled'?'A disabled user is already unable to authenticate.':'',run:()=>this.dlgUserStatus(u,'locked','Lock '+u.name,'The user cannot authenticate until unlocked. Existing sessions end.','Lock')},
+      u.status==='disabled'?{label:'Re-enable',run:()=>this.dlgUserStatus(u,'active','Re-enable '+u.name,'The user may authenticate again with the same role.','Re-enable')}
+        :{label:'Disable',disabled:isLast,reason:isLast?lastReason:'',run:()=>this.dlgUserStatus(u,'disabled','Disable '+u.name,'The account is retained for audit but can no longer authenticate.','Disable')}
+    ].filter(Boolean);
+    return {crumbs:this.crumbs([this.tRoot(),{label:'Users',hash:'/users'},{label:u.name}]),kicker:'Tenant user †',title:u.name,badge:this.badge('user',u.status),
+      actions:acts,
+      dl:[this.dlItem('Email',u.email,{mono:true,copy:true}),this.dlItem('Role',u.role,{mono:true}),this.dlItem('Status','',{badge:this.badge('user',u.status)}),this.dlItem('Created',u.created,{mono:true}),this.dlItem('Last authenticated',u.last,{mono:true}),this.dlItem('User identifier',u.id,{mono:true,copy:true})],
+      panels:[{title:'Capabilities of this role',body:u.role===ADMIN?'Credential management, tenant user management, training request and cancellation, model version review and lifecycle actions, usage, quota and service status. No catalog access and no event submission.':'Credential management, catalog write and synchronization, event submission and submission result read. No training, model, usage or service status access.',
+        cols:['Capability','Held'],rows:[
+          ['Credential management',true],['Tenant user management †',u.role===ADMIN],['Catalog write',u.role===DEV],['Event submission',u.role===DEV],['Submission result read',u.role===DEV],['Training request & cancellation',u.role===ADMIN],['Model version read & lifecycle',u.role===ADMIN],['Usage, quota and service status',u.role===ADMIN]
+        ].map(r=>({cells:[this.cellText(r[0]),this.cellTag(r[1]?'yes':'no',r[1]?'ok':'neu')]}))}],
+      footnote:isLast?lastReason:''};
+  }
+  dlgRole(u){
+    this.openDialog({id:'user-role',title:'Change role for '+u.name,width:'640px',form:true,confirmLabel:'Change role',
+      body:'The two tenant roles do not overlap except for sign-in and credential management. Changing role changes which screens the user can reach.',
+      initial:{role:u.role===ADMIN?DEV:ADMIN},
+      fields:()=>[this.dfld('role','Role',{options:[ADMIN,DEV]})],
+      commit:f=>this.mutate(st=>{ st.users=st.users.map(x=>x.id===u.id?Object.assign({},x,{role:f.role}):x); },u.name+' is now a '+f.role+'.')});
+  }
+  dlgUserStatus(u,to,title,cons,verb){
+    this.openDialog({id:'user-status',title:title,danger:to!=='active',confirmLabel:verb,
+      body:'Review and confirm the change.',consequence:cons,
+      dl:[{label:'Current status',value:u.status},{label:'New status',value:to}],
+      commit:()=>this.mutate(st=>{ st.users=st.users.map(x=>x.id===u.id?Object.assign({},x,{status:to}):x); },u.name+' is now '+to+'.')});
+  }
+  dlgSimple(id,title,body,verb,run){ this.openDialog({id:id,title:title,body:body,confirmLabel:verb,commit:()=>run()}); }
+
+  pg_audit(){
+    const s=this.state.store, act=this.f('action','all action types'), win=this.f('win','last 30 days');
+    let list=s.audit.filter(r=>r.tenant==='NGS-01');
+    if(act!=='all action types') list=list.filter(r=>r.action===act);
+    const rows=list.map(r=>({cells:[
+      this.cellText(r.at,{mono:true}),this.cellText(r.actor,{mono:true}),this.cellText(r.action,{mono:true}),
+      this.cellText(r.res,{mono:true}),this.cellBadge('outcome',r.outcome)
+    ]}));
+    return {crumbs:this.crumbs([this.tRoot(),{label:'Audit'}]),kicker:'Read-only ‡',title:'Audit',
+      subtitle:'Tenant-scoped action history, redacted. Credential secrets, raw event payloads and any hint of another tenant are never present.',
+      filters:[this.filter('action','Action type',['all action types','credential','training','activation','rollback','quota','access','security']),this.filter('win','Time range',['last 30 days','last 7 days','last 24 hours'])],
+      table:{minWidth:'900px',cols:['Occurred at','Actor type','Action type','Resource','Outcome'],rows:rows,
+        empty:{title:'No audit records match this filter',body:'Widen the time range or clear the action type filter.'},count:list.length+' records'},
+      footnote:'Audit records are written by the platform and cannot be edited or deleted from this console.'};
+  }
+
+  // ─── tenant · developer ───────────────────────────────────
+  pg_products(){
+    const s=this.state.store, cat=this.f('cat','all categories'), av=this.f('avail','all availability'), q=(this.f('q','')||'').toLowerCase();
+    let list=s.products.slice();
+    if(cat!=='all categories') list=list.filter(p=>p.cat===cat);
+    if(av!=='all availability') list=list.filter(p=>p.avail===av);
+    if(q) list=list.filter(p=>(p.id+' '+p.title).toLowerCase().indexOf(q)>=0);
+    const rows=list.map(p=>({cells:[
+      this.cellLink(p.id,'/products/'+p.id),
+      this.cellText(p.title,{sub:p.eligible?'':p.why}),
+      this.cellText(p.cat,{muted:true}),this.cellText(p.brand,{muted:true}),
+      this.cellText(p.price,{mono:true,align:'right'}),
+      this.cellTag(p.active?'active':'inactive',p.active?'ok':'neu'),
+      this.cellText(p.avail,{mono:true}),
+      this.cellTag(p.eligible?'served':'ineligible',p.eligible?'ok':'warn'),
+      this.cellText(p.updated,{mono:true}),
+      this.cellActions([{label:'Open',run:()=>this.go('/products/'+p.id)},{label:'Disable',disabled:!p.active,reason:p.active?'':'Already disabled.',run:()=>this.dlgDisable(p)}])
+    ]}));
+    return {crumbs:this.crumbs([this.tRoot(),{label:'Products'}]),kicker:'Catalog',title:'Products',
+      subtitle:'The catalog GraphRec serves from. Ineligible products are never returned by serving, whatever the model predicts.',
+      actions:[{label:'Add product',variant:'primary',run:()=>this.go('/products/new')},{label:'Synchronize',run:()=>this.go('/products/sync')}],
+      filters:[this.filter('cat','Category',['all categories','Hardware','Timber','Power tools','Workwear']),this.filter('avail','Availability',['all availability','in_stock','low_stock','out_of_stock']),this.search('q','Search','identifier or title')],
+      table:{minWidth:'1240px',cols:['External id','Title','Category','Brand',{label:'Price',align:'right'},'Active','Availability','Serving','Updated',{label:'',align:'right'}],rows:rows,
+        empty:{title:'No products match this filter',body:'Clear the filter, or synchronize your catalog to populate it.',action:{label:'Synchronize catalog',run:()=>this.go('/products/sync')}},count:list.length+' of '+s.products.length}};
+  }
+  pg_productNew(){
+    return {crumbs:this.crumbs([this.tRoot(),{label:'Products',hash:'/products'},{label:'New'}]),kicker:'Catalog',title:'Add product',
+      subtitle:'The external identifier is your own product identifier and is unique within this tenant. It is also the idempotency key for later updates.',
+      form:{width:'720px',submit:'Add product',error:this.state.formError,
+        fields:[this.fld('id','External product id',{mono:true,placeholder:'SKU-0001'}),this.fld('title','Title'),this.fld('cat','Category',{options:['Hardware','Timber','Power tools','Workwear']}),this.fld('brand','Brand'),this.fld('price','Price'),this.fld('avail','Availability',{options:['in_stock','low_stock','out_of_stock']}),this.fld('desc','Description',{wide:true,area:true,rows:4})],
+        secondary:{label:'Cancel',hash:'#/products'}},
+      footnote:'Try identifier SKU-4471 for a conflict, or QUOTA to see the quota rejection banner.'};
+  }
+  pg_product(p){
+    const s=this.state.store, pr=s.products.find(x=>x.id===p.productId);
+    return {crumbs:this.crumbs([this.tRoot(),{label:'Products',hash:'/products'},{label:pr.id,mono:true}]),kicker:'Catalog',title:pr.title,
+      badge:this.tag(pr.eligible?'served':'ineligible',pr.eligible?'ok':'warn'),
+      subtitle:pr.eligible?'':pr.why,
+      actions:[{label:'Disable product',variant:'danger',disabled:!pr.active,reason:pr.active?'':'This product is already disabled.',run:()=>this.dlgDisable(pr)}],
+      dl:[this.dlItem('External product id',pr.id,{mono:true,copy:true}),this.dlItem('Category',pr.cat),this.dlItem('Brand',pr.brand),this.dlItem('Price',pr.price,{mono:true}),this.dlItem('Active','',{badge:this.tag(pr.active?'active':'inactive',pr.active?'ok':'neu')}),this.dlItem('Availability',pr.avail,{mono:true}),this.dlItem('Updated at',pr.updated,{mono:true})],
+      form:{width:'720px',submit:'Update product',error:this.state.formError,
+        fields:[this.fld('title','Title',{wide:true,value:pr.title}),this.fld('cat','Category',{options:['Hardware','Timber','Power tools','Workwear'],value:pr.cat}),this.fld('brand','Brand',{value:pr.brand}),this.fld('price','Price',{value:pr.price}),this.fld('avail','Availability',{options:['in_stock','low_stock','out_of_stock'],value:pr.avail})]},
+      footnote:'A concurrent change to the same product is reported as a state conflict; your entries are kept so you can reconcile them.'};
+  }
+  dlgDisable(pr){
+    this.openDialog({id:'product-disable',title:'Disable '+pr.id,danger:true,width:'640px',confirmLabel:'Disable product',
+      body:'A disabled product stops being returned by serving immediately.',
+      consequence:'The record is retained and can be re-enabled by an update. A reason is required and is written to the audit history.',
+      fields:()=>[this.dfld('reason','Reason',{area:true,placeholder:'Discontinued by supplier'})],
+      commit:f=>{ if(!f.reason||f.reason.trim().length<4) return {error:'A reason is required for this action.'};
+        this.mutate(st=>{ st.products=st.products.map(x=>x.id===pr.id?Object.assign({},x,{active:false,eligible:false,why:'Inactive — excluded from serving',updated:'2026-08-14 10:12'}):x); },pr.id+' disabled.','/products'); }});
+  }
+
+  pg_productSync(){
+    const r=this.state.syncResult;
+    if(r) return {crumbs:this.crumbs([this.tRoot(),{label:'Products',hash:'/products'},{label:'Synchronize'}]),kicker:'Phase 2 of 2',title:'Synchronization accepted',badge:this.badge('outcome','succeeded'),
+      subtitle:'Submission '+r.id+' was accepted for processing. Counts below are the current result.',
+      stats:[{label:'Accepted',value:r.accepted},{label:'Updated',value:r.updated},{label:'Skipped',value:r.skipped},{label:'Failed',value:r.failed,valueStyle:{fontFamily:MONO,fontSize:'21px',color:'var(--danger)'}}],
+      actions:[{label:'Open full result',variant:'primary',run:()=>this.go('/submissions/'+r.id)},{label:'Synchronize again',run:()=>this.setState({syncResult:null})}],
+      dl:[this.dlItem('Submission id',r.id,{mono:true,copy:true}),this.dlItem('Synchronization identifier',r.ref,{mono:true}),this.dlItem('Received',String(r.received),{mono:true})],
+      footnote:'Failures are reported per item; the accepted remainder is not discarded.'};
+    return {crumbs:this.crumbs([this.tRoot(),{label:'Products',hash:'/products'},{label:'Synchronize'}]),kicker:'Phase 1 of 2',title:'Synchronize catalog',
+      subtitle:'Submit a bounded product collection with a synchronization identifier. Repeating the same identifier is confirmed as a duplicate rather than applied twice.',
+      form:{width:'860px',submit:'Submit synchronization',error:this.state.formError,
+        fields:[this.fld('ref','Synchronization identifier',{mono:true,placeholder:'req-9d21'}),this.fld('mode','Mode',{options:['upsert','upsert and disable missing']}),this.fld('payload','Product collection (JSON)',{wide:true,area:true,rows:10,mono:true,placeholder:'{ "products": [ { "external_id": "SKU-4471", ... } ] }',hint:'Bounded to 5,000 products per submission.'})]},
+      footnote:'Paste more than 5,000 products, or the word OVERSIZE, to see the rejection path.'};
+  }
+
+  pg_events(){
+    const r=this.state.eventResult;
+    if(r) return {crumbs:this.crumbs([this.tRoot(),{label:'Submit Events'}]),kicker:'Result',title:r.title,badge:r.badge,
+      subtitle:r.subtitle,
+      dl:r.dl,
+      actions:[r.sub?{label:'Open submission result',variant:'primary',run:()=>this.go('/submissions/'+r.sub)}:null,{label:'Submit another',run:()=>this.setState({eventResult:null})}].filter(Boolean)};
+    const mode=this.f('mode','single event');
+    const fields=mode==='single event'
+      ? [this.fld('ev','Event identifier',{mono:true,placeholder:'ev-33810',hint:'Idempotency key. A repeat is confirmed as a duplicate.'}),this.fld('cus','Customer identifier',{mono:true}),this.fld('prod','External product id',{mono:true}),this.fld('type','Event type',{options:['view','add_to_cart','purchase','remove_from_cart']}),this.fld('at','Occurred at',{mono:true,placeholder:'2026-08-14T09:41:02Z'}),this.fld('val','Value (optional)'),this.fld('ctx','Context (optional JSON)',{wide:true,area:true,rows:3,mono:true})]
+      : [this.fld('batch','Batch identifier',{mono:true,placeholder:'batch-4471'}),this.fld('payload','Event collection (JSON)',{wide:true,area:true,rows:10,mono:true,hint:'Bounded to 5,000 events per batch.'})];
+    return {crumbs:this.crumbs([this.tRoot(),{label:'Submit Events'}]),kicker:'Ingestion',title:'Submit events',
+      subtitle:'Interaction events feed the dataset snapshot a training job builds from. Single and batch share one event shape.',
+      filters:[this.filter('mode','Submission mode',['single event','batch'])],
+      form:{width:'860px',submit:mode==='single event'?'Submit event':'Submit batch',error:this.state.formError,fields:fields},
+      footnote:'Enter event identifier ev-33810 to see duplicate confirmation, or DUPLICATE in the batch identifier.'};
+  }
+
+  pg_submission(p){
+    const s=this.state.store, sub=s.submissions.find(x=>x.id===p.submissionId);
+    const pct=sub.received?Math.round((sub.accepted+sub.failed+sub.skipped)/sub.received*100):0;
+    const stages=['received','validating','applying','completed'];
+    const at=sub.status==='processing'?2:3;
+    return {crumbs:this.crumbs([this.tRoot(),{label:sub.kind==='product sync'?'Products':'Submit Events',hash:sub.kind==='product sync'?'/products':'/events/submit'},{label:sub.id,mono:true}]),
+      kicker:sub.kind,title:'Submission '+sub.id,badge:this.badge('outcome',sub.status==='processing'?'succeeded':sub.status),
+      subtitle:sub.status==='processing'?'Processing. This view updates in place; your position is preserved.':'Processing finished.',
+      updated:sub.status==='processing'?'updated '+(this.state.tick%9)+'s ago · polling every 2s':'',
+      rail:{title:'Progress',note:sub.status==='processing'?pct+'% of items handled':'All items handled.',
+        stages:stages.map((st,i)=>this.stage(st,i,at,sub.status==='failed'))},
+      stats:[{label:'Received',value:String(sub.received)},{label:'Accepted',value:String(sub.accepted)},{label:sub.kind==='product sync'?'Updated':'Duplicates',value:String(sub.kind==='product sync'?sub.updated:sub.skipped)},{label:'Skipped',value:String(sub.skipped)},{label:'Failed',value:String(sub.failed),valueStyle:{fontFamily:MONO,fontSize:'21px',color:sub.failed?'var(--danger)':'inherit'}}],
+      dl:[this.dlItem('Submission id',sub.id,{mono:true,copy:true}),this.dlItem('Kind',sub.kind),this.dlItem('Submitted identifier',sub.ref,{mono:true}),this.dlItem('Submitted at',sub.at,{mono:true}),this.dlItem('Status','',{badge:this.badge('outcome',sub.status==='processing'?'succeeded':sub.status)})],
+      panels:[{title:'Error details',note:sub.errors.length+' reported',body:'Errors identify the offending item and a safe reason. Raw payloads are never echoed back.',
+        cols:['Item reference','Reason'],rows:sub.errors.map(e=>({cells:[this.cellText(e.ref,{mono:true}),this.cellText(e.reason,{muted:true})]}))}],
+      footnote:'There is no submission index. This view is reached from the submission that produced it.'};
+  }
+
+  // ─── platform ─────────────────────────────────────────────
+  pRoot(){ return {label:'Platform',hash:'/admin'}; }
+  pg_pTenants(){
+    const s=this.state.store, st=this.f('status','all statuses'), pl=this.f('plan','all plans');
+    let list=s.tenants.slice();
+    if(st!=='all statuses') list=list.filter(t=>t.status===st);
+    if(pl!=='all plans') list=list.filter(t=>t.plan===pl);
+    const rows=list.map(t=>({cells:[
+      this.cellLink(t.id,'/admin/tenants/'+t.id),
+      this.cellText(t.name),this.cellBadge('tenant',t.status),this.cellText(t.plan,{mono:true}),this.cellText(t.created,{mono:true}),
+      this.cellActions([{label:'Open',run:()=>this.go('/admin/tenants/'+t.id)},{label:'Change status',run:()=>this.dlgTenantStatus(t)}])
+    ]}));
+    return {crumbs:this.crumbs([this.pRoot(),{label:'Tenants'}]),kicker:'Platform permission',title:'Tenants',
+      subtitle:'Four tenant accounts. Tenant is a filter here, not a scope — this console never assumes a tenant identity.',
+      filters:[this.filter('status','Status',['all statuses','pending','active','suspended','deleting','deleted']),this.filter('plan','Plan',['all plans','STARTER','GROWTH','SCALE']),this.search('q','Search','tenant code or name')],
+      table:{minWidth:'900px',cols:['Tenant code','Name','Status','Assigned plan','Created at',{label:'',align:'right'}],rows:rows,
+        empty:{title:'No tenants match this filter',body:'Clear the filter to see all tenant accounts.'},count:list.length+' of '+s.tenants.length}};
+  }
+  dlgTenantStatus(t){
+    this.openDialog({id:'t-status',title:'Change status of '+t.id,width:'640px',danger:true,confirmLabel:'Apply status change',
+      body:'Review and confirm. The tenant is notified through its own console at /account/tenant-status.',
+      consequence:'A suspended, deleting or deleted tenant loses access to every tenant screen and its serving traffic stops. This writes an audit record.',
+      initial:{status:t.status==='active'?'suspended':'active'},
+      fields:()=>[this.dfld('status','New status',{options:['pending','active','suspended','deleting','deleted']}),this.dfld('reason','Reason',{area:true,placeholder:'Payment dispute pending resolution'})],
+      commit:f=>{ if(!f.reason||f.reason.trim().length<4) return {error:'A reason is required and is written to the audit history.'};
+        this.mutate(st=>{ st.tenants=st.tenants.map(x=>x.id===t.id?Object.assign({},x,{status:f.status}):x); if(t.id==='NGS-01') st.tenant=Object.assign({},st.tenant,{status:f.status});
+          st.audit=[{at:'2026-08-14 10:18:00',actor:'platform_administrator',action:'tenant',res:t.id,outcome:'succeeded',ref:'cor-8f5c1',tenant:t.id}].concat(st.audit); },t.id+' is now '+f.status+'.'); }});
+  }
+  pg_pTenant(p){
+    const s=this.state.store, t=s.tenants.find(x=>x.id===p.tenantId), perms=this.state.perms;
+    const plan=s.plans.find(x=>x.id===t.plan), panels=[];
+    panels.push({title:'Status and lifecycle',badge:this.badge('tenant',t.status),note:'platform permission',
+      dl:[this.dlItem('Status','',{badge:this.badge('tenant',t.status)}),this.dlItem('Registered',t.created,{mono:true}),this.dlItem('Tenant code',t.id,{mono:true,copy:true}),this.dlItem('Last transition','2026-08-07 17:42',{mono:true})],
+      actions:[{label:'Change status',variant:'primary',run:()=>this.dlgTenantStatus(t)}]});
+    if(perms.indexOf('plan-management permission')>=0) panels.push({title:'Plan and approved quota overrides',note:'plan-management permission',
+      body:'Overrides apply for an effective period and take precedence over the plan limit while active.',
+      dl:[this.dlItem('Assigned plan',plan.name+' · '+plan.id,{mono:true}),this.dlItem('Event limit',plan.events,{mono:true}),this.dlItem('Recommendation limit',plan.recs,{mono:true}),this.dlItem('Training limit',plan.training,{mono:true})],
+      cols:['Usage type','Override','Effective from','Effective to','Approved by'],
+      rows:t.id==='NGS-01'?[{cells:[this.cellText('events',{mono:true}),this.cellText('8,000,000',{mono:true}),this.cellText('2026-08-01',{mono:true}),this.cellText('2026-09-01',{mono:true}),this.cellText('A. Marek',{muted:true})]}]:[],
+      actions:[{label:'Assign plan',variant:'primary',run:()=>this.dlgAssignPlan(t)},{label:'Add quota override',run:()=>this.dlgOverride(t)}]});
+    else panels.push({title:'Plan and approved quota overrides',note:'withheld',body:'This section requires the plan-management permission. The rest of the page is unaffected.'});
+    if(perms.indexOf('authorized platform scope')>=0) panels.push({title:'Usage summary',note:'authorized platform scope',
+      body:'Aggregate quantities only. Private event payloads are excluded from every platform view.',
+      cols:['Usage type','Current period','Previous period','Effective limit'],
+      rows:[['events','4,182,400','5,904,112',plan.events],['recommendations','11,904,077','14,220,881',plan.recs],['training','6','8',plan.training],['products','48,210','47,880',plan.products]].map(r=>({cells:r.map((c,i)=>this.cellText(c,{mono:i>0}))}))});
+    else panels.push({title:'Usage summary',note:'withheld',body:'This section requires the authorized platform scope. The rest of the page is unaffected.'});
+    return {crumbs:this.crumbs([this.pRoot(),{label:'Tenants',hash:'/admin/tenants'},{label:t.id,mono:true}]),
+      kicker:'Composed detail',title:t.name,badge:this.badge('tenant',t.status),
+      subtitle:'Three permission-gated sections. A holder of only the platform permission sees this page with the other two sections withheld, not a whole-route refusal.',
+      panels:panels,footnote:'Every action on this page writes an audit record.'};
+  }
+  dlgAssignPlan(t){
+    const s=this.state.store;
+    this.openDialog({id:'t-plan',title:'Assign plan to '+t.id,width:'640px',confirmLabel:'Assign plan',
+      body:'The plan sets the effective limits for every usage type unless an approved override applies.',
+      initial:{plan:t.plan},
+      fields:()=>[this.dfld('plan','Plan',{options:s.plans.map(p=>p.id)})],
+      commit:f=>{ const pl=s.plans.find(x=>x.id===f.plan);
+        if(pl&&!pl.open&&pl.id!==t.plan) return {error:'Plan '+pl.id+' is closed to new assignments. Reopen the plan or choose another.'};
+        this.mutate(st=>{ st.tenants=st.tenants.map(x=>x.id===t.id?Object.assign({},x,{plan:f.plan}):x); if(t.id==='NGS-01') st.tenant=Object.assign({},st.tenant,{plan:f.plan}); },t.id+' assigned to plan '+f.plan+'.'); }});
+  }
+  dlgOverride(t){
+    this.openDialog({id:'t-quota',title:'Approve quota override for '+t.id,width:'640px',confirmLabel:'Approve override',
+      body:'An override replaces the plan limit for one usage type over an effective period.',
+      initial:{type:'events',from:'2026-09-01',to:'2026-10-01'},
+      fields:()=>[this.dfld('type','Usage type',{options:['events','recommendations','training','products','storage']}),this.dfld('value','Override limit',{placeholder:'8000000'}),this.dfld('from','Effective from',{type:'date'}),this.dfld('to','Effective to',{type:'date'})],
+      commit:f=>{ if(!f.value||isNaN(Number(f.value))||Number(f.value)<0) return {error:'The override limit must be a non-negative number.'};
+        this.flash('Quota override approved for '+t.id+'.'); }});
+  }
+  pg_pPlans(){
+    const s=this.state.store;
+    const rows=s.plans.map(p=>({cells:[
+      this.cellLink(p.id,'/admin/plans/'+p.id),this.cellText(p.name),
+      this.cellText(p.events,{mono:true,align:'right'}),this.cellText(p.recs,{mono:true,align:'right'}),this.cellText(p.training,{mono:true,align:'right'}),
+      this.cellText(p.products+' products · '+p.storage,{muted:true}),
+      this.cellTag(p.open?'open':'closed',p.open?'ok':'warn'),
+      this.cellActions([{label:'Open',run:()=>this.go('/admin/plans/'+p.id)}])
+    ]}));
+    return {crumbs:this.crumbs([this.pRoot(),{label:'Plans & Quotas'}]),kicker:'Plan-management permission',title:'Plans & Quotas',
+      subtitle:'Plans carry the limits that become a tenant’s effective quota. A closed plan keeps its assigned tenants but takes no new ones.',
+      actions:[{label:'Create plan',variant:'primary',run:()=>this.dlgCreatePlan()}],
+      table:{minWidth:'1080px',cols:['Plan code','Name',{label:'Events',align:'right'},{label:'Recommendations',align:'right'},{label:'Training',align:'right'},'Additional limits','New assignments',{label:'',align:'right'}],rows:rows,
+        empty:{title:'No plans defined',body:'Create a plan before assigning tenants.'},count:s.plans.length+' plans'}};
+  }
+  dlgCreatePlan(){
+    this.openDialog({id:'plan-create',title:'Create plan',width:'640px',confirmLabel:'Create plan',
+      body:'Limits are per period unless the usage type is a standing limit.',
+      fields:()=>[this.dfld('code','Plan code',{placeholder:'SCALE_PLUS'}),this.dfld('name','Name'),this.dfld('events','Event limit',{placeholder:'20000000'}),this.dfld('recs','Recommendation limit',{placeholder:'60000000'})],
+      commit:f=>{
+        if(!f.code) return {error:'A plan code is required.'};
+        if(this.state.store.plans.some(p=>p.id===f.code.toUpperCase())) return {error:'Plan code '+f.code.toUpperCase()+' already exists. Plan codes are unique.'};
+        if(Number(f.events)<0||Number(f.recs)<0) return {error:'Limits cannot be negative.'};
+        this.mutate(st=>{ st.plans=st.plans.concat([{id:f.code.toUpperCase(),name:f.name||f.code,events:f.events||'0',recs:f.recs||'0',training:'0 / month',products:'0',storage:'0 GB',open:true,tenants:[]}]); },'Plan '+f.code.toUpperCase()+' created.');
+      }});
+  }
+  pg_pPlan(p){
+    const s=this.state.store, pl=s.plans.find(x=>x.id===p.planId);
+    const assigned=s.tenants.filter(t=>t.plan===pl.id);
+    return {crumbs:this.crumbs([this.pRoot(),{label:'Plans & Quotas',hash:'/admin/plans'},{label:pl.id,mono:true}]),
+      kicker:'Plan',title:pl.name,badge:this.tag(pl.open?'open to new assignments':'closed',pl.open?'ok':'warn'),
+      actions:[{label:'Close to new assignments',variant:'danger',disabled:!pl.open,reason:pl.open?'':'This plan is already closed.',run:()=>this.dlgClosePlan(pl)}],
+      dl:[this.dlItem('Plan code',pl.id,{mono:true,copy:true}),this.dlItem('Event limit',pl.events,{mono:true}),this.dlItem('Recommendation limit',pl.recs,{mono:true}),this.dlItem('Training limit',pl.training,{mono:true}),this.dlItem('Product limit',pl.products,{mono:true}),this.dlItem('Storage limit',pl.storage,{mono:true})],
+      form:{width:'720px',submit:'Save limits',error:this.state.formError,
+        fields:[this.fld('events','Event limit',{mono:true,value:pl.events}),this.fld('recs','Recommendation limit',{mono:true,value:pl.recs}),this.fld('training','Training limit',{mono:true,value:pl.training}),this.fld('products','Product limit',{mono:true,value:pl.products})]},
+      panels:[{title:'Assigned tenants',note:assigned.length+' assigned',
+        cols:['Tenant code','Name','Status'],rows:assigned.map(t=>({cells:[this.cellLink(t.id,'/admin/tenants/'+t.id),this.cellText(t.name),this.cellBadge('tenant',t.status)]}))}],
+      footnote:'Invalid, conflicting or negative limits are rejected with the conflict named. Enter a negative number to see it.'};
+  }
+  dlgClosePlan(pl){
+    this.openDialog({id:'plan-close',title:'Close '+pl.id+' to new assignments',danger:true,confirmLabel:'Close plan',
+      body:'Tenants already on this plan keep it. No further tenant can be assigned to it.',
+      consequence:'This can be reversed by reopening the plan.',
+      commit:()=>this.mutate(st=>{ st.plans=st.plans.map(x=>x.id===pl.id?Object.assign({},x,{open:false}):x); },'Plan '+pl.id+' closed to new assignments.')});
+  }
+  pg_pUsage(){
+    const s=this.state.store, ten=this.f('tenant','all tenants'), ut=this.f('type','all usage types');
+    let rows=[];
+    s.tenants.forEach(t=>{
+      [['events','4,182,400','6,000,000'],['recommendations','11,904,077','15,000,000'],['training','6','8'],['products','48,210','50,000']].forEach(u=>{
+        if(ten!=='all tenants'&&t.id!==ten) return;
+        if(ut!=='all usage types'&&u[0]!==ut) return;
+        rows.push({cells:[this.cellLink(t.id,'/admin/tenants/'+t.id),this.cellText(t.name,{muted:true}),this.cellText('2026-08',{mono:true}),this.cellText(u[0],{mono:true}),this.cellText(u[1],{mono:true,align:'right'}),this.cellText(u[2],{mono:true,align:'right'})]});
+      });
+    });
+    return {crumbs:this.crumbs([this.pRoot(),{label:'Tenant Usage'}]),kicker:'Authorized platform scope',title:'Tenant Usage',
+      subtitle:'Cross-tenant usage by tenant, period and usage type. Private event payloads are excluded; only aggregate quantities appear.',
+      filters:[this.filter('tenant','Tenant',['all tenants','NGS-01','BRM-02','KLD-03','VNT-04']),this.filter('type','Usage type',['all usage types','events','recommendations','training','products']),this.filter('period','Period',['2026-08','2026-07','2026-06'])],
+      table:{minWidth:'1000px',cols:['Tenant code','Name','Period','Usage type',{label:'Measured',align:'right'},{label:'Effective limit',align:'right'}],rows:rows,
+        empty:{title:'No usage rows match this filter',body:'A tenant outside your scope is rejected rather than shown as an empty row.'},count:rows.length+' rows'}};
+  }
+  pg_pStatus(){
+    const s=this.state.store;
+    return {crumbs:this.crumbs([this.pRoot(),{label:'Platform Status'}]),kicker:'Monitoring access',title:'Platform Status',badge:this.badge('deploy','available'),
+      subtitle:'Shared service health, workload and capacity across the platform. Measurement gaps are identified as gaps.',
+      filters:[this.filter('range','Time range',['last 24 hours','last 7 days','last 30 days'])],
+      stats:[{label:'Serving availability',value:'99.91%',note:'all tenants'},{label:'Training queue',value:'1',note:'concurrency 1, 0 waiting'},{label:'Serving replicas',value:'7 / 7',note:'ready / desired'},{label:'Ingestion lag',value:'gap',note:'no measurement 04:00–04:20',valueStyle:{fontFamily:MONO,fontSize:'21px',color:'var(--warn)'}},{label:'Failures',value:'5',note:'last 24 hours'},{label:'Active tenants',value:String(s.tenants.filter(t=>t.status==='active').length),note:'of '+s.tenants.length+' accounts'}],
+      panels:[
+        {title:'Workload by tenant',body:'Aggregate counts only.',cols:['Tenant','Serving requests (24 h)','Events ingested (24 h)','Training jobs (7 d)'],
+          rows:[['NGS-01','412,004','182,410','2'],['BRM-02','88,120','40,002','1'],['KLD-03','0','0','0'],['VNT-04','0','0','0']].map(r=>({cells:r.map((c,i)=>this.cellText(c,{mono:i>0,align:i>0?'right':'left'}))}))},
+        {title:'Failure summary',cols:['Severity','Area','Count (24 h)'],
+          rows:[['critical','activation','0'],['error','ingestion','2'],['warning','serving','1'],['info','capacity','2']].map(r=>({cells:[this.cellBadge('sev',r[0]),this.cellText(r[1],{mono:true}),this.cellText(r[2],{mono:true,align:'right'})]}))},
+        {title:'Measurement gaps',badge:this.tag('1 gap','warn'),body:'A gap is reported as a gap. It is never rendered as a zero.',
+          cols:['Window','Signal','Note'],rows:[{cells:[this.cellText('2026-08-14 04:00–04:20',{mono:true}),this.cellText('ingestion lag',{mono:true}),this.cellText('collector restart — no samples recorded',{muted:true})]}]}
+      ]};
+  }
+  pg_pAudit(){
+    const s=this.state.store, tab=this.state.tab.pAudit||'Failures';
+    const mk=name=>({label:name,run:()=>{ const t=Object.assign({},this.state.tab); t.pAudit=name; this.setState({tab:t}); },
+      style:{background:'none',border:0,borderBottom:tab===name?'3px solid var(--color-accent)':'3px solid transparent',marginBottom:'-2px',padding:'10px 16px',font:'inherit',fontSize:'14px',fontWeight:tab===name?600:400,color:tab===name?'var(--color-accent)':'var(--color-text)',cursor:'pointer'}});
+    const base={crumbs:this.crumbs([this.pRoot(),{label:'Failures & Audit',hash:'/admin/audit'},{label:tab}]),kicker:'Audit permission',title:'Failures & Audit',
+      tabs:[mk('Failures'),mk('Audit records')]};
+    if(tab==='Failures'){
+      const sev=this.f('sev','all severities');
+      let list=s.failures; if(sev!=='all severities') list=list.filter(f=>f.sev===sev);
+      return Object.assign(base,{subtitle:'Redacted terminal failures across the platform. Tenant identity is redacted unless the record is opened from a tenant.',
+        filters:[this.filter('sev','Severity',['all severities','info','warning','error','critical']),this.filter('win','Time range',['last 30 days','last 7 days','last 24 hours'])],
+        table:{minWidth:'1000px',cols:['Occurred at','Severity','Area','Summary','Reference','Tenant'],
+          rows:list.map(f=>({cells:[this.cellText(f.at,{mono:true}),this.cellBadge('sev',f.sev),this.cellText(f.area,{mono:true}),this.cellText(f.summary,{muted:true}),this.cellText(f.ref,{mono:true}),this.cellText(f.tenant,{mono:true,muted:true})]})),
+          empty:{title:'No failures match this filter',body:'Widen the severity or time range.'},count:list.length+' failures'}});
+    }
+    const act=this.f('action','all action types'), ten=this.f('tenant','all tenants');
+    let list=s.audit;
+    if(act!=='all action types') list=list.filter(r=>r.action===act);
+    if(ten!=='all tenants') list=list.filter(r=>r.tenant===ten);
+    return Object.assign(base,{subtitle:'Immutable, append-only history. Sensitive details stay redacted.',
+      filters:[this.filter('tenant','Tenant',['all tenants','NGS-01','BRM-02','KLD-03','VNT-04']),this.filter('action','Action type',['all action types','credential','training','activation','rollback','quota','tenant','access','security']),this.filter('win','Time range',['last 30 days','last 7 days','last 24 hours'])],
+      table:{minWidth:'1080px',cols:['Occurred at','Actor type','Action type','Resource type','Outcome','Correlation reference'],
+        rows:list.map(r=>({cells:[this.cellText(r.at,{mono:true}),this.cellText(r.actor,{mono:true}),this.cellText(r.action,{mono:true}),this.cellText(r.res,{mono:true}),this.cellBadge('outcome',r.outcome),this.cellText(r.ref,{mono:true})]})),
+        empty:{title:'No audit records match this filter',body:'Widen the time range or clear the filters.'},count:list.length+' records'}});
+  }
+
+  // ─── form submission ──────────────────────────────────────
+  submit(res){
+    const f=this.state.form, id=res.id, err=(m,fields)=>this.setState({formError:{title:m.title,body:m.body,style:this.bannerStyle(m.tone||'danger')},errors:fields||{}});
+    const clear=()=>this.setState({formError:null,errors:{}});
+    if(id==='login'){
+      if(!f.email||!f.pw) return err({title:'Sign-in failed',body:'The credentials supplied are not valid, or the account cannot sign in. If the problem continues, contact your tenant administrator.'});
+      clear(); const role=f.email.indexOf('ruben')>=0?'tenant_dev':'tenant_admin';
+      this.setState({identity:role},()=>{ location.hash='#/home'; this.syncRoute({identity:role}); this.flash('Signed in.'); }); return;
+    }
+    if(id==='adminLogin'){
+      if(!f.email||!f.pw) return err({title:'Sign-in failed',body:'The credentials supplied are not valid, or the operator account cannot sign in.'});
+      clear(); this.setState({identity:'platform'},()=>{ location.hash='#/admin'; this.syncRoute({identity:'platform'}); this.flash('Signed in to the platform realm.'); }); return;
+    }
+    if(id==='register'){
+      if(!f.biz) return err({title:'Registration could not be completed',body:'A business name is required.'},{biz:'Enter the registered business name.'});
+      if((f.biz||'').toLowerCase()==='kelder tools') return err({title:'This business is already registered',body:'A tenant account named “Kelder Tools” already exists. Sign in with the existing administrator account, or register under a different business name.'},{biz:'Business name already registered.'});
+      if(!f.admin||f.admin.indexOf('@')<0) return err({title:'Registration could not be completed',body:'Correct the highlighted field and submit again.'},{admin:'Enter a valid email address.'});
+      if(f.pw!==f.pw2) return err({title:'Registration could not be completed',body:'Correct the highlighted field and submit again.'},{pw2:'The two entries do not match.'});
+      clear(); this.flash('Tenant created. Sign in to continue.'); this.go('/login'); return;
+    }
+    if(id==='recover'){ if(!f.email) return err({title:'Enter an account identifier',body:'Supply the identifier you sign in with.'},{email:'Required.'});
+      clear(); this.flash('If that identifier matches an account, recovery instructions have been sent.'); this.go('/recover/confirm'); return; }
+    if(id==='recoverConfirm'||id==='invite'){
+      const proof=id==='invite'?f.token:f.proof;
+      if(!proof) return err({title:'This link cannot be used',body:'Supply the value you were sent.'},{[id==='invite'?'token':'proof']:'Required.'});
+      if(String(proof).toLowerCase().indexOf('expired')>=0) return err({title:'This link cannot be used',body:'It has expired or is not valid. Request a new one and try again.'});
+      if(f.pw!==f.pw2) return err({title:'Correct the highlighted field',body:'The two entries do not match.'},{pw2:'The two entries do not match.'});
+      clear(); this.flash(id==='invite'?'Account activated. Sign in to continue.':'Authentication material set. Sign in to continue.'); this.go('/login'); return;
+    }
+    if(id==='account'){
+      if(f.new&&f.new!==f.conf) return err({title:'Correct the highlighted field',body:'The new authentication material and its confirmation do not match.'},{conf:'The two entries do not match.'});
+      if(f.new&&!f.cur) return err({title:'Correct the highlighted field',body:'Supply your current authentication material to change it.'},{cur:'Required to make this change.'});
+      clear(); this.flash('Account updated.'); return;
+    }
+    if(id==='productNew'){
+      if(!f.id) return err({title:'Correct the highlighted field',body:'An external product identifier is required.'},{id:'Required.'});
+      if(String(f.id).toUpperCase()==='QUOTA') return err({title:'Product quota exhausted',body:'This tenant holds 50,000 of 50,000 products on plan GROWTH. Disable products you no longer sell, or ask your platform contact about a quota override.',tone:'warn'});
+      if(this.state.store.products.some(p=>p.id===f.id)) return err({title:'That identifier is already in use',body:'A product with identifier '+f.id+' already exists. Use a different identifier or update the existing product.'},{id:'Already exists in this tenant.'});
+      if(!f.title) return err({title:'Correct the highlighted field',body:'A title is required.'},{title:'Required.'});
+      clear(); this.mutate(st=>{ st.products=st.products.concat([{id:f.id,title:f.title,cat:f.cat||'Hardware',brand:f.brand||'—',price:f.price||'0.00',active:true,avail:f.avail||'in_stock',updated:'2026-08-14 10:20',eligible:true}]); },'Product '+f.id+' added.','/products');
+      return;
+    }
+    if(id==='product'){ clear(); this.mutate(st=>{ st.products=st.products.map(x=>x.id===res.params.productId?Object.assign({},x,{title:f.title||x.title,cat:f.cat||x.cat,brand:f.brand||x.brand,price:f.price||x.price,avail:f.avail||x.avail,updated:'2026-08-14 10:22'}):x); },'Product '+res.params.productId+' updated.'); return; }
+    if(id==='productSync'){
+      if(!f.ref) return err({title:'Correct the highlighted field',body:'A synchronization identifier is required so a repeated submission is not applied twice.'},{ref:'Required.'});
+      if(String(f.payload||'').toUpperCase().indexOf('OVERSIZE')>=0) return err({title:'Submission rejected — too large',body:'A synchronization is bounded to 5,000 products. Split the collection and submit it in parts.',tone:'warn'});
+      clear(); const sid='sub-'+(9010+this.state.store.submissions.length);
+      this.mutate(st=>{ st.submissions=[{id:sid,kind:'product sync',status:'succeeded',received:1200,accepted:1140,updated:52,skipped:6,failed:2,at:'2026-08-14 10:24',ref:f.ref,errors:[{ref:'SKU-9101',reason:'price is not a positive decimal'},{ref:'SKU-9142',reason:'category exceeds 120 characters'}]}].concat(st.submissions); });
+      this.setState({syncResult:{id:sid,ref:f.ref,received:1200,accepted:1140,updated:52,skipped:6,failed:2}});
+      return;
+    }
+    if(id==='events'){
+      const mode=this.f('mode','single event');
+      if(mode==='single event'){
+        if(!f.ev) return err({title:'Correct the highlighted field',body:'An event identifier is required — it is the idempotency key.'},{ev:'Required.'});
+        if(f.ev==='ev-33810'){ clear(); this.setState({eventResult:{title:'Duplicate confirmed',badge:this.badge('outcome','succeeded'),subtitle:'Event ev-33810 was already received and is not counted twice. This is a success outcome, not an error.',dl:[this.dlItem('Event identifier','ev-33810',{mono:true}),this.dlItem('First received','2026-08-14 09:41:02',{mono:true}),this.dlItem('Status','duplicate_confirmed',{mono:true})],sub:null}}); return; }
+        if(!f.cus||!f.prod) return err({title:'Correct the highlighted fields',body:'Customer and product identifiers are required.'},{cus:f.cus?'':'Required.',prod:f.prod?'':'Required.'});
+        clear(); this.setState({eventResult:{title:'Event accepted',badge:this.badge('outcome','succeeded'),subtitle:'Event '+f.ev+' was accepted and will be included in the next dataset snapshot.',dl:[this.dlItem('Event identifier',f.ev,{mono:true}),this.dlItem('Event type',f.type||'view',{mono:true}),this.dlItem('Accepted at','2026-08-14 10:26',{mono:true})],sub:null}}); return;
+      }
+      if(!f.batch) return err({title:'Correct the highlighted field',body:'A batch identifier is required.'},{batch:'Required.'});
+      if(String(f.payload||'').toUpperCase().indexOf('OVERSIZE')>=0) return err({title:'Batch rejected — too large',body:'A batch is bounded to 5,000 events. Split the collection and submit it in parts.',tone:'warn'});
+      clear(); const bid='sub-'+(9020+this.state.store.submissions.length);
+      this.mutate(st=>{ st.submissions=[{id:bid,kind:'event batch',status:'processing',received:2400,accepted:2100,updated:0,skipped:280,failed:20,at:'2026-08-14 10:28',ref:f.batch,errors:[{ref:'ev-40012',reason:'unknown external product identifier'}]}].concat(st.submissions); });
+      this.setState({eventResult:{title:'Batch accepted',badge:this.badge('outcome','succeeded'),subtitle:'Batch '+f.batch+' was accepted for processing with initial counts.',dl:[this.dlItem('Batch identifier',f.batch,{mono:true}),this.dlItem('Submission id',bid,{mono:true}),this.dlItem('Received','2,400',{mono:true})],sub:bid}});
+      return;
+    }
+    if(id==='pPlan'){
+      const neg=['events','recs','training','products'].some(k=>String(f[k]||'').indexOf('-')===0);
+      if(neg) return err({title:'Limits cannot be negative',body:'A negative limit conflicts with the quota model. Enter zero to withhold a usage type entirely.'},{events:String(f.events||'').indexOf('-')===0?'Must be zero or greater.':''});
+      clear(); this.mutate(st=>{ st.plans=st.plans.map(p=>p.id===res.params.planId?Object.assign({},p,{events:f.events||p.events,recs:f.recs||p.recs,training:f.training||p.training,products:f.products||p.products}):p); },'Plan '+res.params.planId+' limits saved.');
+      return;
+    }
+    clear();
+  }
+
+  // ─── tenant · administrator ───────────────────────────────
+  eligibility(){
+    const s=this.state.store, running=s.jobs.find(j=>['queued','waiting_for_resources','preparing_data','building_graph','training','evaluating','indexing_embeddings','registering','cancelling'].indexOf(j.state)>=0);
+    const quota=s.usage.find(u=>u.type==='training');
+    if(running) return {ok:false,reason:'Job '+running.id+' is already running. Global training concurrency is 1.'};
+    if(quota&&quota.rem==='0') return {ok:false,reason:'The training quota for this period is exhausted. It resets on 2026-09-01.'};
+    return {ok:true,reason:''};
+  }
+  pg_training(){
+    const s=this.state.store, el=this.eligibility(), st=this.f('state','all states');
+    let list=s.jobs.slice();
+    if(st!=='all states') list=list.filter(j=>j.state===st);
+    const rows=list.map(j=>({cells:[
+      this.cellLink(j.id,'/training/'+j.id),
+      this.cellBadge('job',j.state),
+      this.cellText(j.type,{mono:true}),
+      this.cellText(j.requested,{mono:true}),
+      this.cellText(j.completed,{mono:true}),
+      this.cellText(j.by,{muted:true}),
+      this.cellActions([{label:'Open',run:()=>this.go('/training/'+j.id)}])
+    ]}));
+    return {crumbs:this.crumbs([this.tRoot(),{label:'Training'}]),kicker:'Model production',title:'Training',
+      subtitle:'Offline batch training with a global concurrency of one job. A request is accepted only when data, quota and cooldown all allow it.',
+      actions:[{label:'Start training',variant:'primary',disabled:!el.ok,reason:el.reason,run:()=>this.dlgTrain()}],
+      stats:[{label:'Concurrency',value:'1',note:'platform-wide'},{label:'Eligibility',value:el.ok?'eligible':'blocked',note:el.ok?'a request would be accepted':el.reason,valueStyle:{fontFamily:MONO,fontSize:'19px',color:el.ok?'var(--ok)':'var(--warn)'}},{label:'Interaction data',value:'4.18 M',note:'sufficient — 1,000 sequences required'},{label:'Training quota',value:'6 / 8',note:'resets 2026-09-01'},{label:'Cooldown',value:'none',note:'15 min between requests'}],
+      filters:[this.filter('state','State',['all states','queued','training','succeeded','failed','cancelled'])],
+      table:{minWidth:'980px',cols:['Job','State','Requested model type','Requested at','Completed at','Requester',{label:'',align:'right'}],rows:rows,
+        empty:{title:'No training jobs yet',body:'Request training to produce your first model version.',action:{label:'Start training',run:()=>this.dlgTrain()}},count:list.length+' of '+s.jobs.length}};
+  }
+  dlgTrain(){
+    const el=this.eligibility();
+    this.openDialog({id:'train-start',title:'Start training',width:'640px',form:true,confirmLabel:'Request training',
+      body:'A training job builds a dataset snapshot, constructs the interaction graph, trains the model and registers a version. It does not activate anything.',
+      consequence:el.ok?'':'This request will be rejected: '+el.reason,
+      initial:{type:'DGSR',window:'90 days'},
+      fields:()=>[this.dfld('type','Model type',{options:['DGSR']}),this.dfld('window','Interaction window',{options:['30 days','90 days','180 days']}),this.dfld('epochs','Maximum epochs',{options:['10','20','40']}),this.dfld('req','Request identifier',{placeholder:'req-…',hint:'Idempotency key for this request.'})],
+      commit:f=>{
+        const e=this.eligibility();
+        if(!e.ok) return {error:e.reason};
+        if(!f.req) return {error:'A request identifier is required so a repeated request is not applied twice.'};
+        const id='job-'+(2293+this.state.store.jobs.length);
+        this.mutate(st=>{ st.jobs=[{id:id,state:'queued',type:f.type||'DGSR',requested:'2026-08-14 10:14',completed:'—',by:'Dana Whitfield',reason:null,version:null,stageAt:0,progress:'waiting to start'}].concat(st.jobs); },'Training job '+id+' requested.','/training/'+id);
+      }});
+  }
+  pg_job(p){
+    const s=this.state.store, j=s.jobs.find(x=>x.id===p.jobId);
+    const active=['queued','waiting_for_resources','preparing_data','building_graph','training','evaluating','indexing_embeddings','registering'].indexOf(j.state)>=0;
+    const failed=j.state==='failed', cancelled=j.state==='cancelled', done=j.state==='succeeded';
+    const at=failed||cancelled?j.stageAt:JOB_STAGES.indexOf(j.state);
+    const v=j.version?s.versions.find(x=>x.id===j.version):null;
+    const panels=[];
+    if(done&&v) panels.push({title:'Quality measures',badge:this.tag('produced v'+v.n,'ok'),
+      dl:[this.dlItem('Recall@10',v.recall.toFixed(3),{mono:true}),this.dlItem('HR@10',v.hr.toFixed(3),{mono:true}),this.dlItem('NDCG@10',v.ndcg.toFixed(3),{mono:true}),this.dlItem('Coverage',v.cov.toFixed(2),{mono:true})],
+      actions:[{label:'Open model version v'+v.n,variant:'primary',run:()=>this.go('/models/'+v.id)}]});
+    if(failed||cancelled) panels.push({title:failed?'Failure reason':'Cancellation reason',badge:this.badge('job',j.state),
+      body:j.reason,dl:[this.dlItem('Error reference','err-3e90-'+j.id.slice(4),{mono:true,copy:true})],
+      actions:[]});
+    panels.push({title:'Dataset snapshot',note:'snap-78'+j.id.slice(-2),
+      body:'The immutable snapshot this job trained from. Snapshot construction, graph building and indexing are platform processes; they appear here only as stages.',
+      dl:[this.dlItem('Snapshot id','snap-78'+j.id.slice(-2),{mono:true,copy:true}),this.dlItem('Interaction window','90 days'),this.dlItem('Sequences','182,410',{mono:true}),this.dlItem('Products in snapshot','48,210',{mono:true})]});
+    return {crumbs:this.crumbs([this.tRoot(),{label:'Training',hash:'/training'},{label:j.id+' · '+j.state,mono:true}]),
+      kicker:'Training job',title:j.id,badge:this.badge('job',j.state),
+      subtitle:active?'The job is running. This view updates in place.':done?'The job completed and registered a model version. Activation is a separate, deliberate action.':failed?'The job stopped before producing a version.':'The job was cancelled before producing a version.',
+      updated:active?'updated '+(this.state.tick%9)+'s ago · polling every 2s':'',
+      actions:[{label:'Cancel job',variant:'danger',disabled:!active,reason:active?'':'Only a job in an active state can be cancelled.',run:()=>this.dlgCancel(j)}],
+      rail:{title:'Pipeline stage',note:active?j.progress:failed?'Stopped at '+JOB_STAGES[j.stageAt]+'.':cancelled?'Cancelled at '+JOB_STAGES[j.stageAt]+'.':'All stages complete.',
+        stages:JOB_STAGES.map((st,i)=>this.stage(st,i,at,failed||cancelled))},
+      dl:[this.dlItem('Requested model type',j.type,{mono:true}),this.dlItem('Requested at',j.requested,{mono:true}),this.dlItem('Completed at',j.completed,{mono:true}),this.dlItem('Requester',j.by),this.dlItem('Produced version',j.version?'v'+s.versions.find(x=>x.id===j.version).n:'none',{mono:true}),this.dlItem('Job identifier',j.id,{mono:true,copy:true})],
+      panels:panels};
+  }
+  dlgCancel(j){
+    this.openDialog({id:'job-cancel',title:'Cancel '+j.id,danger:true,width:'640px',confirmLabel:'Cancel job',cancelLabel:'Keep running',
+      body:'The job moves to cancelling and then to cancelled. Work already done is discarded.',
+      consequence:'No model version is produced. A reason is required and is written to the audit history.',
+      fields:()=>[this.dfld('reason','Reason',{area:true,placeholder:'Superseded by a corrected catalog sync'})],
+      commit:f=>{ if(!f.reason||f.reason.trim().length<4) return {error:'A reason is required for this action.'};
+        this.mutate(st=>{ st.jobs=st.jobs.map(x=>x.id===j.id?Object.assign({},x,{state:'cancelling',reason:'Cancelled by requester: '+f.reason}):x); },j.id+' is cancelling.'); }});
+  }
+
+  pg_models(){
+    const s=this.state.store, st=this.f('status','all statuses');
+    let list=s.versions.slice();
+    if(st!=='all statuses') list=list.filter(v=>v.status===st);
+    const c=k=>s.versions.filter(v=>v.status===k).length;
+    const rows=list.map(v=>({cells:[
+      this.cellLink('v'+v.n,'/models/'+v.id),
+      this.cellText(v.type,{mono:true}),
+      this.cellBadge('model',v.status),
+      this.cellText(v.created,{mono:true}),
+      this.cellText('R@10 '+v.recall.toFixed(3)+' · NDCG '+v.ndcg.toFixed(3),{mono:true,sub:'coverage '+v.cov.toFixed(2)}),
+      this.cellTag(v.status==='active'?'serving':'—',v.status==='active'?'ok':'neu'),
+      this.cellActions([{label:'Open',run:()=>this.go('/models/'+v.id)},{label:'Activate',disabled:v.status!=='eligible',reason:v.status==='active'?'Already active.':v.status==='eligible'?'':'Only an eligible version can be activated.',run:()=>this.dlgActivate(v)}])
+    ]}));
+    return {crumbs:this.crumbs([this.tRoot(),{label:'Model Versions'}]),kicker:'Model lifecycle',title:'Model Versions',
+      subtitle:'Every succeeded training job registers a version. A version serves traffic only once it is deliberately activated.',
+      stats:[{label:'Active',value:String(c('active')),note:'serving now'},{label:'Desired',value:'1',note:'one active version'},{label:'Eligible',value:String(c('eligible')),note:'may be activated'},{label:'Retired',value:String(c('retired')),note:'retained for rollback'},{label:'Failed',value:String(c('failed_deployment')),note:'activation rejected',valueStyle:{fontFamily:MONO,fontSize:'21px',color:c('failed_deployment')?'var(--danger)':'inherit'}}],
+      filters:[this.filter('status','Lifecycle status',['all statuses','registered','eligible','active','retired','rejected','archived','failed_deployment'])],
+      table:{minWidth:'1080px',cols:['Version','Model type','Lifecycle status','Created at','Quality summary','Serving',{label:'',align:'right'}],rows:rows,
+        empty:{title:'No model versions yet',body:'Train a model to produce your first version.',action:{label:'Go to training',run:()=>this.go('/training')}},count:list.length+' of '+s.versions.length}};
+  }
+  pg_version(p){
+    const s=this.state.store, v=s.versions.find(x=>x.id===p.versionId), act=s.versions.find(x=>x.status==='active');
+    const base={recall:0.150,hr:0.260,ndcg:0.130,cov:0.44};
+    const d=(a,b)=>((a-b)>=0?'+':'')+(a-b).toFixed(3);
+    const canActivate=v.status==='eligible';
+    const canRollback=v.status==='active'&&s.versions.some(x=>x.status==='retired');
+    const canArchive=['registered','rejected','retired'].indexOf(v.status)>=0&&!(v.status==='retired'&&act&&act.n-v.n<=1);
+    const archReason=v.status==='active'?'An active version cannot be archived.':v.status==='archived'?'Already archived.':v.status==='retired'&&act&&act.n-v.n<=1?'Retained as the rollback target for the active version.':'';
+    const panels=[
+      {title:'Quality against baseline and the active version',
+        body:'Comparison is the input to the activation decision. Baseline is the platform’s popularity ranker.',
+        cols:['Measure','This version','Baseline','Δ baseline',act?'Active v'+act.n:'Active','Δ active'],
+        rows:[['Recall@10','recall'],['HR@10','hr'],['NDCG@10','ndcg'],['Coverage','cov']].map(m=>({cells:[
+          this.cellText(m[0]),this.cellText(v[m[1]].toFixed(3),{mono:true}),this.cellText(base[m[1]].toFixed(3),{mono:true}),
+          this.cellText(d(v[m[1]],base[m[1]]),{mono:true}),this.cellText(act?act[m[1]].toFixed(3):'—',{mono:true}),
+          this.cellText(act?d(v[m[1]],act[m[1]]):'—',{mono:true})
+        ]}))},
+      {title:'Feature contract and artifact',
+        dl:[this.dlItem('Artifact digest',v.digest,{mono:true,copy:true}),this.dlItem('Dataset snapshot',v.snap,{mono:true,copy:true}),this.dlItem('Producing job',v.job,{mono:true}),this.dlItem('Feature contract','sequence · product · category · brand',{mono:true}),this.dlItem('Embedding dimension','128',{mono:true}),this.dlItem('Eligibility','',{badge:this.tag(v.eligible?'eligible':'not eligible',v.eligible?'ok':'warn')})]}
+    ];
+    if(v.failNote) panels.unshift({title:'Previous activation failed',badge:this.badge('model','failed_deployment'),body:v.failNote,
+      dl:[this.dlItem('Error reference','err-3b17-'+v.id.slice(2),{mono:true,copy:true}),this.dlItem('Version active throughout','v6',{mono:true})]});
+    return {crumbs:this.crumbs([this.tRoot(),{label:'Model Versions',hash:'/models'},{label:'v'+v.n,mono:true}]),
+      kicker:'Model version',title:'Version '+v.n,badge:this.badge('model',v.status),
+      subtitle:v.status==='active'?'This version is serving traffic now.':'Registered by '+v.job+'.',
+      actions:[
+        {label:'Activate',variant:'primary',disabled:!canActivate,reason:canActivate?'':(v.status==='active'?'This version is already active.':'Only an eligible version can be activated.'),run:()=>this.dlgActivate(v)},
+        {label:'Roll back',disabled:!canRollback,reason:canRollback?'':'Roll back applies to the active version, and requires a retained target.',run:()=>this.dlgRollback(v)},
+        {label:'Archive',variant:'danger',disabled:!canArchive,reason:archReason,run:()=>this.dlgArchive(v)}
+      ],
+      dl:[this.dlItem('Version number','v'+v.n,{mono:true}),this.dlItem('Model type',v.type,{mono:true}),this.dlItem('Lifecycle status','',{badge:this.badge('model',v.status)}),this.dlItem('Created at',v.created,{mono:true}),this.dlItem('Version identifier',v.id,{mono:true,copy:true})],
+      panels:panels};
+  }
+  dlgActivate(v){
+    const s=this.state.store, act=s.versions.find(x=>x.status==='active');
+    this.openDialog({id:'v-activate',title:'Activate version '+v.n,width:'640px',confirmLabel:'Activate version '+v.n,
+      body:'Version '+v.n+' becomes the version that serves all recommendation traffic for this tenant.',
+      consequence:act?('If activation fails, version '+act.n+' remains active and no traffic moves.'):'If activation fails, no version serves and the fallback strategy applies.',
+      dl:[{label:'Recall@10',value:v.recall.toFixed(3)},{label:'NDCG@10',value:v.ndcg.toFixed(3)},{label:'Current active',value:act?'v'+act.n:'none'},{label:'Coverage',value:v.cov.toFixed(2)}],
+      commit:()=>this.mutate(st=>{ st.versions=st.versions.map(x=>x.id===v.id?Object.assign({},x,{status:'active'}):(x.status==='active'?Object.assign({},x,{status:'retired'}):x)); st.deployment=Object.assign({},st.deployment,{version:v.id,state:'progressing',transition:'2026-08-14 10:16'}); },'Version '+v.n+' activated.')});
+  }
+  dlgRollback(v){
+    const s=this.state.store, targets=s.versions.filter(x=>x.status==='retired');
+    this.openDialog({id:'v-rollback',title:'Roll back from version '+v.n,width:'640px',danger:true,confirmLabel:'Roll back',
+      body:'Serving returns to a retained version. The target is validated before the active version changes.',
+      consequence:'If the target fails validation, version '+v.n+' remains active.',
+      initial:{target:targets.length?('v'+targets[0].n):''},
+      fields:()=>[this.dfld('target','Roll-back target',{options:targets.map(t=>'v'+t.n)}),this.dfld('reason','Reason',{area:true,placeholder:'Coverage regression observed in production'})],
+      commit:f=>{
+        if(!targets.length) return {error:'No retained version is available as a roll-back target.'};
+        if(!f.reason||f.reason.trim().length<4) return {error:'A reason is required for this action.'};
+        const n=parseInt((f.target||('v'+targets[0].n)).slice(1),10);
+        this.mutate(st=>{ st.versions=st.versions.map(x=>x.n===n?Object.assign({},x,{status:'active'}):(x.id===v.id?Object.assign({},x,{status:'retired'}):x)); },'Rolled back to version '+n+'.','/models');
+      }});
+  }
+  dlgArchive(v){
+    this.openDialog({id:'v-archive',title:'Archive version '+v.n,danger:true,confirmLabel:'Archive',
+      body:'An archived version is retained for audit but can no longer be activated or used as a roll-back target.',
+      consequence:'Active and protected versions are rejected in place; this one is neither.',
+      commit:()=>this.mutate(st=>{ st.versions=st.versions.map(x=>x.id===v.id?Object.assign({},x,{status:'archived',eligible:false}):x); },'Version '+v.n+' archived.','/models')});
+  }
+
+  pg_usage(){
+    const s=this.state.store, t=this.f('type','all usage types'), per=this.f('period','current period');
+    let list=s.usage.slice();
+    if(t!=='all usage types') list=list.filter(u=>u.type===t);
+    const rows=list.map(u=>({cells:[
+      this.cellText(u.type,{mono:true}),
+      this.cellText(u.qty,{mono:true,align:'right'}),
+      this.cellText(u.limit,{mono:true,align:'right'}),
+      this.cellText(u.rem,{mono:true,align:'right'}),
+      this.cellText(u.reset,{muted:true}),
+      this.cellTag(u.status,u.status==='measured'?'ok':'warn')
+    ]}));
+    return {crumbs:this.crumbs([this.tRoot(),{label:'Usage & Quotas'}]),kicker:'Plan '+s.tenant.plan,title:'Usage & Quotas',
+      subtitle:'Measured quantity against the effective limit for each usage type. An unavailable measurement is stated as such and never shown as zero.',
+      filters:[this.filter('type','Usage type',['all usage types','events','recommendations','training','products','storage','service_capacity']),this.filter('period','Period',['current period','previous period','last 3 periods'])],
+      table:{minWidth:'1000px',cols:['Usage type',{label:'Measured',align:'right'},{label:'Effective limit',align:'right'},{label:'Remaining',align:'right'},'Reset period','Measurement'],rows:rows,
+        empty:{title:'No usage types match this filter',body:'Clear the filter to see all six usage types.'},count:list.length+' of '+s.usage.length},
+      panels:[{title:'Trend by period',note:'summarized',
+        cols:['Period','Events','Recommendations','Training jobs','Products'],
+        rows:[['2026-08 (current)','4,182,400','11,904,077','6','48,210'],['2026-07','5,904,112','14,220,881','8','47,880'],['2026-06','5,110,203','13,004,552','7','46,912']].map(r=>({cells:r.map((c,i)=>this.cellText(c,{mono:i>0}))}))}],
+      footnote:'Service capacity is measured continuously; the current reading is delayed, so remaining allowance is not calculable.'};
+  }
+
+  pg_service(){
+    const s=this.state.store, d=s.deployment, act=s.versions.find(v=>v.status==='active');
+    return {crumbs:this.crumbs([this.tRoot(),{label:'Service Status'}]),kicker:'Serving',title:'Service Status',badge:this.badge('deploy',d.state),
+      subtitle:'Recommendation traffic is served server-to-server. This board reports availability and capacity; recommendation results themselves are never shown in this console.',
+      filters:[this.filter('range','Time range',['last 24 hours','last 7 days','last 30 days'])],
+      stats:[
+        {label:'Availability',value:'99.94%',note:'last 24 hours'},
+        {label:'Active version',value:act?'v'+act.n:'none',note:act?'since '+d.transition:'no version serving'},
+        {label:'Desired capacity',value:String(d.desired),note:'replicas requested'},
+        {label:'Ready capacity',value:String(d.ready),note:d.ready<d.desired?'below desired':'matches desired',valueStyle:{fontFamily:MONO,fontSize:'21px',color:d.ready<d.desired?'var(--warn)':'inherit'}},
+        {label:'Fallback rate',value:d.fallback,note:'requests served by fallback'},
+        {label:'Latency p95',value:d.latency,note:'serving path'}
+      ],
+      dl:[this.dlItem('Deployment state','',{badge:this.badge('deploy',d.state)}),this.dlItem('Last transition',d.transition,{mono:true}),this.dlItem('Recent errors',d.errors,{mono:true}),this.dlItem('Measurement freshness','12 s ago',{mono:true})],
+      panels:[{title:'Recent serving errors',note:'redacted',
+        body:'Error classes only. Request payloads and recommendation results are never rendered here.',
+        cols:['Occurred at','Class','Reason','Reference'],
+        rows:[['2026-08-14 06:22:10','unavailable','Replica restart — fallback strategy served the request','err-3f81'],['2026-08-13 21:44:02','validation','Unknown customer identifier in request context','err-3f55'],['2026-08-13 18:10:31','unavailable','Embedding index read timed out','err-3f40']].map(r=>({cells:[this.cellText(r[0],{mono:true}),this.cellText(r[1],{mono:true}),this.cellText(r[2],{muted:true}),this.cellText(r[3],{mono:true})]}))}],
+      footnote:'If a measurement is delayed the board says so rather than reporting a zero.'};
+  }
+
+  stage(label,i,at,failed){
+    const done=i<at, cur=i===at;
+    const color=failed&&cur?'var(--danger)':cur?'var(--color-accent)':done?'var(--color-neutral-800)':'var(--color-divider)';
+    return {label:label,barStyle:{height:'6px',background:color,animation:cur&&!failed?'gr-pulse 1.6s ease-in-out infinite':'none'},
+      labelStyle:{fontFamily:MONO,fontSize:'10.5px',letterSpacing:'.04em',color:cur?'var(--color-text)':'var(--color-neutral-700)',fontWeight:cur?600:400,overflowWrap:'anywhere'}};
+  }
+
+
+}
+
+</script>
+</body>
+</html>
