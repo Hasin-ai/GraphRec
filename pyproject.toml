@@ -25,6 +25,18 @@ dependencies = [
     "cryptography>=43.0,<44",
     "python-json-logger>=2.0,<3",
     "boto3>=1.35,<2",
+    # CON-01 makes DGSR the model family, and `Ultimate §14` names PyTorch.
+    # PyTorch Geometric is deliberately *not* here — see ADR 0023. The GNN
+    # pathway is three scatter operations, and PyG would add a compiled
+    # extension pinned to a torch build for them.
+    "torch>=2.5,<3",
+    # `numpy` arrives with torch; it is named because the feature builder and
+    # the evaluator use it directly rather than by inheritance.
+    "numpy>=1.26",
+    # "Never `pickle` across a trust boundary" (BACKEND_PLAN §8.4). Phase 10
+    # exports bundles with it; Phase 8 writes checkpoints with it for the same
+    # reason a checkpoint is also an artifact somebody could swap.
+    "safetensors>=0.4,<1",
 ]
 
 [project.optional-dependencies]

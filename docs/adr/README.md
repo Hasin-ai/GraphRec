@@ -73,9 +73,16 @@ confirmation than an explicit answer and is named as such rather than dressed up
 as one. Both remain cheap to revisit — D9 adds or removes a verb on one
 resource, D10 a parameter on a list.
 
-**Phases 6 and 7 are built and nothing gated either.** BUILD_PROMPT marks no 🛑
-on ingestion or metering. The next gate is D4, before Phase 10, and it is the one
-with an unresolved conflict of authorities above.
+**Phases 6, 7 and 8 are built and nothing gated either.** BUILD_PROMPT marks no 🛑
+on ingestion, metering or offline modelling. Phase 8 recorded three decisions of
+its own — **ADR 0023** (plain PyTorch, no PyTorch Geometric), **ADR 0024**
+(full-catalogue evaluation) and **ADR 0025** (safetensors checkpoints) — none of
+which is a listed gate, though 0024 constrains one: the metric floor D8's
+`eligible` state depends on has to be calibrated against full-catalogue numbers,
+which are roughly a third of the sampled-protocol figures a paper would quote.
+
+The next gate is D4, before Phase 10, and it is the one with an unresolved
+conflict of authorities above.
 
 ## Open questions with no recommendation
 
