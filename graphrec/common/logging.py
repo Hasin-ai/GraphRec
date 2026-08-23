@@ -30,7 +30,11 @@ job_id_var: ContextVar[str | None] = ContextVar("job_id", default=None)
 
 
 #: Keys whose values never appear in a log line, whatever they contain.
-_SENSITIVE_KEYS = frozenset(
+#: Public, and read by `graphrec.domain.audit.record` as well: the audit trail's
+#: `details` column is the other place a caller can hand the system a dict, and
+#: a secret is no more acceptable in a durable table than in a log line. One
+#: list means adding a key protects both.
+SENSITIVE_KEYS = frozenset(
     {
         "password",
         "new_password",
@@ -100,7 +104,7 @@ def _redact(value: Any, _depth: int = 0) -> Any:
         return _REDACTED
     if isinstance(value, dict):
         return {
-            key: (_REDACTED if key.lower() in _SENSITIVE_KEYS else _redact(inner, _depth + 1))
+            key: (_REDACTED if key.lower() in SENSITIVE_KEYS else _redact(inner, _depth + 1))
             for key, inner in value.items()
         }
     if isinstance(value, tuple):
@@ -129,7 +133,7 @@ class ContextFilter(logging.Filter):
         for key, value in list(record.__dict__.items()):
             if key.startswith("_") or key in _RESERVED_RECORD_ATTRS:
                 continue
-            if key.lower() in _SENSITIVE_KEYS:
+            if key.lower() in SENSITIVE_KEYS:
                 record.__dict__[key] = _REDACTED
             elif isinstance(value, dict | list | tuple | str):
                 record.__dict__[key] = _redact(value)

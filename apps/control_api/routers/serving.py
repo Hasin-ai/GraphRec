@@ -35,7 +35,7 @@ from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, Depends, Query, Request, status
 
-from apps.control_api.deps import RequireAdministrator
+from apps.control_api.deps import RequireAdministrator, TenantAudit
 from apps.control_api.schemas import (
     ActivateVersionRequest,
     AutoscalingResponse,
@@ -49,7 +49,7 @@ from apps.control_api.schemas import (
     ServingErrorBody,
     ServingErrorsResponse,
 )
-from graphrec.common.enums import AuditActor
+from graphrec.common.enums import AuditAction, AuditActor
 from graphrec.domain.serving.activation import ActivationService
 from graphrec.domain.serving.deployment import DeploymentService
 from graphrec.domain.serving.metrics import MetricsService
@@ -292,6 +292,7 @@ async def activate_model_version(
     activations: Activations,
     deployments: Deployments,
     measurements: Metrics,
+    audit: TenantAudit,
 ) -> DeploymentResponse:
     """`202`, and the previous version is still answering when it returns.
 
@@ -300,14 +301,28 @@ async def activate_model_version(
     or so is "the previous one, while the new one loads". `serving_previous` is
     that fact, and it is the same field the console watches until the swap.
     """
-    await activations.activate(
-        principal.session,
-        tenant_id=principal.tenant_id,
-        version_id=version_id,
-        actor_id=principal.user_id,
-        actor_type=AuditActor.TENANT_USER,
-        reason=body.reason,
-    )
+    async with audit.action(
+        AuditAction.ACTIVATION,
+        resource_type="model_version",
+        resource_ref=version_id,
+        details={"reason": body.reason},
+    ) as entry:
+        request = await activations.activate(
+            principal.session,
+            tenant_id=principal.tenant_id,
+            version_id=version_id,
+            actor_id=principal.user_id,
+            actor_type=AuditActor.TENANT_USER,
+            reason=body.reason,
+        )
+        # The revision number, because that is what the operator and the
+        # reconciler both name this attempt: the audit row and
+        # `deployment_revisions` can be joined without guessing from timestamps.
+        entry.details["revision"] = request.revision.revision
+        # `succeeded` here means the *request* was accepted and the previous
+        # version is still serving. Whether the new one ever becomes ready is a
+        # later fact, recorded by the reconciler against the same revision.
+        entry.details["outcome_scope"] = "requested"
     view = await deployments.view(principal.session)
     measures = await measurements.summary(principal.session)
     return _deployment_body(view, measures)
@@ -327,6 +342,7 @@ async def rollback_model(
     deployments: Deployments,
     measurements: Metrics,
     store: Store,
+    audit: TenantAudit,
 ) -> DeploymentResponse:
     """The target is validated before anything changes (ER-F-07).
 
@@ -336,15 +352,27 @@ async def rollback_model(
     finds; passing it to the service as a second scope would be a second,
     weaker copy of a check RLS already made.
     """
-    await activations.rollback(
-        principal.session,
-        tenant_id=principal.tenant_id,
-        actor_id=principal.user_id,
-        actor_type=AuditActor.TENANT_USER,
-        target_version_id=body.target_version_id,
-        reason=body.reason,
-        store=store,
-    )
+    async with audit.action(
+        AuditAction.ROLLBACK,
+        resource_type="model",
+        resource_ref=model_id,
+        details={"reason": body.reason},
+    ) as entry:
+        request = await activations.rollback(
+            principal.session,
+            tenant_id=principal.tenant_id,
+            actor_id=principal.user_id,
+            actor_type=AuditActor.TENANT_USER,
+            target_version_id=body.target_version_id,
+            reason=body.reason,
+            store=store,
+        )
+        entry.details["revision"] = request.revision.revision
+        # The version rolled *to*, which may have been chosen for the caller:
+        # `target_version_id` is optional and the service resolves the retained
+        # previous version when it is absent. Recording the resolved id is the
+        # difference between "rolled back" and "rolled back to 7".
+        entry.details["target_version_id"] = str(request.target.model_version_id)
     view = await deployments.view(principal.session)
     measures = await measurements.summary(principal.session)
     return _deployment_body(view, measures)

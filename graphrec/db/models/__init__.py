@@ -7,6 +7,7 @@ two ever disagree, the migration is right and the model is the bug.
 
 from __future__ import annotations
 
+from graphrec.db.models.audit import AuditLog, SecurityEvent
 from graphrec.db.models.base import Base, TenantOwned
 from graphrec.db.models.catalog import Product, ProductCategory
 from graphrec.db.models.credentials import ApiKey
@@ -54,6 +55,7 @@ from graphrec.db.models.training import (
 
 __all__ = [
     "ApiKey",
+    "AuditLog",
     "Base",
     "Customer",
     "DatasetSnapshot",
@@ -80,6 +82,7 @@ __all__ = [
     "RecommendationResult",
     "RecoveryToken",
     "RefreshSession",
+    "SecurityEvent",
     "ServingReplica",
     "Submission",
     "SubmissionError",

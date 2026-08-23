@@ -20,7 +20,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
-from apps.control_api.deps import CurrentTenant, get_settings_dep
+from apps.control_api.deps import CurrentTenant, TenantAudit, get_settings_dep
 from apps.control_api.schemas import (
     CreateCredentialRequest,
     CredentialListResponse,
@@ -34,6 +34,7 @@ from graphrec.common.config import Settings
 from graphrec.common.enums import (
     SCOPE_LABELS,
     SCOPE_SHORT_LABELS,
+    AuditAction,
     CredentialScope,
     CredentialState,
 )
@@ -131,17 +132,35 @@ async def list_credentials(
     summary="Create a credential",
 )
 async def create_credential(
-    body: CreateCredentialRequest, principal: CurrentTenant, service: Service
+    body: CreateCredentialRequest,
+    principal: CurrentTenant,
+    service: Service,
+    audit: TenantAudit,
 ) -> IssuedCredentialResponse:
-    """One of exactly two routes that ever return a secret."""
-    issued = await service.create(
-        principal.session,
-        tenant_id=principal.tenant_id,
-        created_by=principal.user_id,
-        name=body.name,
-        scopes=[scope.value for scope in body.scopes],
-        expires_in_days=body.expires_in_days,
-    )
+    """One of exactly two routes that ever return a secret.
+
+    Audited, and note what the details carry: the credential's name and its
+    scopes. Not the secret, not its prefix, not the digest. `safe_details`
+    would redact a key called `secret` anyway, but the real defence is that the
+    handler never offers one — the audit trail records that a credential was
+    issued, which is the fact an investigation needs, and knowing *which*
+    credential is what `resource_ref` is for.
+    """
+    async with audit.action(AuditAction.CREDENTIAL, resource_type="api_key") as entry:
+        issued = await service.create(
+            principal.session,
+            tenant_id=principal.tenant_id,
+            created_by=principal.user_id,
+            name=body.name,
+            scopes=[scope.value for scope in body.scopes],
+            expires_in_days=body.expires_in_days,
+        )
+        entry.resource_ref = issued.api_key.key_id
+        entry.details = {
+            "operation": "create",
+            "name": body.name,
+            "scopes": ",".join(scope.value for scope in body.scopes),
+        }
     return IssuedCredentialResponse(
         credential=_view(issued.api_key, now=dt.datetime.now(dt.UTC)),
         secret=issued.secret,
@@ -168,6 +187,7 @@ async def rotate_credential(
     body: RotateCredentialRequest,
     principal: CurrentTenant,
     service: Service,
+    audit: TenantAudit,
 ) -> IssuedCredentialResponse:
     """The second and last route that returns a secret.
 
@@ -175,13 +195,24 @@ async def rotate_credential(
     retrievable afterwards. There is no read route that returns a secret and no
     column that could serve one.
     """
-    issued = await service.rotate(
-        principal.session,
-        key_id=key_id,
-        scopes=None if body.scopes is None else [scope.value for scope in body.scopes],
-        grace_seconds=body.grace_seconds,
-        reason=body.reason,
-    )
+    async with audit.action(
+        AuditAction.CREDENTIAL, resource_type="api_key", resource_ref=key_id
+    ) as entry:
+        issued = await service.rotate(
+            principal.session,
+            key_id=key_id,
+            scopes=None if body.scopes is None else [scope.value for scope in body.scopes],
+            grace_seconds=body.grace_seconds,
+            reason=body.reason,
+        )
+        entry.details = {
+            "operation": "rotate",
+            "grace_seconds": body.grace_seconds,
+            # The tenant's own words for why. Truncated by `safe_details`, and
+            # the reason a rotation reads as deliberate rather than as an
+            # unexplained key change six months later.
+            "reason": body.reason,
+        }
     return IssuedCredentialResponse(
         credential=_view(issued.api_key, now=dt.datetime.now(dt.UTC)),
         secret=issued.secret,
@@ -194,7 +225,7 @@ async def rotate_credential(
     summary="Revoke a credential",
 )
 async def revoke_credential(
-    key_id: uuid.UUID, principal: CurrentTenant, service: Service
+    key_id: uuid.UUID, principal: CurrentTenant, service: Service, audit: TenantAudit
 ) -> Response:
     """Immediate and irreversible (dc.html L1157). Repeating it is safe.
 
@@ -203,7 +234,13 @@ async def revoke_credential(
     `revoked_at` set. A credential that submitted events is part of the audit
     trail.
     """
-    await service.revoke(principal.session, key_id=key_id)
+    async with audit.action(
+        AuditAction.CREDENTIAL,
+        resource_type="api_key",
+        resource_ref=key_id,
+        details={"operation": "revoke"},
+    ):
+        await service.revoke(principal.session, key_id=key_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

@@ -263,12 +263,22 @@ def test_every_tenant_table_is_protected(owner_engine) -> None:
 
 
 def test_every_tenant_policy_has_both_using_and_with_check(owner_engine) -> None:
-    """`USING` filters reads; `WITH CHECK` constrains writes. Both, or neither works."""
+    """`USING` filters reads; `WITH CHECK` constrains writes. Both, or neither works.
+
+    Asserted per command rather than per policy, because Postgres only accepts
+    the clause a command can use: a `FOR SELECT` policy has no `WITH CHECK` and
+    a `FOR INSERT` policy has no `USING`, and demanding both of those would be
+    demanding something the database will not create.
+
+    The invariant that actually matters survives the split: for every
+    tenant-owned table, *reading* is filtered and *writing* is checked. A table
+    whose policies cover one command and not the other fails here.
+    """
     with owner_engine.connect() as conn:
         policies = list(
             conn.execute(
                 sa.text(
-                    "SELECT tablename, policyname, qual, with_check FROM pg_policies "
+                    "SELECT tablename, policyname, cmd, qual, with_check FROM pg_policies "
                     "WHERE schemaname = 'public' AND 'graphrec_app' = ANY(roles)"
                 )
             )
@@ -277,12 +287,22 @@ def test_every_tenant_policy_has_both_using_and_with_check(owner_engine) -> None
     missing = set(TENANT_TABLES) - covered
     assert not missing, f"no graphrec_app policy on {sorted(missing)}"
 
+    reads: set[str] = set()
+    writes: set[str] = set()
     for policy in policies:
-        assert policy.qual, f"{policy.policyname} has no USING clause"
-        assert policy.with_check, (
-            f"{policy.policyname} has no WITH CHECK clause: a tenant could insert a row "
-            "stamped with another tenant's id and then never see it again"
-        )
+        if policy.cmd in ("ALL", "SELECT", "UPDATE", "DELETE"):
+            assert policy.qual, f"{policy.policyname} filters reads with no USING clause"
+            reads.add(policy.tablename)
+        if policy.cmd in ("ALL", "INSERT", "UPDATE"):
+            assert policy.with_check, (
+                f"{policy.policyname} has no WITH CHECK clause: a tenant could insert a row "
+                "stamped with another tenant's id and then never see it again"
+            )
+            writes.add(policy.tablename)
+
+    for table in TENANT_TABLES:
+        assert table in reads, f"{table} has no policy that filters a read"
+        assert table in writes, f"{table} has no policy that constrains a write"
 
 
 def test_no_tenant_policy_is_permissive_to_everyone(owner_engine) -> None:

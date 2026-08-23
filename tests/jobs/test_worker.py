@@ -424,3 +424,71 @@ def test_the_claim_filter_is_the_registry(sessionmaker_app) -> None:
 
     assert registry.job_types == (JobType.PRODUCT_BULK_UPSERT,)
     assert _worker(sessionmaker_app, registry).registry.job_types == (JobType.PRODUCT_BULK_UPSERT,)
+
+
+# ------------------------------------------------------------ security events
+
+
+async def _events(sessionmaker, tenant_id, reference: str):
+    """Read `security_events` back as the tenant. RLS applies; that is the point."""
+    async with sessionmaker() as session, session.begin():
+        await bind_tenant(session, tenant_id)
+        return (
+            await session.execute(
+                sa.text(
+                    "SELECT severity, area, summary FROM security_events " "WHERE reference = :ref"
+                ),
+                {"ref": reference},
+            )
+        ).all()
+
+
+async def test_a_permanently_failed_job_raises_a_security_event(
+    sessionmaker_app, queue_tenants
+) -> None:
+    """The Failures tab is fed from here, and only terminal failures reach it.
+
+    The area comes from the job type rather than from the error, because what an
+    operator triages by is which part of the installation stopped working —
+    ingestion, training, capacity — and a `job_failed` code says none of that.
+    """
+    registry = HandlerRegistry()
+
+    @registry.register(JobType.EVENT_BATCH)
+    async def handle(ctx: JobContext) -> None:
+        raise PermanentJobError("job_failed")
+
+    job_id = await _enqueue(sessionmaker_app, queue_tenants["alpha"])
+    await _worker(sessionmaker_app, registry).run_once()
+
+    row = await _row(sessionmaker_app, queue_tenants["alpha"], job_id)
+    assert row.status == QueueStatus.FAILED.value
+
+    events = await _events(sessionmaker_app, queue_tenants["alpha"], str(job_id)[:8])
+    assert len(events) == 1, "a job died and the failures board says nothing"
+    assert events[0].area == "ingestion"
+    assert events[0].severity == "error"
+    assert events[0].summary, "a failure with no sentence is an unrenderable row"
+
+
+async def test_a_retryable_failure_raises_no_security_event(
+    sessionmaker_app, queue_tenants
+) -> None:
+    """Otherwise the board fills with rows for work that then succeeded.
+
+    A retry is the system doing what it was designed to do. Recording each one
+    as a failure would make the count that matters — how many things actually
+    stopped — unreadable, which is a slower way of having no monitoring at all.
+    """
+    registry = HandlerRegistry()
+
+    @registry.register(JobType.EVENT_BATCH)
+    async def handle(ctx: JobContext) -> None:
+        raise UnavailableError("service_unavailable")
+
+    job_id = await _enqueue(sessionmaker_app, queue_tenants["alpha"])
+    await _worker(sessionmaker_app, registry).run_once()
+
+    row = await _row(sessionmaker_app, queue_tenants["alpha"], job_id)
+    assert row.status == QueueStatus.QUEUED.value
+    assert not await _events(sessionmaker_app, queue_tenants["alpha"], str(job_id)[:8])

@@ -27,13 +27,16 @@ import socket
 import uuid
 from typing import TYPE_CHECKING
 
+from graphrec.common.enums import FailureArea, Severity
+from graphrec.common.error_copy import resolve_copy
 from graphrec.common.logging import get_logger
 from graphrec.db.tenant_context import bind_tenant
+from graphrec.domain.audit import security_event
 from graphrec.domain.metering.counters import InMemoryUsageCounters, UsageCounters
 from graphrec.jobs.failures import JobCancelled, classify
 from graphrec.jobs.handlers import JobContext
 from graphrec.jobs.queue import JobLeaseLost, JobQueue
-from graphrec.jobs.states import JobType
+from graphrec.jobs.states import JobType, QueueStatus
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -41,10 +44,25 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     from graphrec.common.config import Settings
+    from graphrec.jobs.failures import Verdict
     from graphrec.jobs.handlers import HandlerRegistry
     from graphrec.jobs.queue import ClaimTicket
 
 logger = get_logger(__name__)
+
+#: Which area of the system a terminal job failure belongs to on `/admin/status`.
+#:
+#: The mapping is by job type rather than by exception, because the area answers
+#: "which part of the product is broken for this tenant" and that is decided by
+#: what the job was doing, not by how it went wrong. `usage_rollup` is
+#: `capacity`: a rollup that fails leaves a measurement gap, and a gap in
+#: metering is an installation problem rather than a tenant-facing one.
+FAILURE_AREAS: dict[JobType | None, FailureArea] = {
+    JobType.EVENT_BATCH: FailureArea.INGESTION,
+    JobType.PRODUCT_BULK_UPSERT: FailureArea.INGESTION,
+    JobType.TRAINING: FailureArea.TRAINING,
+    JobType.USAGE_ROLLUP: FailureArea.CAPACITY,
+}
 
 
 def worker_identity(prefix: str) -> str:
@@ -202,10 +220,16 @@ class Worker:
         control: AsyncSession,
         log_context: dict[str, str],
     ) -> None:
+        # Remembered outside the transaction because the failure path needs it
+        # and the transaction that could read it is, by then, aborted. `None`
+        # means the job row was never loaded, which is itself a failure worth
+        # recording — under `capacity`, since nothing tenant-shaped went wrong.
+        job_type: JobType | None = None
         try:
             async with self.sessionmaker() as work, work.begin():
                 await bind_tenant(work, ticket.tenant_id)
                 job = await self.queue.load(work, job_id=ticket.job_id)
+                job_type = JobType(job.job_type)
 
                 handler = self.registry.get(JobType(job.job_type))
                 if handler is None:  # pragma: no cover - the claim filter prevents it
@@ -256,8 +280,48 @@ class Worker:
             )
             await self._record(
                 ticket,
-                lambda session: self.queue.fail(session, job_id=ticket.job_id, verdict=verdict),
+                lambda session: self._fail(
+                    session, ticket=ticket, verdict=verdict, job_type=job_type
+                ),
             )
+
+    async def _fail(
+        self,
+        session: AsyncSession,
+        *,
+        ticket: ClaimTicket,
+        verdict: Verdict,
+        job_type: JobType | None,
+    ) -> QueueStatus:
+        """Record the outcome, and raise a failure event if it was terminal.
+
+        Only terminal failures reach `security_events`. A retryable failure that
+        will be tried again in ninety seconds is not something an operator needs
+        woken for, and a Failures tab that listed every transient error would be
+        a tab nobody reads — which is the same as not having one.
+
+        In the job's own outcome transaction, deliberately: the row that says
+        the job failed and the row that says so on `/admin/status` commit
+        together or not at all. If this insert raises, `_record` discards both
+        and the sweeper requeues the job, which is the correct outcome for an
+        unrecorded ending.
+        """
+        status = await self.queue.fail(session, job_id=ticket.job_id, verdict=verdict)
+        if status is not QueueStatus.FAILED:
+            return status
+        await security_event(
+            session,
+            severity=Severity.ERROR,
+            area=FAILURE_AREAS.get(job_type, FailureArea.CAPACITY),
+            # The approved copy for the failure code, which is the same sentence
+            # the tenant's own console shows. Never `str(exc)`: NR-NF-06, and a
+            # `summary` interpolated from a caller's payload would be a route
+            # from one tenant's data onto a platform operator's screen.
+            summary=resolve_copy(verdict.code, **verdict.copy_args),
+            tenant_id=ticket.tenant_id,
+            reference=str(ticket.job_id)[:8],
+        )
+        return status
 
     async def _record(
         self, ticket: ClaimTicket, action: Callable[[AsyncSession], Awaitable[object]]

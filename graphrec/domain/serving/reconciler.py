@@ -41,13 +41,14 @@ from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
 
-from graphrec.common.enums import DeploymentState, ModelVersionStatus
+from graphrec.common.enums import DeploymentState, FailureArea, ModelVersionStatus, Severity
 from graphrec.common.error_copy import resolve_copy
 from graphrec.db.models import (
     ModelActivationHistory,
     ModelVersion,
     ServingReplica,
 )
+from graphrec.domain.audit import security_event
 from graphrec.domain.serving.deployment import DeploymentService
 from graphrec.serving.states import RevisionStatus
 from graphrec.serving_driver.driver import DesiredState, DriverError
@@ -131,6 +132,7 @@ async def converge(
     deployment: ModelDeployment,
     deployments: DeploymentService | None = None,
     activation_timeout: dt.timedelta = DEFAULT_ACTIVATION_TIMEOUT,
+    suspended: bool = False,
     now: dt.datetime | None = None,
 ) -> ConvergenceResult:
     """One pass over one tenant: apply, observe, record, decide.
@@ -143,12 +145,50 @@ async def converge(
     service = deployments or DeploymentService()
     moment = now or dt.datetime.now(dt.UTC)
 
+    if suspended:
+        # Gate 2 refuses the tenant's own requests the moment their status
+        # changes, but the containers keep answering credentials issued earlier
+        # until something turns them off. L1417 says a suspended, deleting or
+        # deleted tenant's serving traffic stops, and this is where it stops.
+        # Applied before the branch below rather than by the platform handler,
+        # because `model_deployments` is not granted to `graphrec_platform` —
+        # deliberately, since a console that could write serving state directly
+        # is a console that could serve the wrong version.
+        await service.halt(session, deployment, now=moment)
+    else:
+        # And the way back. A tenant restored to `active` resumes the version
+        # they were serving, because a suspension that required a manual
+        # re-activation afterwards would make "reversible" a word rather than a
+        # property. `resume` refuses a deployment that has no active version, so
+        # this cannot start something nobody activated.
+        await service.resume(session, deployment, now=moment)
+
     if deployment.desired_version_id is None or deployment.desired_replicas == 0:
         # Nothing is wanted. Observe anyway — a tenant whose deployment was
         # stopped may still have containers the driver knows about, and leaving
         # them unrecorded is how a replica outlives the row that explains it.
         observation = await _observe(driver, deployment)
+        if observation.live_count:
+            # Wanted nothing and found something. Tearing it down here rather
+            # than waiting for the next activation is what makes "serving
+            # stops" true for a suspension: the alternative leaves a suspended
+            # tenant's replicas answering until somebody notices them.
+            try:
+                observation = await driver.stop(deployment.tenant_id)
+            except DriverError:
+                logger.warning(
+                    "teardown_failed",
+                    extra={"deployment_id": str(deployment.deployment_id)},
+                )
         await _record_replicas(session, deployment=deployment, observation=observation, now=moment)
+        # The mirror is updated on this path too. `halt` winds `desired` down and
+        # deliberately does not touch `ready` — that column is the reconciler's,
+        # and only an observation may write it. Leaving it alone here would mean
+        # a stopped deployment still reporting the replica count it had before it
+        # was stopped, which is precisely the memory-dressed-as-a-measurement the
+        # platform status board refuses to render.
+        deployment.ready_replicas = observation.ready_count
+        await session.flush()
         return ConvergenceResult(
             deployment_id=deployment.deployment_id,
             state=deployment.deployment_state,
@@ -213,11 +253,30 @@ async def converge(
     # is the active one and something is ready; `degraded` when a deployment
     # that should be serving has nothing ready and is not mid-activation.
     if deployment.active_version_id == deployment.desired_version_id:
+        previous_state = deployment.state
         deployment.state = (
             DeploymentState.AVAILABLE.value
             if observation.ready_count >= 1
             else DeploymentState.DEGRADED.value
         )
+        if (
+            deployment.state == DeploymentState.DEGRADED.value
+            and previous_state != DeploymentState.DEGRADED.value
+        ):
+            # On the *transition* into degraded, not on every pass that finds it
+            # degraded. The reconciler runs every few seconds, so an event per
+            # pass would put thousands of identical rows in front of an operator
+            # and bury the one that mattered. The recovery is visible on the
+            # deployment's own state; what needs a timestamped row is the moment
+            # a tenant's serving stopped being able to answer.
+            await security_event(
+                session,
+                severity=Severity.ERROR,
+                area=FailureArea.CAPACITY,
+                summary="Serving has no ready replica for the active version.",
+                tenant_id=deployment.tenant_id,
+                reference=str(deployment.deployment_id)[:8],
+            )
     await session.flush()
     return ConvergenceResult(
         deployment_id=deployment.deployment_id,
@@ -431,6 +490,19 @@ async def _fail_activation(
         now=now,
     )
     await session.flush()
+    # ER-F-11's `activation` area on `/admin/status`. Written here rather than
+    # in the caller because this is the only place that knows an activation
+    # ended in failure rather than in a rollback or a timeout that recovered —
+    # and `critical` when nothing is left serving, because a tenant with no
+    # active version is an outage rather than a setback.
+    await security_event(
+        session,
+        severity=Severity.CRITICAL if previous is None else Severity.ERROR,
+        area=FailureArea.ACTIVATION,
+        summary=_failure_copy(previous),
+        tenant_id=deployment.tenant_id,
+        reference=str(revision.revision_id)[:8],
+    )
     logger.warning(
         "activation_failed",
         extra={

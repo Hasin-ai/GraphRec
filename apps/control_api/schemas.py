@@ -18,13 +18,20 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from graphrec.common.enums import (
+    AuditAction,
+    AuditActor,
+    AuditOutcome,
     Availability,
     CredentialScope,
     CredentialState,
     DeploymentState,
+    FailureArea,
+    MeasurementStatus,
+    Severity,
     SubmissionKind,
     SubmissionStatus,
     TenantRole,
+    TenantStatus,
     UsageType,
     UserStatus,
 )
@@ -1046,3 +1053,345 @@ class ServingErrorBody(BaseModel):
 
 class ServingErrorsResponse(BaseModel):
     errors: list[ServingErrorBody]
+
+
+class AuditLogRow(BaseModel):
+    """One line of a tenant's own history (L1288).
+
+    Six fields, and the two that are missing are the interesting ones. There is
+    no `actor_id`: a tenant learns that *a* platform administrator suspended
+    them, never which one, because the identity of a platform employee is not a
+    customer-facing fact. There is no `details`: it is the free-form column, and
+    free-form is exactly what a redacted view cannot promise about.
+    """
+
+    occurred_at: dt.datetime
+    actor_type: AuditActor
+    action: AuditAction
+    resource_type: str
+    resource_ref: str | None
+    outcome: AuditOutcome
+
+
+class AuditLogListResponse(BaseModel):
+    entries: list[AuditLogRow]
+    total: int
+    limit: int
+    offset: int
+
+
+# --------------------------------------------------------------- platform realm
+
+
+class PlatformTenantRow(BaseModel):
+    """One tenant, as `/admin/tenants` lists it (L1418)."""
+
+    tenant_id: uuid.UUID
+    tenant_code: str
+    tenant_name: str
+    status: TenantStatus
+    plan_code: str | None
+    created_at: dt.datetime
+
+
+class PlatformTenantListResponse(BaseModel):
+    tenants: list[PlatformTenantRow]
+    total: int
+    limit: int
+    offset: int
+
+
+class TenantStatusSectionData(BaseModel):
+    status: TenantStatus
+    status_changed_at: dt.datetime | None
+    status_reason: str | None
+    created_at: dt.datetime
+    #: Gate 2's answer, precomputed. The console disables tenant-affecting
+    #: controls from this rather than re-deriving the rule from `status`.
+    is_operable: bool
+
+
+class QuotaOverrideBody(BaseModel):
+    override_id: uuid.UUID
+    usage_type: UsageType
+    limit_value: int
+    reason: str
+    granted_at: dt.datetime
+    #: `null` is open-ended, which the console renders as "no end date" — never
+    #: as a blank, because an exception with no visible end becomes permanent.
+    expires_at: dt.datetime | None
+
+
+class TenantPlanSectionData(BaseModel):
+    plan_id: uuid.UUID | None
+    plan_code: str | None
+    plan_name: str | None
+    assigned_at: dt.datetime | None
+    overrides: list[QuotaOverrideBody]
+
+
+class PlatformUsageRowBody(BaseModel):
+    """One aggregate figure. `quantity` is null whenever it was not measured,
+    and `measurement_status` says which kind of not-measured it was."""
+
+    tenant_id: uuid.UUID
+    tenant_code: str
+    period: str
+    usage_type: UsageType
+    quantity: decimal.Decimal | None
+    measurement_status: MeasurementStatus
+
+
+class TenantUsageSectionData(BaseModel):
+    period: str
+    rows: list[PlatformUsageRowBody]
+
+
+class TenantStatusSection(BaseModel):
+    granted: bool
+    data: TenantStatusSectionData | None = None
+    reason: str | None = None
+
+
+class TenantPlanSection(BaseModel):
+    granted: bool
+    data: TenantPlanSectionData | None = None
+    reason: str | None = None
+
+
+class TenantUsageSection(BaseModel):
+    granted: bool
+    data: TenantUsageSectionData | None = None
+    reason: str | None = None
+
+
+class PlatformTenantSections(BaseModel):
+    """Three sections, each independently gated (BACKEND_PLAN §12.10, L1436).
+
+    Modelled as three named fields rather than a map so the generated client is
+    typed: a console that reads `sections.plan.data.overrides` should not have
+    to cast, and a section that changed shape should break the build.
+    """
+
+    status: TenantStatusSection
+    plan: TenantPlanSection
+    usage: TenantUsageSection
+
+
+class PlatformTenantDetailResponse(BaseModel):
+    tenant: PlatformTenantRow
+    sections: PlatformTenantSections
+
+
+class ChangeTenantStatusRequest(_Body):
+    """L1420 — the dialog's two fields, and `reason` is required.
+
+    Required on the wire as well as in the form: the status, the actor and the
+    timestamp are all mechanical, and the reason is the only part of the audit
+    row a person wrote.
+    """
+
+    status: TenantStatus
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class AssignPlanRequest(_Body):
+    plan_id: uuid.UUID
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class GrantOverrideRequest(_Body):
+    usage_type: UsageType
+    #: Zero is legitimate — it withholds a usage type entirely (L1635). The
+    #: floor is enforced here as well as in the domain so that a negative
+    #: number is a field error rather than a round trip.
+    limit_value: int = Field(ge=0)
+    reason: str = Field(min_length=1, max_length=500)
+    expires_at: dt.datetime | None = None
+
+
+class PlatformTenantUsageResponse(BaseModel):
+    tenant_id: uuid.UUID
+    tenant_code: str
+    period: str
+    rows: list[PlatformUsageRowBody]
+
+
+class PlatformUsageListResponse(BaseModel):
+    rows: list[PlatformUsageRowBody]
+    total: int
+    limit: int
+    offset: int
+
+
+class PlanBody(BaseModel):
+    plan_id: uuid.UUID
+    plan_code: str
+    plan_name: str
+    description: str | None
+    event_limit: int
+    recommendation_limit: int
+    training_limit: int
+    product_limit: int
+    storage_limit_bytes: int
+    service_limits: dict[str, Any]
+    #: L1439's "whether new assignments are allowed". Named for what it permits
+    #: rather than for the column, because `is_active` reads like a statement
+    #: about the plan's tenants and is not one.
+    accepts_assignments: bool
+    assigned_tenants: int
+
+
+class PlanListResponse(BaseModel):
+    plans: list[PlanBody]
+
+
+class AssignedTenantBody(BaseModel):
+    tenant_id: uuid.UUID
+    tenant_code: str
+    tenant_name: str
+    status: TenantStatus
+
+
+class PlanDetailResponse(BaseModel):
+    plan: PlanBody
+    tenants: list[AssignedTenantBody]
+
+
+class PlanLimitsBody(_Body):
+    """The five limits, all optional on a PATCH and all required on a POST.
+
+    Kept as one nested object rather than five sibling fields so that "absent"
+    and "zero" stay distinguishable: zero is a meaningful limit here, and a form
+    that omitted a field must not be read as setting it to nothing.
+    """
+
+    event_limit: int = Field(ge=0)
+    recommendation_limit: int = Field(ge=0)
+    training_limit: int = Field(ge=0)
+    product_limit: int = Field(ge=0)
+    storage_limit_bytes: int = Field(ge=0)
+
+
+class CreatePlanRequest(_Body):
+    plan_code: str = Field(min_length=2, max_length=32, pattern=r"^[A-Za-z0-9][A-Za-z0-9_\-]*$")
+    plan_name: str = Field(min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=1000)
+    limits: PlanLimitsBody
+    service_limits: dict[str, Any] = Field(default_factory=dict)
+
+
+class UpdatePlanRequest(_Body):
+    plan_name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=1000)
+    limits: PlanLimitsBody | None = None
+    service_limits: dict[str, Any] | None = None
+
+
+class QueueDepthBody(BaseModel):
+    running: int
+    waiting: int
+    #: The configured ceiling, not an observation. `waiting: 6` means something
+    #: different at a concurrency of one than at a concurrency of eight.
+    concurrency: int
+
+
+class ReplicaCountBody(BaseModel):
+    #: Null when the reconciler has not reported recently enough for the mirror
+    #: to be trustworthy. The accompanying `measurement_gaps` entry says so.
+    ready: int | None
+    desired: int
+
+
+class TenantWorkloadBody(BaseModel):
+    tenant_id: uuid.UUID
+    tenant_code: str
+    running_jobs: int
+    queued_jobs: int
+    desired_replicas: int
+    ready_replicas: int
+
+
+class FailureSummaryBody(BaseModel):
+    area: FailureArea
+    severity: Severity
+    count: int
+
+
+class MeasurementGapBody(BaseModel):
+    """A quantity with no value, and the server's sentence for why.
+
+    UC-30's alternative outcome — "Measurement gaps are identified rather than
+    hidden" — is this field. The console renders `gap` in warn colour and this
+    sentence beside it; it never composes its own explanation.
+    """
+
+    quantity: str
+    reason: str
+
+
+class PlatformStatusResponse(BaseModel):
+    window_hours: int
+    #: Null with a `measurement_gaps` entry when nothing was served in the
+    #: window. Never `0.0`, which would read as a total outage.
+    serving_availability: float | None
+    training_queue: QueueDepthBody
+    replicas: ReplicaCountBody
+    ingestion_lag_seconds: int
+    failures_24h: int
+    active_tenants: int
+    workload_by_tenant: list[TenantWorkloadBody]
+    failure_summary: list[FailureSummaryBody]
+    #: Required, never optional — an empty list is the claim that everything on
+    #: this board was measured.
+    measurement_gaps: list[MeasurementGapBody]
+
+
+class FailureRowBody(BaseModel):
+    """One terminal failure (L1550).
+
+    `tenant_id` is null unless the caller opened the tab from a tenant context.
+    The platform role can read the column; the default view redacts it, because
+    a severity ranking that named tenants would be a league table of who is
+    struggling.
+    """
+
+    occurred_at: dt.datetime
+    severity: Severity
+    area: FailureArea
+    summary: str
+    reference: str
+    tenant_id: uuid.UUID | None
+
+
+class FailureListResponse(BaseModel):
+    failures: list[FailureRowBody]
+    total: int
+    limit: int
+    offset: int
+
+
+class PlatformAuditLogRow(BaseModel):
+    """The tenant row plus the three columns an operator is entitled to.
+
+    `details` is still absent. `FRONTEND_BUILD_PROMPT` L312 lists six columns
+    and none of them is a free-form payload; an audit permission is a licence to
+    read the history, not whatever a handler once put in a jsonb column.
+    """
+
+    occurred_at: dt.datetime
+    tenant_id: uuid.UUID | None
+    actor_type: AuditActor
+    actor_id: str | None
+    action: AuditAction
+    resource_type: str
+    resource_ref: str | None
+    outcome: AuditOutcome
+    correlation_ref: str | None
+
+
+class PlatformAuditListResponse(BaseModel):
+    entries: list[PlatformAuditLogRow]
+    total: int
+    limit: int
+    offset: int

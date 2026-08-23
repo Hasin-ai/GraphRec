@@ -75,6 +75,11 @@ PINNED = [
     ("0012_serving", "ERROR_CLASSES", ServingErrorClass),
     ("0012_serving", "FEEDBACK_TYPES", FeedbackType),
     ("0012_serving", "ACTOR_TYPES", "AuditActor"),
+    ("0013_audit", "ACTOR_TYPES", "AuditActor"),
+    ("0013_audit", "ACTIONS", "AuditAction"),
+    ("0013_audit", "OUTCOMES", "AuditOutcome"),
+    ("0013_audit", "SEVERITIES", "Severity"),
+    ("0013_audit", "AREAS", "FailureArea"),
 ]
 
 

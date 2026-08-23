@@ -21,6 +21,7 @@ from sqlalchemy import select
 from apps.control_api.deps import (
     CurrentTenant,
     RequireAdministrator,
+    TenantAudit,
     get_settings_dep,
     get_token_service,
 )
@@ -34,6 +35,7 @@ from apps.control_api.schemas import (
 )
 from graphrec.auth.tokens import TokenService
 from graphrec.common.config import Settings
+from graphrec.common.enums import AuditAction
 from graphrec.db.models import TenantUser
 from graphrec.domain.identity import IdentityService
 
@@ -77,7 +79,10 @@ async def list_users(principal: CurrentTenant) -> UserListResponse:
     summary="Invite a user to the caller's tenant",
 )
 async def create_user(
-    body: CreateUserRequest, principal: RequireAdministrator, service: Service
+    body: CreateUserRequest,
+    principal: RequireAdministrator,
+    service: Service,
+    audit: TenantAudit,
 ) -> InvitationResponse:
     """Creates an `invited` user and the token that activates it.
 
@@ -85,14 +90,20 @@ async def create_user(
     is no body field for it, because an administrator being able to record
     somebody else as the inviter would make the audit trail a fiction.
     """
-    issued = await service.create_user(
-        principal.session,
-        tenant_id=principal.tenant_id,
-        email=body.email,
-        display_name=body.display_name,
-        role=body.role.value,
-        invited_by=principal.user_id,
-    )
+    async with audit.action(AuditAction.ACCESS, resource_type="tenant_user") as entry:
+        issued = await service.create_user(
+            principal.session,
+            tenant_id=principal.tenant_id,
+            email=body.email,
+            display_name=body.display_name,
+            role=body.role.value,
+            invited_by=principal.user_id,
+        )
+        entry.resource_ref = issued.user.tenant_user_id
+        # The role, not the address. The invited user's email is their personal
+        # data and the row is readable by every administrator the tenant ever
+        # has; the id identifies them precisely and the users page resolves it.
+        entry.details = {"operation": "invite", "role": body.role.value}
     return InvitationResponse(
         user=_render(issued.user),
         invitation_id=issued.invitation.invitation_id,
@@ -107,14 +118,27 @@ async def change_role(
     body: ChangeRoleRequest,
     principal: RequireAdministrator,
     service: Service,
+    audit: TenantAudit,
 ) -> UserResponse:
-    """May refuse with 409 `last_active_administrator` — see the service."""
-    user = await service.change_user_role(
-        principal.session,
-        tenant_id=principal.tenant_id,
-        target_user_id=tenant_user_id,
-        new_role=body.role.value,
-    )
+    """May refuse with 409 `last_active_administrator` — see the service.
+
+    That refusal is audited too, as `cancelled`: an administrator who tried to
+    demote the last administrator and was stopped is a thing worth being able to
+    see afterwards, and it is exactly the row that the refusal's own rollback
+    would have destroyed had it been written on this transaction.
+    """
+    async with audit.action(
+        AuditAction.ACCESS,
+        resource_type="tenant_user",
+        resource_ref=tenant_user_id,
+        details={"operation": "change_role", "role": body.role.value},
+    ):
+        user = await service.change_user_role(
+            principal.session,
+            tenant_id=principal.tenant_id,
+            target_user_id=tenant_user_id,
+            new_role=body.role.value,
+        )
     return _render(user)
 
 
@@ -124,11 +148,18 @@ async def change_status(
     body: ChangeStatusRequest,
     principal: RequireAdministrator,
     service: Service,
+    audit: TenantAudit,
 ) -> UserResponse:
-    user = await service.set_user_status(
-        principal.session,
-        tenant_id=principal.tenant_id,
-        target_user_id=tenant_user_id,
-        new_status=body.status.value,
-    )
+    async with audit.action(
+        AuditAction.ACCESS,
+        resource_type="tenant_user",
+        resource_ref=tenant_user_id,
+        details={"operation": "change_status", "status": body.status.value},
+    ):
+        user = await service.set_user_status(
+            principal.session,
+            tenant_id=principal.tenant_id,
+            target_user_id=tenant_user_id,
+            new_status=body.status.value,
+        )
     return _render(user)

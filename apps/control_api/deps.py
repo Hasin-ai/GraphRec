@@ -47,6 +47,7 @@ from graphrec.common.errors import AuthError, ForbiddenError, NotFoundError
 from graphrec.common.logging import actor_id_var, tenant_id_var
 from graphrec.db.models import ApiKey, PlatformUser, Tenant, TenantUser
 from graphrec.db.tenant_context import bind_tenant
+from graphrec.domain.audit import Actor, AuditTrail
 from graphrec.domain.credentials import CredentialService
 from graphrec.domain.metering.counters import UsageCounters
 
@@ -325,7 +326,11 @@ async def current_platform_principal(
         raise AuthError("invalid_platform_credentials") from exc
 
     sessionmaker = request.app.state.platform_sessionmaker
-    async with sessionmaker() as session:
+    # One transaction for the whole request, exactly as the tenant realm gets.
+    # The platform realm reached Phase 12 with nothing to commit, so this was a
+    # bare session; it now suspends tenants, edits plans and grants overrides,
+    # and each of those has to land with its audit row or not at all.
+    async with sessionmaker() as session, session.begin():
         user = await session.scalar(
             select(PlatformUser).where(PlatformUser.platform_user_id == claims.user_id)
         )
@@ -358,6 +363,46 @@ UsageCountersDep = Annotated[UsageCounters, Depends(get_usage_counters)]
 CurrentTenant = Annotated[TenantPrincipal, Depends(current_tenant_principal)]
 CurrentPlatform = Annotated[PlatformPrincipal, Depends(current_platform_principal)]
 CurrentCredential = Annotated[CredentialPrincipal, Depends(current_credential_principal)]
+
+
+def tenant_audit(principal: CurrentTenant, request: Request) -> AuditTrail:
+    """The tenant realm's audit writer.
+
+    Carries two things a handler cannot get from the principal alone: the actor
+    in the four-value vocabulary the table stores, and the sessionmaker a
+    *refused* action needs — a refusal's row cannot be written into the
+    transaction that is about to roll back (`domain/audit/trail.py`).
+    """
+    return AuditTrail(
+        session=principal.session,
+        sessionmaker=request.app.state.sessionmaker,
+        actor=Actor.user(principal.user_id),
+        tenant_id=principal.tenant_id,
+    )
+
+
+def platform_audit(principal: CurrentPlatform, request: Request) -> AuditTrail:
+    """The platform realm's audit writer, concerning no tenant yet.
+
+    `tenant_id` is `None` here and a handler acting on a tenant calls
+    `.concerning(tenant_id)`. That is not ceremony: an operator listing plans
+    acts on nothing tenant-shaped, and defaulting the column to the subject of
+    the path would attribute a plan edit to whichever tenant happened to be in
+    the URL of a different route.
+
+    The refusal connection is the platform sessionmaker, which connects as
+    `graphrec_platform` — the role whose policy on `audit_logs` is
+    `WITH CHECK (true)`, because the platform realm never sets `app.tenant_id`.
+    """
+    return AuditTrail(
+        session=principal.session,
+        sessionmaker=request.app.state.platform_sessionmaker,
+        actor=Actor.platform(principal.user_id),
+    )
+
+
+TenantAudit = Annotated[AuditTrail, Depends(tenant_audit)]
+PlatformAudit = Annotated[AuditTrail, Depends(platform_audit)]
 
 
 # ------------------------------------------------- gate 3: role / permission
@@ -589,12 +634,15 @@ def require_ingest(
 
 
 __all__ = [
+    "AuditTrail",
     "CurrentPlatform",
     "CurrentTenant",
     "ForbiddenError",
     "IngestPrincipal",
+    "PlatformAudit",
     "PlatformPrincipal",
     "RequireAdministrator",
+    "TenantAudit",
     "TenantPrincipal",
     "TenantStatus",
     "current_platform_principal",

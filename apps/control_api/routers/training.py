@@ -32,7 +32,7 @@ from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, Depends, Query, Request, Response, status
 
-from apps.control_api.deps import CurrentTenant, UsageCountersDep
+from apps.control_api.deps import CurrentTenant, TenantAudit, UsageCountersDep
 from apps.control_api.schemas import (
     CancelTrainingRequest,
     RequestTrainingRequest,
@@ -43,7 +43,7 @@ from apps.control_api.schemas import (
     TrainingMetricsResponse,
     TrainingSnapshotResponse,
 )
-from graphrec.common.enums import JobState
+from graphrec.common.enums import AuditAction, AuditOutcome, JobState
 from graphrec.common.error_copy import resolve_copy
 from graphrec.domain.training.service import (
     TrainingRequest,
@@ -184,6 +184,7 @@ async def request_training(
     service: Service,
     counters: UsageCountersDep,
     response: Response,
+    audit: TenantAudit,
 ) -> TrainingJobResponse:
     """`202` for a new run, `200` for a replay of one already requested.
 
@@ -198,18 +199,27 @@ async def request_training(
     the cooldown, then the quota, then the data. Fixed because a tenant blocked
     by two things should be told about the same one on every call.
     """
-    outcome = await service.request(
-        principal.session,
-        counters,
-        tenant_id=principal.tenant_id,
-        requested_by=principal.user_id,
-        request=TrainingRequest(
-            request_ref=body.request_ref,
-            model_type=body.model_type,
-            interaction_window_days=body.interaction_window_days,
-            max_epochs=body.max_epochs,
-        ),
-    )
+    async with audit.action(
+        AuditAction.TRAINING, resource_type="training_job", details={"operation": "request"}
+    ) as entry:
+        outcome = await service.request(
+            principal.session,
+            counters,
+            tenant_id=principal.tenant_id,
+            requested_by=principal.user_id,
+            request=TrainingRequest(
+                request_ref=body.request_ref,
+                model_type=body.model_type,
+                interaction_window_days=body.interaction_window_days,
+                max_epochs=body.max_epochs,
+            ),
+        )
+        entry.resource_ref = outcome.job.training_job_id
+        # A replay is recorded too, and recorded as what it is. Four rows for
+        # four retries of one run would misread as four attempts to train; the
+        # flag is how the history distinguishes "asked again" from "asked for
+        # another".
+        entry.details["replayed"] = not outcome.created
     response.status_code = status.HTTP_202_ACCEPTED if outcome.created else status.HTTP_200_OK
     snapshot = (
         None
@@ -231,6 +241,7 @@ async def cancel_training(
     body: CancelTrainingRequest,
     principal: CurrentTenant,
     service: Service,
+    audit: TenantAudit,
 ) -> TrainingJobResponse:
     """L1714: "The job moves to cancelling and then to cancelled."
 
@@ -239,9 +250,19 @@ async def cancel_training(
     `200` from this route means the request was recorded — not that training has
     stopped. The response's `state` says `cancelling` for exactly that reason.
     """
-    job = await service.cancel(
-        principal.session, training_job_id=training_job_id, reason=body.reason
-    )
+    async with audit.action(
+        AuditAction.TRAINING,
+        resource_type="training_job",
+        resource_ref=training_job_id,
+        details={"operation": "cancel", "reason": body.reason},
+    ) as entry:
+        # `cancelled`, not `succeeded`. The request succeeded — the run did not,
+        # and the history is about the run. This is the one place the four-value
+        # outcome vocabulary earns its fourth value.
+        entry.outcome = AuditOutcome.CANCELLED
+        job = await service.cancel(
+            principal.session, training_job_id=training_job_id, reason=body.reason
+        )
     snapshot = await service.snapshot_of(principal.session, training_job_id=training_job_id)
     return _render(job, snapshot)
 

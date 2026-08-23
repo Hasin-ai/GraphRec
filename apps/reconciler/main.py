@@ -46,9 +46,10 @@ from typing import TYPE_CHECKING
 import sqlalchemy as sa
 
 from graphrec.common.config import get_settings
+from graphrec.common.enums import TenantStatus
 from graphrec.common.logging import configure_logging, get_logger, tenant_id_var
 from graphrec.db.engine import create_platform_engine, create_sessionmaker, create_worker_engine
-from graphrec.db.models import ModelDeployment
+from graphrec.db.models import ModelDeployment, Tenant
 from graphrec.db.tenant_context import bind_tenant
 from graphrec.domain.serving.deployment import DeploymentService
 from graphrec.domain.serving.reconciler import (
@@ -157,10 +158,12 @@ class Reconciler:
         nobody is waiting for.
         """
         results: list[ConvergenceResult] = []
-        for tenant_id in await self._tenants():
+        for tenant_id, status in await self._tenants():
             token = tenant_id_var.set(str(tenant_id))
             try:
-                result = await self._converge_tenant(tenant_id)
+                result = await self._converge_tenant(
+                    tenant_id, suspended=status != TenantStatus.ACTIVE.value
+                )
             except Exception:
                 # Per tenant, so one unreachable daemon does not strand every
                 # other tenant's activation behind it.
@@ -172,21 +175,31 @@ class Reconciler:
                 results.append(result)
         return results
 
-    async def _tenants(self) -> list[uuid.UUID]:
-        """Every tenant with a deployment row, read as the platform role.
+    async def _tenants(self) -> list[tuple[uuid.UUID, str]]:
+        """Every tenant with a deployment row, and its lifecycle status.
 
         Ordered by id so a pass is reproducible and a log from two runs can be
         compared line for line. There is one row per tenant
         (`uq_model_deployments_tenant`), so this is the tenant list and not a
         distinct over something larger.
+
+        The status comes along because a suspended tenant's serving must stop
+        (L1417) and the platform role cannot write `model_deployments` to make
+        that happen. It reads the status here and the convergence acts on it,
+        which keeps the one privilege that can scale a deployment in the one
+        process that is allowed to.
         """
         async with self._platform_sessionmaker() as session:
             rows = await session.execute(
-                sa.select(ModelDeployment.tenant_id).order_by(ModelDeployment.tenant_id)
+                sa.select(ModelDeployment.tenant_id, Tenant.status)
+                .join(Tenant, Tenant.tenant_id == ModelDeployment.tenant_id)
+                .order_by(ModelDeployment.tenant_id)
             )
-            return list(rows.scalars())
+            return [(row.tenant_id, row.status) for row in rows.all()]
 
-    async def _converge_tenant(self, tenant_id: uuid.UUID) -> ConvergenceResult | None:
+    async def _converge_tenant(
+        self, tenant_id: uuid.UUID, *, suspended: bool
+    ) -> ConvergenceResult | None:
         """One tenant, one transaction, under that tenant's own RLS view.
 
         The deployment is re-read here rather than carried from the sweep: the
@@ -206,6 +219,7 @@ class Reconciler:
                 deployment=deployment,
                 deployments=self._deployments,
                 activation_timeout=self._activation_timeout,
+                suspended=suspended,
             )
 
     async def _sleep(self) -> None:

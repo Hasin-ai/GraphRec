@@ -20,9 +20,11 @@ from redis.asyncio import ConnectionPool, Redis
 
 from apps.control_api.routers import (
     api_keys,
+    audit,
     auth,
     health,
     ingestion,
+    platform,
     platform_auth,
     products,
     registry,
@@ -173,6 +175,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     v1.include_router(products.router)
     v1.include_router(ingestion.router)
     v1.include_router(usage.router)
+    v1.include_router(audit.router)
     v1.include_router(training.router)
     v1.include_router(registry.router)
     v1.include_router(serving.router)
@@ -182,6 +185,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # relations (BACKEND_PLAN L1131).
     v1.include_router(training.datasets)
     v1.include_router(platform_auth.router)
+    v1.include_router(platform.router)
     app.include_router(v1)
 
     return app

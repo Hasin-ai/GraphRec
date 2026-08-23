@@ -302,3 +302,99 @@ async def test_one_tenants_failure_does_not_strand_another(
         )
 
     assert settled.swapped is True
+
+
+async def test_a_suspended_tenant_is_wound_down_and_its_containers_stopped(
+    serving_tenants, seed_catalogue, seed_model_version, seed_deployment, bound_serving
+) -> None:
+    """Suspension has to reach the containers, not just the console.
+
+    The platform role deliberately holds no write on `model_deployments`, so
+    suspending a tenant cannot itself stop their serving — the API changes
+    `tenants.status` and nothing else. The reconciler is what closes the gap: it
+    reads the status on its sweep and converges a suspended tenant towards zero.
+
+    Asserted at the driver rather than only at the row, because a deployment
+    marked `stopped` while its containers keep answering is the failure this
+    exists to prevent — and it is a failure that looks fine in the console.
+    """
+    tenant_id = serving_tenants["alpha"]
+    seed_catalogue(tenant_id)
+    version_id = seed_model_version(tenant_id, version_number=1)
+    seed_deployment(tenant_id)
+    driver = InProcessDriver()
+
+    async with bound_serving(tenant_id) as session:
+        await ActivationService().activate(
+            session, tenant_id=tenant_id, version_id=version_id, actor_id=ACTOR, now=NOW
+        )
+    async with bound_serving(tenant_id) as session:
+        await converge(session, driver=driver, deployment=await _deployment(session), now=NOW)
+    driver.settle(tenant_id)
+    async with bound_serving(tenant_id) as session:
+        running = await converge(
+            session, driver=driver, deployment=await _deployment(session), now=NOW
+        )
+    assert running.ready_replicas >= 1
+
+    async with bound_serving(tenant_id) as session:
+        stopped = await converge(
+            session,
+            driver=driver,
+            deployment=await _deployment(session),
+            now=NOW,
+            suspended=True,
+        )
+
+    assert stopped.state is DeploymentState.STOPPED
+    assert stopped.ready_replicas == 0
+    assert not (await driver.observe(tenant_id)).replicas, "the containers are still up"
+
+    # And the pass is idempotent: the sweep comes back every few seconds, and a
+    # suspended tenant must not accumulate an epoch bump per pass.
+    async with bound_serving(tenant_id) as session:
+        deployment = await _deployment(session)
+        epoch = deployment.epoch
+        again = await converge(
+            session, driver=driver, deployment=deployment, now=NOW, suspended=True
+        )
+    assert again.state is DeploymentState.STOPPED
+    assert deployment.epoch == epoch
+
+
+async def test_restoring_a_tenant_brings_serving_back(
+    serving_tenants, seed_catalogue, seed_model_version, seed_deployment, bound_serving
+) -> None:
+    """Reactivation is not a second activation: the tenant's active version is
+    still there, so the reconciler restores desired capacity to the floor rather
+    than waiting for someone to promote a model again."""
+    tenant_id = serving_tenants["beta"]
+    seed_catalogue(tenant_id)
+    version_id = seed_model_version(tenant_id, version_number=1)
+    seed_deployment(tenant_id)
+    driver = InProcessDriver()
+
+    async with bound_serving(tenant_id) as session:
+        await ActivationService().activate(
+            session, tenant_id=tenant_id, version_id=version_id, actor_id=ACTOR, now=NOW
+        )
+    async with bound_serving(tenant_id) as session:
+        await converge(session, driver=driver, deployment=await _deployment(session), now=NOW)
+    driver.settle(tenant_id)
+    async with bound_serving(tenant_id) as session:
+        await converge(session, driver=driver, deployment=await _deployment(session), now=NOW)
+    async with bound_serving(tenant_id) as session:
+        await converge(
+            session,
+            driver=driver,
+            deployment=await _deployment(session),
+            now=NOW,
+            suspended=True,
+        )
+
+    async with bound_serving(tenant_id) as session:
+        resumed = await converge(
+            session, driver=driver, deployment=await _deployment(session), now=NOW
+        )
+    assert resumed.state is not DeploymentState.STOPPED
+    assert resumed.desired_replicas >= 1

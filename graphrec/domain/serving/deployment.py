@@ -236,6 +236,70 @@ class DeploymentService:
         )
         return deployment
 
+    async def halt(
+        self,
+        session: AsyncSession,
+        deployment: ModelDeployment,
+        *,
+        now: dt.datetime | None = None,
+    ) -> bool:
+        """Wind desired capacity down to nothing. Returns whether anything moved.
+
+        `active_version_id` is left alone, exactly as `set_desired` leaves it.
+        A halted deployment remembers what it was serving, so a tenant restored
+        to `active` resumes the version they had rather than an empty
+        `/service-status` and a re-activation nobody has a reason to perform.
+
+        Idempotent, and it has to be: the reconciler passes over a suspended
+        tenant every few seconds, and an epoch bump on each of those would make
+        every replica permanently drifted from a deployment that is not
+        changing.
+        """
+        if deployment.desired_replicas == 0 and deployment.state == DeploymentState.STOPPED.value:
+            return False
+        deployment.desired_replicas = 0
+        deployment.state = DeploymentState.STOPPED.value
+        deployment.epoch += 1
+        deployment.updated_at = now or dt.datetime.now(dt.UTC)
+        deployment.last_transition_at = deployment.updated_at
+        await session.flush()
+        logger.info(
+            "deployment_halted",
+            extra={
+                "deployment_id": str(deployment.deployment_id),
+                "epoch": deployment.epoch,
+            },
+        )
+        return True
+
+    async def resume(
+        self,
+        session: AsyncSession,
+        deployment: ModelDeployment,
+        *,
+        now: dt.datetime | None = None,
+    ) -> bool:
+        """The other half of `halt`, for a tenant restored to `active`.
+
+        Only a deployment that has an active version resumes. One that was
+        stopped with nothing active has nothing to bring back, and starting a
+        `desired_version_id` that was never activated would turn a suspension
+        into an activation nobody requested.
+        """
+        if deployment.desired_replicas > 0 or deployment.active_version_id is None:
+            return False
+        deployment.desired_version_id = deployment.active_version_id
+        deployment.desired_replicas = max(deployment.min_replicas, MINIMUM_DESIRED_REPLICAS)
+        deployment.state = DeploymentState.PROGRESSING.value
+        deployment.epoch += 1
+        deployment.updated_at = now or dt.datetime.now(dt.UTC)
+        await session.flush()
+        logger.info(
+            "deployment_resumed",
+            extra={"deployment_id": str(deployment.deployment_id), "epoch": deployment.epoch},
+        )
+        return True
+
     async def next_revision_number(self, session: AsyncSession, *, deployment_id: uuid.UUID) -> int:
         """`max + 1` inside the caller's transaction.
 

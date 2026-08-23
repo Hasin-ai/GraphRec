@@ -335,6 +335,15 @@ ERROR_COPY: dict[str, str] = {
     ),
     # L1496
     "plan_already_closed": "This plan is already closed.",
+    "plan_code_already_exists": (  # (derived) — the prototype's create dialog
+        "That plan code is already in use. Choose another."
+    ),
+    "tenant_status_unchanged": (  # (derived) — L1420's dialog preselects nothing
+        "This account is already in that state. Choose a different one."
+    ),
+    "override_expiry_in_past": (  # (derived) — L1450's effective period
+        "The effective period must end in the future."
+    ),
     # L1635
     "negative_limit": (
         "A negative limit conflicts with the quota model. "
@@ -367,6 +376,43 @@ ERROR_COPY: dict[str, str] = {
     "service_unavailable": (
         "If activation fails, no version serves and the fallback strategy applies."
     ),
+}
+
+
+#: What a withheld section of the composed tenant detail says, keyed by the
+#: permission that would grant it (BACKEND_PLAN §12.10, L1436).
+#:
+#: These are the one family of user-facing sentences that are **not** refusals.
+#: `/admin/tenants/:tenantId` returns `200` with two of its three sections
+#: withheld when the operator holds only `platform permission`, and each
+#: withheld section renders this sentence in place of its data. Sending the
+#: reason from the server rather than composing it in the console is the same
+#: rule every refusal follows: the client never writes its own explanation of an
+#: authorization decision it did not make.
+WITHHELD_SECTION_COPY: dict[str, str] = {
+    "plan_management": "This section requires the plan-management permission.",
+    "platform_scope": "This section requires the authorized platform scope.",
+    "monitoring": "This section requires monitoring access.",
+    "audit": "This section requires the audit permission.",
+}
+
+
+#: Why a quantity on `/admin/status` has no value, keyed by the quantity.
+#:
+#: UC-30's alternative outcome — "Measurement gaps are identified rather than
+#: hidden" — is a promise that needs words behind it. The console renders the
+#: literal string `gap` in warn colour (L1531); this is what it renders when the
+#: operator asks why. A gap with no sentence is indistinguishable from a bug.
+MEASUREMENT_GAP_COPY: dict[str, str] = {
+    "serving_availability": (
+        "No recommendation requests were served in this window, "
+        "so availability cannot be calculated."
+    ),
+    "replicas": (
+        "Capacity was last observed too long ago to be current. "
+        "The figure shown would be a memory rather than a measurement."
+    ),
+    "ingestion_lag": ("The ingestion queue could not be read, so lag is not known."),
 }
 
 

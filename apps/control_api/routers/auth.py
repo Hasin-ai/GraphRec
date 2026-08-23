@@ -28,7 +28,9 @@ from apps.control_api.schemas import (
     UserResponse,
 )
 from graphrec.auth.tokens import TokenService
-from graphrec.common.errors import AuthError, ConflictError
+from graphrec.common.enums import AuditAction
+from graphrec.common.errors import AuthError, ConflictError, GraphRecError
+from graphrec.domain.audit import Actor, AuditTrail, record
 from graphrec.domain.identity import IdentityService
 
 router = APIRouter(tags=["auth"])
@@ -104,6 +106,43 @@ async def register_tenant(
 async def sign_in(
     body: SignInRequest, request: Request, session: Session, service: Service
 ) -> SessionResponse:
+    """Audited both ways, and the two ways are written differently.
+
+    A successful sign-in joins this transaction: `authenticate_tenant_user` has
+    already bound `app.tenant_id`, so the row lands scoped to the tenant whose
+    audit page will show it.
+
+    A refused sign-in cannot. The refusal raises, the transaction rolls back,
+    and a row written here would go with it — so `AuditTrail.refused` writes on
+    a second connection. Which tenant it names depends on how far the attempt
+    got: a real tenant code gives a row that tenant can see on their own audit
+    page, and an unrecognised one gives a row with no tenant at all, visible
+    only to the platform realm. Neither case tells the caller which it was.
+    """
+    trail = AuditTrail(
+        session=session,
+        sessionmaker=request.app.state.sessionmaker,
+        actor=Actor.unauthenticated(),
+    )
+    try:
+        return await _sign_in(body, request, session, service, trail)
+    except GraphRecError as exc:
+        await trail.refused(
+            AuditAction.ACCESS,
+            resource_type="session",
+            error=exc,
+            details={"operation": "sign_in"},
+        )
+        raise
+
+
+async def _sign_in(
+    body: SignInRequest,
+    request: Request,
+    session: AsyncSession,
+    service: IdentityService,
+    trail: AuditTrail,
+) -> SessionResponse:
     async with session.begin():
         # A direct `SELECT` here returns nothing: no context is bound yet, so RLS
         # filters every row. That is the correct default and is not worked
@@ -121,8 +160,22 @@ async def sign_in(
             verify_password(None, body.password)
             raise AuthError("invalid_credentials")
 
+        # Known from here on, so a refusal past this point names the tenant it
+        # was aimed at rather than nobody.
+        trail.tenant_id = tenant_id
+
         tenant, user = await service.authenticate_tenant_user(
             session, tenant_id=tenant_id, email=body.email, password=body.password
+        )
+        trail.actor = Actor.user(user.tenant_user_id)
+        await record(
+            session,
+            actor=trail.actor,
+            action=AuditAction.ACCESS,
+            resource_type="session",
+            resource_ref=user.tenant_user_id,
+            tenant_id=tenant_id,
+            details={"operation": "sign_in"},
         )
         issued = await service.issue_tenant_session(
             session,

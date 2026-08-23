@@ -44,7 +44,7 @@ import numpy as np
 import sqlalchemy as sa
 from sqlalchemy.exc import SQLAlchemyError
 
-from graphrec.common.enums import ModelVersionStatus, UsageType
+from graphrec.common.enums import FailureArea, ModelVersionStatus, Severity, UsageType
 from graphrec.common.error_copy import ERROR_COPY
 from graphrec.common.errors import UnavailableError, ValidationError
 from graphrec.db.models import (
@@ -55,6 +55,7 @@ from graphrec.db.models import (
     RecommendationRequest,
     RecommendationResult,
 )
+from graphrec.domain.audit import security_event
 from graphrec.domain.metering import counters as counter_ops
 from graphrec.domain.metering import ledger, quota
 from graphrec.domain.metering.periods import current_period
@@ -372,6 +373,19 @@ class RecommendationService:
             )
             session.add(row)
             await session.flush()
+            # ER-F-11's `serving` area. A refusal is the one serving outcome
+            # that is a failure rather than a degradation — a fallback answer is
+            # still an answer — so this does not flood the Failures tab in the
+            # way an event per fallback would. It is written on the same session
+            # as the refusal row, so the two agree or neither exists.
+            await security_event(
+                session,
+                severity=Severity.ERROR,
+                area=FailureArea.SERVING,
+                summary=ERROR_COPY[reason_key],
+                tenant_id=tenant_id,
+                reference=str(row.request_id)[:8],
+            )
         except SQLAlchemyError:
             logger.warning("refusal_not_recorded", exc_info=True)
             return None

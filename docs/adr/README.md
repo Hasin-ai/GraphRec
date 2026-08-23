@@ -93,6 +93,15 @@ marked *confirmed by instruction to proceed*. Its shape is deliberately D4's: a
 port, the light adapter shipped, the heavy one deferred with the console's
 contract — desired, ready, per-replica — honoured identically by both.
 
+**Phase 12 gated nothing and decided two things anyway.** BUILD_PROMPT marks no
+🛑 on audit and platform, but the phase reached two forks worth recording.
+**ADR 0029** settles where a *refused* action's audit row is written: on a second
+connection, because the transaction that would have carried it is the one the
+refusal unwound. **ADR 0030** settles what a platform user who holds some of a
+page's permissions sees: the page, with the sections they lack replaced by a
+sentence naming the permission, rather than a `403` that hides the sections they
+were entitled to.
+
 **Phases 6, 7 and 8 are built and nothing gated either.** BUILD_PROMPT marks no 🛑
 on ingestion, metering or offline modelling. Phase 8 recorded three decisions of
 its own — **ADR 0023** (plain PyTorch, no PyTorch Geometric), **ADR 0024**
