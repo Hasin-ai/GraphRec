@@ -49,6 +49,7 @@ PINNED = [
     ("0008_ingestion", "SUBMISSION_STATUSES", SubmissionStatus),
     ("0009_metering", "USAGE_TYPES", UsageType),
     ("0009_metering", "MEASUREMENT_STATUSES", MeasurementStatus),
+    ("0010_training", "TRAINING_STATES", "JobState"),
 ]
 
 

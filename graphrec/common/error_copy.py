@@ -222,6 +222,12 @@ ERROR_COPY: dict[str, str] = {
     "training_request_ref_required": (
         "A request identifier is required so a repeated request is not applied twice."
     ),
+    # (derived) — the dialog offers one option (L1677) and CON-01 names one
+    # family, so a request naming anything else is a client that has invented a
+    # value rather than a tenant who chose badly.
+    "training_model_type_unknown": (
+        "That model type is not available. DGSR is the only type this service trains."
+    ),
     "training_cooldown": (  # (derived) — the cooldown is provisional, see config
         "A training request was made recently. The next request may be made in {seconds} seconds."
     ),
@@ -229,6 +235,13 @@ ERROR_COPY: dict[str, str] = {
     # queue refuse cancellation for the same reason and must say so
     # identically, and two codes carrying one string is how they drift apart.
     "job_not_cancellable": "Only a job in an active state can be cancelled.",
+    # (derived) — L1714 says the job "moves to cancelling and then to
+    # cancelled", so `cancelling` is a state a tenant sees and asks about. It is
+    # not `job_not_cancellable`: that one means the request would be wrong,
+    # and this one means it has already been made and is being carried out.
+    "job_already_cancelling": (
+        "This job is already being cancelled. It will stop at its next stage boundary."
+    ),
     # ---------------------------------------------------------------- jobs
     # A job's terminal failure reason is rendered in the console (dc.html L1696,
     # "Failure reason"). It is therefore approved copy, never an exception

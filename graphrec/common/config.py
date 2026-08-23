@@ -32,6 +32,13 @@ class ServingDriverKind(StrEnum):
     K3S = "k3s"
 
 
+class ArtifactStoreKind(StrEnum):
+    """Where bundles, snapshots and checkpoints live."""
+
+    S3 = "s3"
+    LOCAL = "local"
+
+
 class CandidateIndexKind(StrEnum):
     """D4 — in-process exact top-K by default; Qdrant when SRS §6.3 must be demonstrated."""
 
@@ -93,6 +100,14 @@ class Settings(BaseSettings):
     s3_bucket: str = "graphrec"
     s3_region: str = "us-east-1"
     s3_use_path_style: bool = True
+
+    # Which adapter the factory builds. `local` is a directory on disk and is
+    # what the test suite and a laptop use; `s3` is MinIO in Compose and the
+    # object store in a real deployment. A flag rather than an inference from
+    # `s3_endpoint`, because "no MinIO running" and "deliberately on disk" are
+    # different situations and only one of them should start quietly.
+    artifact_store: ArtifactStoreKind = ArtifactStoreKind.S3
+    artifact_local_root: str = "var/artifacts"
 
     # ------------------------------------------------------------ service
 

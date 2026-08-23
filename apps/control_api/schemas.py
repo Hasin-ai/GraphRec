@@ -608,3 +608,141 @@ class SubscriptionResponse(BaseModel):
     plan_name: str
     description: str | None
     entitlements: list[EntitlementBody]
+
+
+# ------------------------------------------------------------------ training
+
+
+class RequestTrainingRequest(_Body):
+    """The dialog's four fields (dc.html L1677-1680), and nothing else.
+
+    Each of the three parameters is a `Literal` over the values the dialog
+    offers rather than a bounded integer. The dialog is a select, not a slider:
+    a client sending `max_epochs: 21` has invented a value rather than chosen
+    one, and the migration's `CHECK` constraints say the same thing at the other
+    end. Rejecting it here means the run is refused before a job exists.
+    """
+
+    request_ref: str = Field(min_length=1, max_length=200)
+    model_type: Literal["DGSR"] = "DGSR"
+    interaction_window_days: Literal[30, 90, 180] = 90
+    max_epochs: Literal[10, 20, 40] = 20
+
+
+class CancelTrainingRequest(_Body):
+    """L1717: the dialog will not submit below four characters.
+
+    Enforced here as well as there, because the console is not the only client
+    and "cancelled" with no reason is the record nobody can interpret six months
+    later. `min_length` runs after `str_strip_whitespace`, so four spaces is a
+    422 rather than a reason.
+    """
+
+    reason: str = Field(min_length=4, max_length=500)
+
+
+class TrainingConcurrencyBody(BaseModel):
+    limit: int
+    #: `platform` today, and only aspirationally so — see PHASE_9_REPORT §3.
+    scope: str
+
+
+class TrainingDataBody(BaseModel):
+    sequences: int
+    required: int
+    sufficient: bool
+
+
+class TrainingQuotaBody(BaseModel):
+    used: int
+    #: `None` is unlimited, which is not the same as zero and must not render as
+    #: one. The console shows "6 / 8" or "6 / unlimited" from this pair.
+    limit: int | None
+    remaining: int | None
+    resets_at: dt.date
+
+
+class TrainingCooldownBody(BaseModel):
+    active: bool
+    seconds_remaining: int
+    window_seconds: int
+
+
+class TrainingEligibilityResponse(BaseModel):
+    """The four stat cards (L1666-1669), each with its own numbers.
+
+    `reason` is `""` when eligible rather than absent, matching the prototype's
+    own contract at L1648. A client renders it unconditionally; an optional
+    field would invite `reason ?? 'ok'` and a message that is not ours.
+    """
+
+    eligible: bool
+    reason: str
+    concurrency: TrainingConcurrencyBody
+    interaction_data: TrainingDataBody
+    quota: TrainingQuotaBody
+    cooldown: TrainingCooldownBody
+
+
+class TrainingSnapshotResponse(BaseModel):
+    snapshot_id: uuid.UUID
+    training_job_id: uuid.UUID
+    cutoff_at: dt.datetime
+    window_days: int
+    #: The store's own URI. Not a download link: there is no signed-URL route in
+    #: this phase, and returning something that looks fetchable but is not would
+    #: be worse than returning the identifier it is.
+    uri: str
+    checksum: str
+    sequence_count: int
+    product_count: int
+    event_count: int
+    created_at: dt.datetime
+
+
+class TrainingMetricBody(BaseModel):
+    epoch: int
+    metric_name: str
+    value: float
+
+
+class TrainingMetricsResponse(BaseModel):
+    training_job_id: uuid.UUID
+    metrics: list[TrainingMetricBody]
+
+
+class TrainingJobResponse(BaseModel):
+    """One run, with the rail and the two controls the console draws from it.
+
+    `stages` travels with every response rather than being a constant the client
+    holds. The rail is nine names in a fixed order and a client that hard-coded
+    them would silently disagree with the server the first time one changed —
+    which is exactly the class of drift the generated enums exist to prevent.
+    """
+
+    training_job_id: uuid.UUID
+    job_id: uuid.UUID
+    state: str
+    stages: list[str]
+    stage_index: int
+    progress: str
+    note: str
+    requested_by: uuid.UUID | None
+    request_ref: str
+    interaction_window_days: int
+    max_epochs: int
+    requested_at: dt.datetime
+    completed_at: dt.datetime | None
+    failure_reason: str | None
+    cancel_reason: str | None
+    error_reference: str | None
+    snapshot: TrainingSnapshotResponse | None
+    #: Gate 5. Whether the button is enabled, decided here and not by the client
+    #: re-deriving it from `state` — and `blocked_reason` is why, in words the
+    #: console shows rather than invents.
+    can_cancel: bool
+    blocked_reason: str | None
+
+
+class TrainingJobListResponse(BaseModel):
+    jobs: list[TrainingJobResponse]

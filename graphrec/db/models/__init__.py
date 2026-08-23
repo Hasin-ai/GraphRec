@@ -34,15 +34,23 @@ from graphrec.db.models.subscription import (
     TenantResourceQuota,
     TenantSubscription,
 )
+from graphrec.db.models.training import (
+    DatasetSnapshot,
+    Model,
+    TrainingJob,
+    TrainingMetric,
+)
 
 __all__ = [
     "ApiKey",
     "Base",
     "Customer",
+    "DatasetSnapshot",
     "IngestStagingItem",
     "InteractionEvent",
     "Invitation",
     "Job",
+    "Model",
     "MonthlyUsageAggregate",
     "PlatformUser",
     "PlatformUserPermission",
@@ -59,5 +67,7 @@ __all__ = [
     "TenantResourceQuota",
     "TenantSubscription",
     "TenantUser",
+    "TrainingJob",
+    "TrainingMetric",
     "UsageEvent",
 ]

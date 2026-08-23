@@ -164,6 +164,49 @@ services:
     stop_grace_period: 150s
     restart: unless-stopped
 
+  # Same profile, separate process. `job_worker` claims ingestion and
+  # `training_worker` claims training, because a four-hour training run holding
+  # a slot in a shared pool is a queue of CSV uploads that never drains.
+  #
+  # Deliberately not replicated. ASM-03 wants training serialised platform-wide
+  # and the schema only enforces one active job *per tenant*, so today the
+  # global rule is "run one of these" — see docs/PHASE_9_REPORT.md §3.
+  training_worker:
+    profiles: ["workers"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      ENVIRONMENT: local
+      POSTGRES_HOST: postgres
+      POSTGRES_APP_USER: graphrec_app
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:-graphrec_app_local_only}
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT: http://minio:9000
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      # One at a time within the process too. Two concurrent runs on one box
+      # contend for every core and finish later than they would in sequence.
+      WORKER_CONCURRENCY: 1
+    env_file:
+      - path: .env
+        required: false
+    command: ["python", "-m", "apps.training_worker.main"]
+    # Longer than job_worker's, and for a different reason: draining here means
+    # letting the current epoch reach a checkpoint. An epoch is minutes, so ten
+    # of them is the budget, and a run killed past it resumes from its last
+    # checkpoint rather than from nothing.
+    stop_grace_period: 600s
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   minio_data:

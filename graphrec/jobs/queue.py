@@ -266,6 +266,40 @@ class JobQueue:
             progress={"stage_at": stage} if stage else None,
         )
 
+    async def cancel_unclaimed(
+        self, session: AsyncSession, *, job_id: uuid.UUID, stage: str | None
+    ) -> bool:
+        """Settle a job that is still waiting, from the API rather than a worker.
+
+        `finish_cancelled` is the worker's path and requires the lease, which is
+        right: only the process doing the work can say where it stopped. But a
+        job nobody has claimed has no such process, and left alone it would sit
+        at `cancelling` until a worker picked it up purely in order to put it
+        down again. The guard is `status = 'queued'` rather than a lock: if a
+        claim lands between the read and this write the update matches nothing,
+        this returns `False`, and the worker that now owns the job observes the
+        request at its first stage boundary exactly as it would have anyway.
+        """
+        result = await session.execute(
+            sa.text(
+                "UPDATE jobs SET status = 'cancelled', completed_at = now(), updated_at = now(), "
+                "lease_owner = NULL, lease_expires_at = NULL, "
+                "failure_code = :code, failure_reason = :reason, "
+                "progress = COALESCE(CAST(:progress AS jsonb), progress) "
+                "WHERE job_id = :job_id AND status = 'queued'"
+            ).bindparams(
+                sa.bindparam(
+                    "progress", value={"stage_at": stage} if stage else None, type_=sa.JSON
+                )
+            ),
+            {
+                "code": "job_cancelled",
+                "reason": resolve_copy("job_cancelled"),
+                "job_id": job_id,
+            },
+        )
+        return cast("CursorResult[Any]", result).rowcount == 1
+
     async def fail(
         self, session: AsyncSession, *, job_id: uuid.UUID, verdict: Verdict
     ) -> QueueStatus:
