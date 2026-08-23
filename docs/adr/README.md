@@ -10,7 +10,7 @@ gate that depends on it.
 |---|---|---|---|
 | D1 | Resource model: SRS-native vs AWS Personalize | **Confirmed — SRS-native** | Phase 2 |
 | D2 | Job queue: PostgreSQL `SKIP LOCKED` | **Confirmed — by instruction** (ADR 0011) | Phase 4 |
-| D3 | Serving: Compose + `ServingDriver` port | Accepted | Phase 11 |
+| D3 | Serving: Compose + `ServingDriver` port | **Confirmed — by instruction** (ADR 0028) | Phase 11 |
 | D4 | Candidates: in-process exact top-K behind `CandidateIndex` | **Confirmed — by instruction** (ADR 0026) | Phase 10 |
 | D5 | Token signing: EdDSA + published JWKS | **Confirmed** (ADR 0009) | Phase 3 |
 | D6 | Versioning: `/v1` and `/v1/platform/*` | **Confirmed** | Phase 2 |
@@ -85,6 +85,13 @@ were built to BUILD_PROMPT's own recommendation and recorded as **ADR 0026** and
 carries the SRS §6.3 deferral described above, which is a decision of a
 different weight: it diverges from the highest authority in the project and
 says so.
+
+**D3 is closed the same way, one phase later.** BUILD_PROMPT marks Phase 11 🛑
+*"CONFIRM D3 (Compose vs k3s) before starting"*. The same instruction covers it,
+so it is built to BUILD_PROMPT's recommendation and recorded as **ADR 0028**,
+marked *confirmed by instruction to proceed*. Its shape is deliberately D4's: a
+port, the light adapter shipped, the heavy one deferred with the console's
+contract — desired, ready, per-replica — honoured identically by both.
 
 **Phases 6, 7 and 8 are built and nothing gated either.** BUILD_PROMPT marks no 🛑
 on ingestion, metering or offline modelling. Phase 8 recorded three decisions of

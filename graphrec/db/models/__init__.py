@@ -30,6 +30,16 @@ from graphrec.db.models.ingestion import (
 from graphrec.db.models.jobs import Job
 from graphrec.db.models.metering import MonthlyUsageAggregate, UsageEvent
 from graphrec.db.models.registry import ModelEvaluationMetric, ModelVersion
+from graphrec.db.models.serving import (
+    DeploymentRevision,
+    ModelActivationHistory,
+    ModelDeployment,
+    RecommendationFeedback,
+    RecommendationImpression,
+    RecommendationRequest,
+    RecommendationResult,
+    ServingReplica,
+)
 from graphrec.db.models.subscription import (
     QuotaOverride,
     TenantResourceQuota,
@@ -47,11 +57,14 @@ __all__ = [
     "Base",
     "Customer",
     "DatasetSnapshot",
+    "DeploymentRevision",
     "IngestStagingItem",
     "InteractionEvent",
     "Invitation",
     "Job",
     "Model",
+    "ModelActivationHistory",
+    "ModelDeployment",
     "ModelEvaluationMetric",
     "ModelVersion",
     "MonthlyUsageAggregate",
@@ -61,8 +74,13 @@ __all__ = [
     "Product",
     "ProductCategory",
     "QuotaOverride",
+    "RecommendationFeedback",
+    "RecommendationImpression",
+    "RecommendationRequest",
+    "RecommendationResult",
     "RecoveryToken",
     "RefreshSession",
+    "ServingReplica",
     "Submission",
     "SubmissionError",
     "Tenant",

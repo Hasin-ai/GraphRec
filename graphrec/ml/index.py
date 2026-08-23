@@ -91,6 +91,23 @@ class CandidateIndex(Protocol):
         exclude: Collection[str] = (),
     ) -> list[Candidate]: ...
 
+    def vectors(self, key: IndexKey, item_refs: Collection[str]) -> NDArray[np.float32]:
+        """The embedding rows for `item_refs`, in the order given.
+
+        Unknown refs are skipped rather than zero-filled, so the result can be
+        shorter than the input and can be empty. A zero row would be a vector
+        that contributes nothing to a mean while still counting in the divisor,
+        which is a silent way to make a query weaker the more unknown items the
+        caller sent.
+
+        The port exposes rows and not a query vector on purpose: *how* a history
+        becomes a query is a modelling decision, and it belongs in
+        `graphrec.domain.serving.recommend` where it can be read beside the
+        strategy it produces — not inside an adapter that would then have to be
+        reimplemented identically for Qdrant.
+        """
+        ...
+
     def drop(self, key: IndexKey) -> None:
         """Forget an index. Absent is not an error — archive may run twice, and
         a cleanup that fails because it already succeeded is a cleanup that
@@ -191,6 +208,20 @@ class InProcessIndex:
             for row in ordered
             if np.isfinite(scores[row])
         ]
+
+    def vectors(self, key: IndexKey, item_refs: Collection[str]) -> NDArray[np.float32]:
+        resident = self._resident(key)
+        rows = [
+            position
+            for position in (resident.positions.get(ref) for ref in item_refs)
+            if position is not None
+        ]
+        if not rows:
+            # `(0, dim)` rather than `(0,)`: the caller means to stack or
+            # average these, and an array with the wrong rank turns "no known
+            # items" into a shape error one frame away from where it happened.
+            return np.empty((0, resident.matrix.shape[1]), dtype=np.float32)
+        return resident.matrix[rows]
 
     def drop(self, key: IndexKey) -> None:
         with self._lock:

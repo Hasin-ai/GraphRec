@@ -158,6 +158,24 @@ class AuthError(GraphRecError):
     code = "unauthenticated"
 
 
+class ForbiddenError(GraphRecError):
+    """403 — the actor is known, and is not allowed.
+
+    Distinct from `AuthError` (401, "we do not know who you are") and from
+    `NotFoundError` (404, "it is not yours, and we will not say more"). Used only
+    for gates 2 and 3, where the resource in question is the tenant's own.
+
+    Lives here rather than beside one app's dependencies because both FastAPI
+    applications raise it and the contract in `pyproject.toml` forbids either
+    from importing the other. A second definition would be a second `403` with
+    the same name and, eventually, different copy.
+    """
+
+    error_class = ErrorClass.AUTH
+    code = "insufficient_role"
+    status_code = 403
+
+
 class NotFoundError(GraphRecError):
     """404 — and it never names the resource type.
 

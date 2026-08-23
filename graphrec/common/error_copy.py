@@ -296,6 +296,38 @@ ERROR_COPY: dict[str, str] = {
     "archive_already_archived": "Already archived.",
     # L1749 — the retired version immediately preceding the active one is protected
     "archive_rollback_target": "Retained as the rollback target for the active version.",
+    # ---------------------------------------------------------- serving
+    # L1779, the second half of the console's consequence line: this is what a
+    # tenant is told when the new version would not load and something else was
+    # already serving. The version number is the one that *kept* serving, which
+    # is the fact ER-F-06 exists to guarantee.
+    "activation_failed": (
+        "If activation fails, version {version_number} remains active and no traffic moves."
+    ),
+    # L1779's first half — the same failure with nothing already serving.
+    "activation_failed_no_active": (
+        "If activation fails, no version serves and the fallback strategy applies."
+    ),
+    # (derived) — two activations at once would race on load-before-swap, and
+    # the loser would swap in a version the winner had already replaced.
+    "activation_in_progress": (
+        "An activation is already in progress for this tenant. Wait for it to settle."
+    ),
+    # (derived) — BACKEND_PLAN L1166: the roll-back body names its target, and a
+    # target that is not the retained one is refused rather than silently
+    # redirected to whichever version the server would have chosen.
+    "invalid_target": ("That version is not the retained roll-back target for the active version."),
+    # L1190, the data-plane error table: `unavailable` / 503 / "model version
+    # not ready". This is the refusal when nothing can answer and the caller
+    # asked for no fallback.
+    "model_not_ready": "Serving is degraded; a fallback may apply",
+    # (derived) — feedback names a request this tenant never made. A `404`
+    # rather than a validation error: the identifier is well formed and the
+    # request is simply not theirs, and saying which would be a cross-tenant
+    # disclosure.
+    "recommendation_request_unknown": (
+        "No recommendation request with this identifier was made by this tenant."
+    ),
     # ---------------------------------------------------------- plans / quotas
     # L1454
     "plan_closed": (

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from apps.control_api.middleware import REQUEST_ID_HEADER
+from graphrec.http import REQUEST_ID_HEADER
 
 
 def test_healthz_is_ok(client) -> None:

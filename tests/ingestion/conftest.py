@@ -201,25 +201,48 @@ def drain(ingest_sessionmaker):
     The real registry — `apps.job_worker.registry` — rather than one assembled
     for the test. A handler that works when a test wires it up but is not
     registered in the process that ships is a handler that does not run.
+
+    And the real counters, for the same reason. `Worker` defaults to a
+    process-local pair so that a unit test needs no Redis; a worker that takes
+    that default in a deployment moves a counter nobody else can see, and
+    `/v1/usage` — which reads the shared one — under-reports every batch the
+    worker charged. That is exactly the defect this fixture failed to catch
+    while it was building its own worker differently from
+    `apps/job_worker/main.py`.
     """
+    from redis.asyncio import ConnectionPool, Redis
+
     from apps.job_worker.registry import registry
     from graphrec.common.config import Settings
+    from graphrec.domain.metering.counters import RedisUsageCounters, ResilientUsageCounters
     from graphrec.jobs.worker import Worker
 
     async def _drain(limit: int = 8) -> int:
+        settings = Settings(
+            environment="ci", job_lease_seconds=60, job_heartbeat_seconds=1, job_max_attempts=3
+        )
+        pool = ConnectionPool.from_url(str(settings.redis_url))
+        redis = Redis(connection_pool=pool)
         worker = Worker(
             name="ingest_test",
             sessionmaker=ingest_sessionmaker,
             registry=registry,
-            settings=Settings(
-                environment="ci", job_lease_seconds=60, job_heartbeat_seconds=1, job_max_attempts=3
-            ),
+            settings=settings,
+            counters=ResilientUsageCounters(RedisUsageCounters(redis)),
         )
-        ran = 0
-        for _ in range(limit):
-            if not await worker.run_once():
-                break
-            ran += 1
-        return ran
+        try:
+            ran = 0
+            for _ in range(limit):
+                if not await worker.run_once():
+                    break
+                ran += 1
+            return ran
+        finally:
+            await redis.aclose()
+            # The client does not disconnect a pool it was handed, and a
+            # connection collected by the garbage collector inside an async
+            # test is an unraisable `ResourceWarning` — which this suite
+            # promotes to an error.
+            await pool.disconnect()
 
     return _drain

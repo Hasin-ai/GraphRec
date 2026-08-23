@@ -36,6 +36,16 @@ from graphrec.common.enums import (
     SubmissionStatus,
     UsageType,
 )
+from graphrec.serving.states import (
+    CandidateSource,
+    FeedbackType,
+    ReplicaStatus,
+    RequestStatus,
+    RevisionKind,
+    RevisionStatus,
+    ServingErrorClass,
+    Strategy,
+)
 
 #: `(migration module, constant, the enum it must equal)`.
 #: Order within the tuple matters as much as membership: a check constraint
@@ -51,6 +61,20 @@ PINNED = [
     ("0009_metering", "MEASUREMENT_STATUSES", MeasurementStatus),
     ("0010_training", "TRAINING_STATES", "JobState"),
     ("0011_registry", "VERSION_STATUSES", "ModelVersionStatus"),
+    ("0012_serving", "DEPLOYMENT_STATES", "DeploymentState"),
+    # Passed as objects rather than names: `_enum` resolves a string against
+    # `graphrec.common.enums`, and these live in `graphrec/serving/states.py`
+    # because that module is generated from the prototype and the data plane
+    # has no console surface to be generated from.
+    ("0012_serving", "REPLICA_STATUSES", ReplicaStatus),
+    ("0012_serving", "REVISION_STATUSES", RevisionStatus),
+    ("0012_serving", "REVISION_KINDS", RevisionKind),
+    ("0012_serving", "STRATEGIES", Strategy),
+    ("0012_serving", "CANDIDATE_SOURCES", CandidateSource),
+    ("0012_serving", "REQUEST_STATUSES", RequestStatus),
+    ("0012_serving", "ERROR_CLASSES", ServingErrorClass),
+    ("0012_serving", "FEEDBACK_TYPES", FeedbackType),
+    ("0012_serving", "ACTOR_TYPES", "AuditActor"),
 ]
 
 

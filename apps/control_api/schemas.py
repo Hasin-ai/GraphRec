@@ -21,6 +21,7 @@ from graphrec.common.enums import (
     Availability,
     CredentialScope,
     CredentialState,
+    DeploymentState,
     SubmissionKind,
     SubmissionStatus,
     TenantRole,
@@ -883,3 +884,165 @@ class ModelVersionSummaryResponse(BaseModel):
     eligible: int
     retired: int
     failed_deployment: int
+
+
+# ------------------------------------------------------------------- serving
+
+
+class ActivateVersionRequest(_Body):
+    """`POST /v1/model-versions/{id}:activate` — `{ reason? }` (L1161).
+
+    Optional, like the archive dialog's: the console's activate dialog (L1779)
+    collects a confirmation and not a justification, and requiring a sentence
+    the prototype never asks for would make its own dialog fail.
+    """
+
+    reason: str | None = Field(default=None, min_length=4, max_length=500)
+
+
+class RollbackRequest(_Body):
+    """`POST /v1/models/{id}:rollback` — `{ target_version_id, reason }` (L1166).
+
+    `reason` is required here and optional on activate, which is not an
+    inconsistency: L1792 collects one, because a roll back is a statement that
+    something went wrong and the next person to read the history needs to know
+    what.
+
+    `target_version_id` confirms rather than selects. There is exactly one
+    retained target, the server knows which, and a body naming a different one
+    is refused — a dialog that showed "roll back to v7" must not roll back to v6
+    because v7 was archived while it was open.
+    """
+
+    target_version_id: uuid.UUID | None = None
+    reason: str = Field(min_length=4, max_length=500)
+
+
+class DeploymentVersionBody(BaseModel):
+    """A version as the deployment refers to it: id and number, nothing else."""
+
+    version_id: uuid.UUID
+    version_number: int
+
+
+class DeploymentResponse(BaseModel):
+    """`GET /v1/deployment` — the six stats and the description list (L1831-1839).
+
+    `serving_previous` is ER-F-06 on the wire. It is `true` exactly when a
+    version was asked for and a different one is answering, which is the state a
+    failed activation leaves behind and the one the console must be able to
+    render without diffing two ids itself.
+
+    The measurement fields repeat `/v1/metrics/summary` deliberately: the plan
+    lists them on this response (L1198) because the board draws them beside the
+    deployment, and a console that had to join two responses to draw one card
+    would draw it from two instants.
+    """
+
+    deployment_id: uuid.UUID
+    state: DeploymentState
+    active_version: DeploymentVersionBody | None
+    desired_version: DeploymentVersionBody | None
+    serving_previous: bool
+    desired_replicas: int
+    ready_replicas: int
+    last_transition_at: dt.datetime | None
+    recent_error_count_24h: int
+    fallback_rate: float | None
+    latency_p95_ms: int | None
+    measurement_status: str
+    measurement_freshness_seconds: int | None
+
+
+class ReplicaBody(BaseModel):
+    """One row of the replica table.
+
+    `status` and `ready` are separate because a replica can be `running` and
+    still loading a bundle. Collapsing them would make "3 / 3 ready" true the
+    moment three containers existed — the exact number L1835 colours amber.
+    """
+
+    replica_ref: str
+    status: str
+    ready: bool
+    version_id: uuid.UUID | None
+    started_at: dt.datetime
+    ended_at: dt.datetime | None
+    observed_at: dt.datetime
+
+
+class DeploymentReplicasResponse(BaseModel):
+    desired_replicas: int
+    ready_replicas: int
+    replicas: list[ReplicaBody]
+
+
+class DeploymentRevisionBody(BaseModel):
+    """One attempt to change what serves — including the ones that failed.
+
+    A failed activation is a row here with a `failure_reason`, which is what a
+    tenant asking "why is version 8 not serving?" is asking to read.
+    """
+
+    revision: int
+    kind: str
+    status: str
+    from_version_id: uuid.UUID | None
+    to_version_id: uuid.UUID | None
+    reason: str | None
+    failure_reason: str | None
+    started_at: dt.datetime
+    completed_at: dt.datetime | None
+
+
+class AutoscalingResponse(BaseModel):
+    """`GET /v1/deployment/autoscaling` — bounds and recent actions (XR-F-08).
+
+    "Recent actions" are the deployment revisions. The alternative, a separate
+    scaling-event log, would record the same transitions under a second name.
+    """
+
+    min_replicas: int
+    max_replicas: int
+    desired_replicas: int
+    ready_replicas: int
+    target_rps_per_replica: float
+    recent_actions: list[DeploymentRevisionBody]
+
+
+class MetricsSummaryResponse(BaseModel):
+    """`GET /v1/metrics/summary` (L1200).
+
+    Every measurement is nullable and `measurement_status` explains the nulls. A
+    window with no traffic reports `measurement delayed`, never zeros — the same
+    discipline `/v1/usage` follows, and for the same reason: a zero is a claim
+    that something was measured.
+    """
+
+    window_hours: int
+    requests: int
+    errors: int
+    availability: float | None
+    latency_p95_ms: int | None
+    fallback_rate: float | None
+    measurement_status: str
+    measurement_freshness_seconds: int | None
+
+
+class ServingErrorBody(BaseModel):
+    """One redacted error row (L1842).
+
+    Four fields, and none of them can carry a payload: `error_class` is a closed
+    enum, `reason` is approved copy written at insert time, and `reference` is
+    four hex characters of the request id. There is no field here a caller's
+    input could reach.
+    """
+
+    occurred_at: dt.datetime
+    error_class: str
+    reason: str
+    reference: str
+
+
+class ServingErrorsResponse(BaseModel):
+    errors: list[ServingErrorBody]

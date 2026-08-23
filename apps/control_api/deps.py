@@ -43,7 +43,7 @@ from graphrec.common.enums import (
     TenantRole,
     TenantStatus,
 )
-from graphrec.common.errors import AuthError, ErrorClass, GraphRecError, NotFoundError
+from graphrec.common.errors import AuthError, ForbiddenError, NotFoundError
 from graphrec.common.logging import actor_id_var, tenant_id_var
 from graphrec.db.models import ApiKey, PlatformUser, Tenant, TenantUser
 from graphrec.db.tenant_context import bind_tenant
@@ -55,19 +55,6 @@ T = TypeVar("T")
 #: `auto_error=False` so a missing header reaches our handler rather than
 #: FastAPI's, which would emit `{"detail": ...}` instead of the envelope.
 _bearer = HTTPBearer(auto_error=False)
-
-
-class ForbiddenError(GraphRecError):
-    """403 — the actor is known, and is not allowed.
-
-    Distinct from `AuthError` (401, "we do not know who you are") and from
-    `NotFoundError` (404, "it is not yours, and we will not say more"). Used only
-    for gates 2 and 3, where the resource in question is the tenant's own.
-    """
-
-    error_class = ErrorClass.AUTH
-    code = "insufficient_role"
-    status_code = 403
 
 
 @dataclass(frozen=True, slots=True)

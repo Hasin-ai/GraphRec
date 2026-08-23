@@ -14,10 +14,13 @@ import asyncio
 import contextlib
 import signal
 
+from redis.asyncio import ConnectionPool, Redis
+
 from apps.job_worker.registry import registry
 from graphrec.common.config import get_settings
 from graphrec.common.logging import configure_logging, get_logger
 from graphrec.db.engine import create_sessionmaker, create_worker_engine
+from graphrec.domain.metering.counters import RedisUsageCounters, ResilientUsageCounters
 from graphrec.jobs.worker import Worker
 
 logger = get_logger(__name__)
@@ -28,11 +31,22 @@ async def run() -> None:
     configure_logging(settings.log_level, settings.log_format)
 
     engine = create_worker_engine(settings)
+    # The same Redis the control API reads, not the process-local default.
+    # `Worker` falls back to an in-memory pair so a test or a one-off run needs
+    # no Redis, and a *deployed* worker taking that default would move a counter
+    # nobody else can see: the ledger would stay right, `/v1/usage` would
+    # under-report every asynchronously ingested batch, and a quota check would
+    # keep passing on a stale number until the key expired.
+    redis_pool = ConnectionPool.from_url(str(settings.redis_url))
+    redis = Redis(connection_pool=redis_pool)
     worker = Worker(
         name="job_worker",
         sessionmaker=create_sessionmaker(engine),
         registry=registry,
         settings=settings,
+        # Wrapped, because an unreachable cache must not stop an ingestion:
+        # `counters.current` repairs from the ledger on a miss.
+        counters=ResilientUsageCounters(RedisUsageCounters(redis)),
     )
 
     loop = asyncio.get_running_loop()
@@ -47,6 +61,9 @@ async def run() -> None:
         await worker.run()
     finally:
         await engine.dispose()
+        await redis.aclose()
+        # The client returns its own connection; the pool holds the rest.
+        await redis_pool.disconnect()
 
 
 def main() -> None:

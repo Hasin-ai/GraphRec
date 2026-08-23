@@ -1,0 +1,155 @@
+# The serving template. One file, applied once per tenant.
+#
+# `ComposeDriver` runs this with `--project-name graphrec-serve-<tenant>` and
+# `--scale inference=<n>`, so the *same* file produces every tenant's replicas
+# and the tenant is carried entirely by the project name and the environment.
+# There is no per-tenant file to generate, and therefore no per-tenant file that
+# can drift from this one.
+#
+# Never started by hand. `docker compose -f this up` with no
+# `GRAPHREC_TENANT_ID` would start a process that refuses to boot (SRS §6.4),
+# which is the correct outcome but a confusing way to discover it. Desired state
+# lives in `model_deployments`; the reconciler is what turns it into containers.
+#
+# The variables below are the driver's contract with this file
+# (`graphrec/serving_driver/compose.py::apply`):
+#
+#   GRAPHREC_TENANT_ID         the tenant this project serves
+#   GRAPHREC_MODEL_VERSION_ID  the version these replicas must load
+#   GRAPHREC_BUNDLE_URI        where its bundle is
+#   GRAPHREC_DEPLOY_EPOCH      the desired-state generation they were started for
+#   GRAPHREC_INFERENCE_IMAGE   optional image override; builds from source otherwise
+
+services:
+  inference:
+    # Built from the repository root, because the inference process is the same
+    # image as the API — same code, same bundle loader, same digest check. A
+    # separate serving image would be a second place for the verification in
+    # `graphrec/ml/bundle.py` to be out of date.
+    image: ${GRAPHREC_INFERENCE_IMAGE:-graphrec:latest}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+
+    # No `container_name`. Compose names scaled replicas
+    # `<project>-inference-<n>`, and a fixed name would cap this service at one
+    # replica — silently, by making the second one a name collision.
+
+    labels:
+      # Read back by `_parse_ps` and turned into `ReplicaObservation.version_id`
+      # and `.epoch`. This is how the reconciler knows a running container is
+      # serving what was asked for rather than what was asked for last time:
+      # without them a rollback to the version already resident would look like
+      # a deployment that had already converged.
+      # Plain `${}` rather than `${:?}`. Compose interpolates this file for
+      # every command, including `ps` and `down` — and those are issued by
+      # `observe` and `stop`, which have no version to supply because they are
+      # asking about containers rather than creating them. A required-variable
+      # guard here makes the reconciler unable to observe what it started.
+      # The guard that matters is in the process: `create_app` raises without a
+      # tenant pin (SRS §6.4), so an unpinned container never serves.
+      com.graphrec.tenant: "${GRAPHREC_TENANT_ID:-}"
+      com.graphrec.version: "${GRAPHREC_MODEL_VERSION_ID:-}"
+      com.graphrec.epoch: "${GRAPHREC_DEPLOY_EPOCH:-0}"
+      com.graphrec.role: "inference"
+
+    environment:
+      # The pin. `Settings` reads the bare name; the driver speaks the
+      # `GRAPHREC_*` namespace so that a serving container's environment is
+      # self-describing when read with `docker inspect`. The bridge is here, in
+      # one line, rather than as an alias in `config.py` — the platform has one
+      # settings vocabulary and this is the only process that needs the other.
+      TENANT_ID: "${GRAPHREC_TENANT_ID:-}"
+      GRAPHREC_TENANT_ID: "${GRAPHREC_TENANT_ID:-}"
+      GRAPHREC_MODEL_VERSION_ID: "${GRAPHREC_MODEL_VERSION_ID:-}"
+      GRAPHREC_BUNDLE_URI: "${GRAPHREC_BUNDLE_URI:-}"
+      GRAPHREC_DEPLOY_EPOCH: "${GRAPHREC_DEPLOY_EPOCH:-0}"
+
+      ENVIRONMENT: ${ENVIRONMENT:-local}
+      POSTGRES_HOST: postgres
+      POSTGRES_APP_USER: graphrec_app
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:-graphrec_app_local_only}
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT: http://minio:9000
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+
+      # A replica that has bound its version does not need to re-read desired
+      # state every ten seconds, but it does need to notice an epoch change on
+      # the same version — see `apps/inference/main.py::_poll`.
+      INFERENCE_POLL_SECONDS: ${INFERENCE_POLL_SECONDS:-10}
+
+    env_file:
+      - path: ../../.env
+        required: false
+
+    # The tenant role only. This process reads its own tenant's products and
+    # writes its own tenant's request rows; it has no grant that would let it do
+    # anything else even if the pin were wrong.
+    #
+    # No `secrets/` mount: the data plane verifies HMAC credentials, not JWTs,
+    # and the signing key is the control plane's business. A serving container
+    # that could mint a session token would be a serving container worth
+    # attacking.
+
+    # `/readyz`, not `/healthz`, and the body is checked rather than the status.
+    #
+    # This is load-before-swap's first link. `ready: false` keeps the container
+    # unhealthy, `_parse_ps` reports `ready=False`, `converge` sees
+    # `serving(desired) == 0`, and the previous version stays active. A
+    # healthcheck that accepted a 200 would report a replica that never loaded a
+    # bundle as ready and retire the version that was working (ER-F-06).
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import json, sys, urllib.request
+          try:
+              with urllib.request.urlopen("http://localhost:8020/readyz", timeout=3) as response:
+                  sys.exit(0 if json.load(response).get("ready") is True else 1)
+          except Exception:
+              sys.exit(1)
+      interval: 5s
+      timeout: 5s
+      # 24 retries at 5s past a 30s start period: two minutes of grace for a
+      # bundle download, comfortably inside the ten-minute activation timeout
+      # the reconciler applies. A replica that is still unready then is not slow.
+      retries: 24
+      start_period: 30s
+
+    # `--factory`, because `create_app` raises without a tenant pin and a
+    # module-level `app` would make the import itself depend on the environment.
+    command:
+      - uvicorn
+      - apps.inference.main:create_app_factory
+      - --factory
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8020"
+
+    expose:
+      - "8020"
+
+    # No `ports:`. Replicas are scaled, and a fixed host port would make the
+    # second one a bind conflict. Traffic reaches them through the shared
+    # network by service name, which is what a load balancer in front of this
+    # would resolve anyway.
+
+    # Drain rather than abort: an in-flight recommendation is 300 ms, and the
+    # rest of the budget is the metering write behind it.
+    stop_grace_period: 30s
+    restart: unless-stopped
+
+    networks:
+      - graphrec
+
+networks:
+  graphrec:
+    # The main stack's network, joined rather than created. These containers
+    # must reach `postgres`, `redis` and `minio` by name, and a project-local
+    # network would isolate every tenant's replicas from the database they exist
+    # to read. Bring the main stack up first: `docker compose up -d`.
+    external: true
+    name: ${GRAPHREC_NETWORK:-graphrec_default}

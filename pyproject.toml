@@ -86,6 +86,9 @@ known-first-party = ["graphrec", "apps"]
 "apps/control_api/deps.py" = ["TCH001", "TCH002", "TCH003"]
 "apps/control_api/schemas.py" = ["TCH001", "TCH002", "TCH003"]
 "apps/control_api/routers/*" = ["TCH001", "TCH002", "TCH003"]
+"apps/inference/deps.py" = ["TCH001", "TCH002", "TCH003"]
+"apps/inference/schemas.py" = ["TCH001", "TCH002", "TCH003"]
+"apps/inference/main.py" = ["TCH001", "TCH002", "TCH003"]
 # SQLAlchemy resolves `Mapped[...]` annotations at runtime against
 # `type_annotation_map`, so `datetime` and `uuid` must be real imports rather
 # than type-checking-only ones. Moving them breaks mapper configuration.

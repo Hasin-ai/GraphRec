@@ -10,6 +10,9 @@ would produce a message that lies.
 
 from __future__ import annotations
 
+# Runtime import, not a type-checking one: pydantic resolves these
+# annotations at class-construction time to build the validators.
+import uuid  # noqa: TCH003
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
@@ -210,6 +213,30 @@ class Settings(BaseSettings):
     session_ttl_seconds: int = 1_800
     serving_driver: ServingDriverKind = ServingDriverKind.COMPOSE
     candidate_index: CandidateIndexKind = CandidateIndexKind.INPROCESS
+
+    # SRS §6.4 pins an inference process to one tenant, and this is the pin.
+    # `None` in every other process: a control API that had a tenant id would
+    # have a default scope, which is the thing RLS exists to make impossible.
+    # The inference app refuses to start without it.
+    tenant_id: uuid.UUID | None = None
+
+    # How often the inference process asks whether desired state moved. Ten
+    # seconds because the reconciler's own loop is five: a poller slower than
+    # the thing it follows adds its interval to every activation, and one
+    # slower than an operator's patience is what makes a deploy feel stuck.
+    inference_poll_seconds: float = 10.0
+
+    # The reconciler's loop and the leader lock it holds while it runs. A
+    # deployment that has been `progressing` for longer than the timeout has
+    # failed to load, and ER-F-06 says what happens then: the previous version
+    # keeps serving and the new one is marked `failed_deployment`.
+    reconcile_interval_seconds: float = 5.0
+    activation_timeout_seconds: float = 600.0
+    #: Prefixed, because `COMPOSE_FILE` is Docker Compose's own variable and
+    #: the reconciler runs `docker compose` in a process that inherits its
+    #: environment. A setting named `compose_file` would silently become the
+    #: default `-f` for every command the driver spawns.
+    serving_compose_file: str = "deploy/single/docker-compose.serving.yml"
 
     # ------------------------------------------------------------ candidate index adapter
 

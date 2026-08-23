@@ -70,3 +70,54 @@ def owner_engine():
         pytest.skip(f"no database at {_owner_url().rsplit('@', 1)[-1]}: {exc}")
     yield engine
     engine.dispose()
+
+
+# ------------------------------------------------------------------ counters
+
+
+@pytest.fixture(scope="session")
+def counter_cache(settings):
+    """A synchronous handle on the Redis the app under test counts into.
+
+    Session-scoped because connecting once per test would cost more than the
+    sweep it exists for. A machine without Redis yields `None`: the counters are
+    a cache, everything that reads them repairs from the ledger on a miss, and a
+    suite that could not run without one would be testing the environment.
+    """
+    import redis
+
+    client = redis.Redis.from_url(str(settings.redis_url))
+    try:
+        client.ping()
+    except Exception:
+        client.close()
+        yield None
+        return
+    yield client
+    client.close()
+
+
+@pytest.fixture(autouse=True)
+def _sweep_counters(counter_cache) -> Iterator[None]:
+    """Usage counters do not survive a test, because the ledger under them does
+    not either.
+
+    Every fixture that empties `usage_events` returns the tenant to the start of
+    their month in the database — and leaves the Redis mirror of that month
+    saying what it said before. The mirror is authoritative on a hit
+    (`counter_ops.current` only recomputes on a *miss*), so the next test asks
+    for a training run and is told its quota is exhausted by usage no table
+    records. That is not a flaw in the counter: high-and-stale is the direction
+    metering deliberately errs in. It is a flaw in a teardown that wiped one of
+    the two places a period's total lives.
+
+    Scanned rather than flushed. `usage:` is the whole prefix metering owns, and
+    a suite that called `FLUSHDB` on a developer's Redis would take their
+    sessions and their queues with it.
+    """
+    yield
+    if counter_cache is None:
+        return
+    keys = list(counter_cache.scan_iter(match="usage:*", count=500))
+    if keys:
+        counter_cache.delete(*keys)

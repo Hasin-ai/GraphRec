@@ -138,7 +138,7 @@ class BodyLimitMiddleware:
         await self.app(scope, limited_receive, send)
 
     async def _reject(self, scope: Scope, receive: Receive, send: Send, limit: int) -> None:
-        from apps.control_api.errors import render_error
+        from graphrec.http.errors import render_error
 
         request = Request(scope, receive)
         response = render_error(request, ValidationError("request_too_large", status_code=413))

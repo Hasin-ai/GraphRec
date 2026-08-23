@@ -207,6 +207,65 @@ services:
     stop_grace_period: 600s
     restart: unless-stopped
 
+  # The convergence loop. Also behind `workers`, and for a different reason than
+  # the other two: this one drives Docker.
+  #
+  # `serving_driver=compose` means the reconciler shells out to `docker compose`
+  # for every tenant, which requires the host's Docker socket. That is a real
+  # privilege — a container with the socket can start any container — and it is
+  # mounted read-only and only here, in the one service whose entire job is to
+  # start containers. On a box where that is not acceptable, run this process on
+  # the host instead: `python -m apps.reconciler.main`.
+  #
+  # Start it with:  docker compose --profile workers up reconciler
+  reconciler:
+    profiles: ["workers"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+    environment:
+      ENVIRONMENT: local
+      POSTGRES_HOST: postgres
+      POSTGRES_APP_USER: graphrec_app
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:-graphrec_app_local_only}
+      POSTGRES_PLATFORM_USER: graphrec_platform
+      POSTGRES_PLATFORM_PASSWORD: ${POSTGRES_PLATFORM_PASSWORD:-graphrec_platform_local_only}
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT: http://minio:9000
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      SERVING_DRIVER: ${SERVING_DRIVER:-compose}
+      SERVING_COMPOSE_FILE: deploy/single/docker-compose.serving.yml
+      # Serving replicas join this stack's network by name, so the reconciler
+      # has to name it for the template it applies.
+      GRAPHREC_NETWORK: ${GRAPHREC_NETWORK:-graphrec_default}
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # The template it applies, and the build context that template names.
+      - ./deploy:/app/deploy:ro
+    command: ["python", "-m", "apps.reconciler.main"]
+    # Two of these can run: the second holds the advisory lock the first does
+    # not, and takes over the moment the leader's connection drops. Replicating
+    # it is a deployment decision, not a code one, which is why the count is
+    # here and the election is in `graphrec/domain/serving/reconciler.py`.
+    #
+    # Long enough to finish the pass in flight. A pass killed between `apply`
+    # and the replica rows leaves containers no row describes, and only the next
+    # leader can clean that up — after the activation timeout has burned.
+    stop_grace_period: 180s
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   minio_data:

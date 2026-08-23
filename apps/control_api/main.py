@@ -18,8 +18,6 @@ from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from redis.asyncio import ConnectionPool, Redis
 
-from apps.control_api.errors import install_error_handlers
-from apps.control_api.middleware import BodyLimitMiddleware, RequestContextMiddleware
 from apps.control_api.routers import (
     api_keys,
     auth,
@@ -28,6 +26,7 @@ from apps.control_api.routers import (
     platform_auth,
     products,
     registry,
+    serving,
     tenants,
     training,
     usage,
@@ -39,6 +38,12 @@ from graphrec.common.config import Settings, get_settings
 from graphrec.common.logging import configure_logging, get_logger
 from graphrec.db.engine import create_app_engine, create_platform_engine, create_sessionmaker
 from graphrec.domain.metering.counters import RedisUsageCounters, ResilientUsageCounters
+from graphrec.http import (
+    BodyLimitMiddleware,
+    RequestContextMiddleware,
+    install_error_handlers,
+)
+from graphrec.storage.factory import create_artifact_store
 
 logger = get_logger(__name__)
 
@@ -74,6 +79,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await app.state.engine.dispose()
     await app.state.platform_engine.dispose()
     await app.state.redis.aclose()
+    # And the pool under it. `aclose` returns the client's own connection and
+    # leaves every other one in the pool open, so a process that started and
+    # stopped an app — a test, a reload, a CLI — leaves sockets for the garbage
+    # collector to notice later as an unraisable `ResourceWarning`.
+    await app.state.redis_pool.disconnect()
     logger.info("api_stopping")
 
 
@@ -129,8 +139,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # The metering cache. Wrapped so that Redis being unreachable costs a
     # ledger query rather than a failed request — a measurement is never allowed
     # to depend on a cache being up (`domain/metering/counters.py`).
-    app.state.redis = Redis(connection_pool=ConnectionPool.from_url(str(settings.redis_url)))
+    # The pool is kept as well as the client: closing a client does not
+    # disconnect a pool it was handed, and shutdown has to reach the pool.
+    app.state.redis_pool = ConnectionPool.from_url(str(settings.redis_url))
+    app.state.redis = Redis(connection_pool=app.state.redis_pool)
     app.state.usage_counters = ResilientUsageCounters(RedisUsageCounters(app.state.redis))
+
+    # The artifact store, for the one control-plane operation that needs the
+    # bytes: a roll back validates that its target's artifact is still there
+    # before it changes desired state (ER-F-07). `:archive` uses it too, to
+    # delete what it retires. A control API configured without one still reads
+    # the registry; it just says so rather than pretending the check passed.
+    app.state.artifact_store = create_artifact_store(settings)
 
     app.state.tokens = TokenService(
         private_key_path=settings.jwt_private_key_path,
@@ -155,6 +175,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     v1.include_router(usage.router)
     v1.include_router(training.router)
     v1.include_router(registry.router)
+    v1.include_router(serving.router)
     # Snapshots hang off `/v1/datasets`, not `/v1/training-jobs`. A snapshot
     # outlives the run that produced it and is referenced by a model version, so
     # addressing it through the job would be addressing it through one of its
