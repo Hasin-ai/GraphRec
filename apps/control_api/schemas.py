@@ -746,3 +746,140 @@ class TrainingJobResponse(BaseModel):
 
 class TrainingJobListResponse(BaseModel):
     jobs: list[TrainingJobResponse]
+
+
+# ------------------------------------------------------------- model registry
+
+
+class ArchiveVersionRequest(_Body):
+    """L1798: the archive dialog has no reason field.
+
+    BACKEND_PLAN L1168 specifies `{ reason }`, and the console the specification
+    is drawn from does not collect one. Requiring it would make the prototype's
+    own dialog fail, so it is optional here and recorded when it is sent — which
+    is also what Phase 12's audit entry needs, since an archive with no stated
+    reason is still an archive somebody has to account for.
+    """
+
+    reason: str | None = Field(default=None, min_length=4, max_length=500)
+
+
+class VersionActionBody(BaseModel):
+    """One control in the `actions` block (BACKEND_PLAN L1155).
+
+    `reason` is populated only when the control is disabled, for the reason
+    `blocked_reason` is on a training job: a reason beside an enabled button is
+    a reason the console has to remember not to show.
+    """
+
+    allowed: bool
+    reason: str | None
+
+
+class VersionActionsBody(BaseModel):
+    activate: VersionActionBody
+    rollback: VersionActionBody
+    archive: VersionActionBody
+
+
+class VersionMeasuresBody(BaseModel):
+    """The four measures the comparison table draws (L1752-1755).
+
+    Every field is nullable. A measure that was not recorded is absent, not
+    zero: zero is a score, and a coverage rendered as 0.00 says the model
+    recommended one item to everybody.
+    """
+
+    recall_at_10: float | None
+    hit_rate_at_10: float | None
+    ndcg_at_10: float | None
+    coverage: float | None
+
+
+class VersionComparisonBody(VersionMeasuresBody):
+    """The active version's column, labelled with its number (L1755)."""
+
+    version_number: int
+
+
+class VersionArtifactBody(BaseModel):
+    digest: str
+    #: The store's own URI, not a download link, for the reason the snapshot's
+    #: `uri` is not one.
+    uri: str
+    snapshot_id: uuid.UUID
+    #: Rendered — "sequence · product · category" (L1758) — rather than the
+    #: stored object. Phase 11 compares contracts field by field; this is the
+    #: line the page draws.
+    feature_contract: str
+    embedding_dim: int
+
+
+class ModelVersionResponse(BaseModel):
+    """The whole `/models/:versionId` page, including its three-way comparison.
+
+    `baseline` is the platform's popularity ranker over the same held-out rows
+    (L1752), and `active_comparison` is `null` when nothing is active or when
+    this *is* the active version — the prototype renders an em-dash there, which
+    is a client's rendering of an absent value rather than a value the server
+    should invent.
+    """
+
+    version_id: uuid.UUID
+    version_number: int
+    model_id: uuid.UUID
+    model_type: str
+    status: str
+    created_at: dt.datetime
+    archived_at: dt.datetime | None
+    training_job_id: uuid.UUID
+    metrics: VersionMeasuresBody
+    baseline: VersionMeasuresBody
+    active_comparison: VersionComparisonBody | None
+    artifact: VersionArtifactBody
+    eligible: bool
+    failure_note: str | None
+    actions: VersionActionsBody
+
+
+class ModelVersionListItem(BaseModel):
+    """One row of the `/models` table (L1726-1733).
+
+    Deliberately not the detail response. The table draws a version number, a
+    status, a date and three headline numbers; the detail response carries a
+    three-way comparison that costs two more reads per row and that no column
+    here renders. `metrics` is the denormalised copy on `model_versions`, which
+    is what that column exists for.
+
+    `can_activate` and `blocked_reason` are the row's Activate control (L1733),
+    resolved server-side like every other gate-5 control.
+    """
+
+    version_id: uuid.UUID
+    version_number: int
+    model_type: str
+    status: str
+    created_at: dt.datetime
+    metrics: VersionMeasuresBody
+    eligible: bool
+    serving: bool
+    can_activate: bool
+    blocked_reason: str | None
+
+
+class ModelVersionListResponse(BaseModel):
+    versions: list[ModelVersionListItem]
+
+
+class ModelVersionSummaryResponse(BaseModel):
+    """The five stat cards above `/models` (L1737).
+
+    A summary endpoint rather than a client-side count, because counting
+    client-side requires the whole list and `/models` is paginated.
+    """
+
+    active: int
+    desired: int
+    eligible: int
+    retired: int
+    failed_deployment: int

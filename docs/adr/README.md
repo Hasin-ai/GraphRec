@@ -11,11 +11,11 @@ gate that depends on it.
 | D1 | Resource model: SRS-native vs AWS Personalize | **Confirmed — SRS-native** | Phase 2 |
 | D2 | Job queue: PostgreSQL `SKIP LOCKED` | **Confirmed — by instruction** (ADR 0011) | Phase 4 |
 | D3 | Serving: Compose + `ServingDriver` port | Accepted | Phase 11 |
-| D4 | Candidates: in-process exact top-K behind `CandidateIndex` | Accepted | Phase 10 |
+| D4 | Candidates: in-process exact top-K behind `CandidateIndex` | **Confirmed — by instruction** (ADR 0026) | Phase 10 |
 | D5 | Token signing: EdDSA + published JWKS | **Confirmed** (ADR 0009) | Phase 3 |
 | D6 | Versioning: `/v1` and `/v1/platform/*` | **Confirmed** | Phase 2 |
 | D7 | Body limits: per-endpoint, not global | **Proposed — built to** | Phase 1 |
-| D8 | Model lifecycle: seven states | Accepted | Phase 10 |
+| D8 | Model lifecycle: seven states | **Confirmed — by instruction** (ADR 0027) | Phase 10 |
 | D9 | Product writes: POST + PUT + PATCH | **Confirmed — by instruction** (ADR 0012) | Phase 5 |
 | D10 | Pagination: limit/offset for console, cursor for volume | **Confirmed — by instruction** (ADR 0013) | Phase 5 |
 | D11 | Plans: STARTER / GROWTH / SCALE | **Confirmed** | Phase 2 |
@@ -48,10 +48,14 @@ across the 97 `/v1` literals in six test files, and the suite passes unchanged.
 It is reversible at any phase, so the earlier claim that it grew more expensive
 over time was wrong.
 
-There is also a conflict the authorities do not resolve between them: the SRS
+There was also a conflict the authorities do not resolve between them: the SRS
 specifies a Qdrant Vector Store Contract (§6.3), which outranks D4's in-process
-exact top-K. D4 is marked Accepted below on BACKEND_PLAN's authority, but the
-SRS is higher, so an explicit "defer Qdrant" decision is needed before Phase 10.
+exact top-K. **ADR 0026 closes it.** The reading it takes is that §6.3 specifies
+an isolation contract and D-5 specifies an implementation: the contract —
+per-tenant indices, `tenant_id` on every manifest, deletion on archive — is
+implemented by the in-process adapter, and the product name is deferred behind
+the `CandidateIndex` port. The divergence is now a decision on the record rather
+than a discrepancy waiting to be found.
 
 ## The next gate
 
@@ -72,6 +76,15 @@ marked *confirmed by instruction to proceed*. As with D2 that is a weaker
 confirmation than an explicit answer and is named as such rather than dressed up
 as one. Both remain cheap to revisit — D9 adds or removes a verb on one
 resource, D10 a parameter on a list.
+
+**D4 and D8 are closed the same way.** BUILD_PROMPT marks Phase 10 🛑 *"CONFIRM
+D4 (in-process index) and D8 (7-value lifecycle) before starting"*. The
+instruction to complete Phases 8–15 was given without separate answers, so both
+were built to BUILD_PROMPT's own recommendation and recorded as **ADR 0026** and
+**ADR 0027**, marked *confirmed by instruction to proceed*. D4 additionally
+carries the SRS §6.3 deferral described above, which is a decision of a
+different weight: it diverges from the highest authority in the project and
+says so.
 
 **Phases 6, 7 and 8 are built and nothing gated either.** BUILD_PROMPT marks no 🛑
 on ingestion, metering or offline modelling. Phase 8 recorded three decisions of

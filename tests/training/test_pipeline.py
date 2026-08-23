@@ -14,10 +14,12 @@ decide what a tenant sees when something goes wrong.
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 import sqlalchemy as sa
 
-from graphrec.common.enums import JobState
+from graphrec.common.enums import JobState, ModelVersionStatus
 from graphrec.domain.training.service import TrainingRequest
 from graphrec.storage import keys
 from graphrec.training import states
@@ -246,32 +248,173 @@ async def test_the_curve_starts_from_the_popularity_baseline(
     assert "loss" in trained
 
 
-async def test_the_item_embeddings_are_exported_for_the_index_to_load(
+async def test_the_run_exports_a_bundle_the_index_can_load(
     service, bound, tenant, counters, seed_interactions, run_worker, artifact_store
 ) -> None:
     """`indexing_embeddings` produces the one artifact serving needs.
 
-    A `safetensors` file with the tenant in its metadata, which is what Phase
-    10's foreign-manifest refusal will read.
+    Phase 9 wrote a bare tensor keyed by the *job*; Phase 10 writes a bundle
+    keyed by the *version*, because the version is what a deployment names and
+    a job can produce at most one. It is checked by loading it through
+    `load_bundle` rather than by opening the file: the exit criterion is that a
+    corrupted or foreign bundle is refused at load, and a test that read the
+    tensor directly would pass against a bundle the loader rejects.
     """
-    from safetensors import safe_open
+    from graphrec.ml import bundle as bundle_ops
+    from tests.training.conftest import ITEMS
 
     await seed_interactions(tenant)
     training_job_id = await _queue_a_run(service, bound, tenant, counters)
     await run_worker()
 
-    key = keys.bundle_key(tenant, training_job_id, "items.safetensors")
+    version_id, _status = await _version(bound, tenant, training_job_id)
+    key = keys.bundle_key(tenant, version_id, bundle_ops.BUNDLE_NAME)
     assert artifact_store.exists(key)
 
-    path = artifact_store.root / key
-    with safe_open(path, framework="pt") as handle:
-        assert handle.metadata()["tenant_id"] == str(tenant)
-        assert handle.metadata()["training_job_id"] == str(training_job_id)
-        matrix = handle.get_tensor("item_embeddings")
+    loaded = bundle_ops.load_bundle(artifact_store.root / key, tenant_id=tenant)
+    assert loaded.manifest.tenant_id == tenant
+    assert loaded.manifest.training_job_id == training_job_id
+    assert loaded.manifest.item_count == ITEMS
+    assert loaded.item_embeddings.shape == (ITEMS, loaded.manifest.embedding_dim)
 
-    from tests.training.conftest import ITEMS
 
-    assert matrix.shape[0] == ITEMS
+async def test_another_tenant_cannot_load_the_bundle_this_run_produced(
+    service, bound, tenant, counters, seed_interactions, run_worker, artifact_store
+) -> None:
+    """The manifest is the evidence, and it is sealed by the run.
+
+    `keys.belongs_to` checks a path, and a path is a claim made by whoever wrote
+    it. This checks the thing training actually signed into the file — over a
+    bundle a real pipeline produced rather than one the test wrote.
+    """
+    from graphrec.ml import bundle as bundle_ops
+
+    await seed_interactions(tenant)
+    training_job_id = await _queue_a_run(service, bound, tenant, counters)
+    await run_worker()
+
+    version_id, _status = await _version(bound, tenant, training_job_id)
+    path = artifact_store.root / keys.bundle_key(tenant, version_id, bundle_ops.BUNDLE_NAME)
+
+    with pytest.raises(bundle_ops.BundleError):
+        bundle_ops.load_bundle(path, tenant_id=uuid.uuid4())
+
+
+async def test_a_completed_run_registers_a_version_against_the_floor(
+    service, bound, tenant, counters, seed_interactions, run_worker
+) -> None:
+    """The `registering` stage is not a label on the rail — it writes a row.
+
+    The status is whatever the floor decided, so this asserts it is one of the
+    two verdicts rather than asserting it is `eligible`: twenty-four seeded
+    users are not enough data to guarantee a model that beats popularity, and a
+    test that demanded one would be a test of the fixture's luck. What is
+    pinned is that a verdict was reached, that a rejection carries its
+    explanation, and that an eligible version carries none —
+    `ck_model_versions_failure_note` is the schema saying the same thing.
+    """
+    await seed_interactions(tenant)
+    training_job_id = await _queue_a_run(service, bound, tenant, counters)
+    await run_worker()
+
+    version_id, status = await _version(bound, tenant, training_job_id)
+    assert status in {
+        ModelVersionStatus.ELIGIBLE.value,
+        ModelVersionStatus.REJECTED.value,
+    }, "the floor reaches a verdict; `registered` means it never ran"
+
+    async with bound(tenant) as session:
+        note, number, dim = (
+            await session.execute(
+                sa.text(
+                    "SELECT failure_note, version_number, embedding_dim "
+                    "  FROM model_versions WHERE model_version_id = :id"
+                ),
+                {"id": version_id},
+            )
+        ).one()
+
+    assert number == 1, "the first version a tenant trains is version 1"
+    assert dim > 0
+    if status == ModelVersionStatus.REJECTED.value:
+        assert note, "a rejection a tenant cannot read is a rejection they cannot act on"
+    else:
+        assert note is None
+
+
+async def test_registration_records_both_the_version_and_the_baseline_it_beat(
+    service, bound, tenant, counters, seed_interactions, run_worker
+) -> None:
+    """CON-01. The comparison the console draws needs both rows to exist, and
+    the split column is what tells them apart."""
+    await seed_interactions(tenant)
+    training_job_id = await _queue_a_run(service, bound, tenant, counters)
+    await run_worker()
+
+    version_id, _status = await _version(bound, tenant, training_job_id)
+    async with bound(tenant) as session:
+        rows = (
+            await session.execute(
+                sa.text(
+                    "SELECT split, metric_name FROM model_evaluation_metrics "
+                    " WHERE model_version_id = :id"
+                ),
+                {"id": version_id},
+            )
+        ).all()
+
+    recorded = {tuple(row) for row in rows}
+    assert {split for split, _ in recorded} == {"test", "baseline"}
+    # The suite runs the pipeline at `k=5`, and the metric names follow `k` —
+    # which is the whole point of the floor following it too.
+    assert ("test", "recall_at_5") in recorded
+    assert ("baseline", "recall_at_5") in recorded
+    assert ("test", "coverage") in recorded
+
+
+async def test_a_resumed_run_registers_one_version_rather_than_two(
+    service, bound, tenant, counters, seed_interactions, ingest_sessionmaker, artifact_store
+) -> None:
+    """`uq_model_versions_job` is the rule; this is the path that would break it.
+
+    A retry re-runs every stage after the checkpoint, `registering` included.
+    The second pass has to find the row the first pass wrote and reuse its id —
+    not only to satisfy the constraint, but because the id is the key the bundle
+    was uploaded under, and a second id would leave the first bundle orphaned
+    and the version pointing at a file nothing wrote.
+    """
+    from graphrec.domain.training.pipeline import TrainingPipeline
+
+    await seed_interactions(tenant)
+    training_job_id = await _queue_a_run(service, bound, tenant, counters)
+
+    class CrashesAfterTraining(TrainingPipeline):
+        """Dies in `evaluating`, which is after the checkpoint and before the
+        version exists — the window a naive retry would register twice in."""
+
+        def _evaluate(self, *args, **kwargs):
+            msg = "the worker was killed"
+            raise RuntimeError(msg)
+
+    await _run_pipeline(
+        ingest_sessionmaker,
+        CrashesAfterTraining(artifact_store, min_sequences=1, seed=7, k=5),
+        attempts=1,
+    )
+    await _clear_backoff(bound, tenant, training_job_id)
+    await _run_pipeline(
+        ingest_sessionmaker, TrainingPipeline(artifact_store, min_sequences=1, seed=7, k=5)
+    )
+
+    async with bound(tenant) as session:
+        count = await session.scalar(
+            sa.text("SELECT count(*) FROM model_versions WHERE training_job_id = :id"),
+            {"id": training_job_id},
+        )
+    assert count == 1
+
+    state, *_ = await _row(bound, tenant, training_job_id)
+    assert state == JobState.SUCCEEDED.value
 
 
 # ------------------------------------------------------------------- failure
@@ -587,6 +730,26 @@ async def test_a_resumed_run_does_not_write_a_second_snapshot(
 
 
 # ----------------------------------------------------------------- machinery
+
+
+async def _version(bound, tenant, training_job_id) -> tuple[uuid.UUID, str]:
+    """The version a run registered, by the job that produced it.
+
+    `uq_model_versions_job` guarantees at most one, so `one()` is the right
+    shape: a run that registered twice should fail here loudly rather than be
+    read as having registered once.
+    """
+    async with bound(tenant) as session:
+        row = (
+            await session.execute(
+                sa.text(
+                    "SELECT model_version_id, status FROM model_versions "
+                    " WHERE training_job_id = :id"
+                ),
+                {"id": training_job_id},
+            )
+        ).one()
+    return row[0], row[1]
 
 
 async def _clear_backoff(bound, tenant, training_job_id) -> None:

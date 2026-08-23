@@ -53,16 +53,17 @@ from graphrec.common.enums import JobState
 from graphrec.common.error_copy import resolve_copy
 from graphrec.common.ids import uuid7
 from graphrec.common.logging import get_logger
+from graphrec.domain.registry import lifecycle, registration
 from graphrec.domain.training import snapshot as snapshot_ops
 from graphrec.jobs.failures import JobCancelled, PermanentJobError
+from graphrec.ml import bundle as bundle_ops
 from graphrec.ml.eval.baseline import evaluate_popularity
 from graphrec.ml.eval.evaluate import evaluate_model
 from graphrec.ml.eval.split import leave_last_out
-from graphrec.ml.features.builder import FeatureBuilder
+from graphrec.ml.features.builder import STATIC_FEATURE_DIM, FeatureBuilder
 from graphrec.ml.graph.build import build_graph
 from graphrec.ml.train.loop import TrainingConfig, train
 from graphrec.storage import keys
-from graphrec.storage.store import digest_file
 from graphrec.training import states
 
 if TYPE_CHECKING:
@@ -71,6 +72,7 @@ if TYPE_CHECKING:
     from graphrec.jobs.handlers import JobContext
     from graphrec.ml.eval.metrics import Metrics
     from graphrec.ml.eval.split import Split
+    from graphrec.ml.features.builder import Dataset
     from graphrec.ml.graph.build import InteractionGraph
     from graphrec.ml.model.dgsr import DGSR
     from graphrec.ml.train.loop import EpochReport, TrainingResult
@@ -98,6 +100,15 @@ _AT_K = re.compile(r"^(?P<family>.+)_at_\d+$")
 #: — rather than from whatever the first trained epoch happened to score.
 BASELINE_EPOCH = 0
 
+#: The feature contract as the detail page draws it: "sequence · product ·
+#: category · brand" (L1758). Three of the four are real — the sequence pathway,
+#: the item's own static features and its category embedding — and `brand` is
+#: not, because nothing in the catalogue carries one. Naming three where the
+#: prototype names four is the honest version: a contract is a promise about
+#: what the bundle consumes, and promising a feature that is never read is how
+#: Phase 11's contract check comes to pass on a bundle it should refuse.
+FEATURE_CONTRACT_NAMES = ("sequence", "product", "category")
+
 #: `numeric(18,6)` in migration 0010. Quantised on the way in so the value the
 #: console plots is the value the evaluator computed, rather than the value
 #: PostgreSQL rounded it to on a later read.
@@ -115,6 +126,12 @@ class StageOutcome:
     metrics: dict[str, float]
     baseline: dict[str, float]
     beats_baseline: bool
+    model_version_id: uuid.UUID
+    #: `eligible` or `rejected`. On the progress rather than only in the row,
+    #: because the console's success note is written from what the job returned
+    #: and "trained successfully, and cannot be deployed" is one sentence a
+    #: tenant should not have to load a second page to read.
+    version_status: str
 
     def as_progress(self) -> dict[str, Any]:
         return {
@@ -126,7 +143,21 @@ class StageOutcome:
             "metrics": self.metrics,
             "baseline": self.baseline,
             "beats_baseline": self.beats_baseline,
+            "model_version_id": str(self.model_version_id),
+            "version_status": self.version_status,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class _BundleOutcome:
+    """What `indexing_embeddings` produced, as registration needs it."""
+
+    model_version_id: uuid.UUID
+    uri: str
+    digest: str
+    embedding_dim: int
+    item_count: int
+    feature_contract: dict[str, object]
 
 
 class Rail:
@@ -269,6 +300,7 @@ class TrainingPipeline:
         seed: int = 1337,
         k: int = 10,
         workspace: pathlib.Path | None = None,
+        floor: lifecycle.MetricFloor | None = None,
     ) -> None:
         self._store = store
         self._builder = builder or FeatureBuilder()
@@ -276,6 +308,20 @@ class TrainingPipeline:
         self._seed = seed
         self._k = k
         self._workspace = workspace
+        # The default, not `None`, so a pipeline constructed without an opinion
+        # applies the same floor as one constructed with the settings' values.
+        # A `None` floor would read as "no floor", which is the one behaviour
+        # this must not have.
+        #
+        # The default floor follows `k`. `MetricFloor`'s own default names
+        # `recall_at_10` because that is what the console leads with, but the
+        # evaluator emits `recall_at_{k}` — so a pipeline at `k=5` measured one
+        # name and was judged on another, and `judge` reads a missing measure as
+        # a rejection. Every version would have been rejected for "no
+        # measurement", correctly by the letter of the rule and wrongly by every
+        # other standard. An explicit floor still wins: a caller who names a
+        # metric has said which one they mean.
+        self._floor = floor or lifecycle.MetricFloor(metric=f"recall_at_{k}")
 
     async def run(self, ctx: JobContext) -> dict[str, Any]:
         """The handler. Nine stages, and one exit for each way a run can end."""
@@ -371,9 +417,20 @@ class TrainingPipeline:
         )
 
         # ---- indexing_embeddings
-        await rail.enter(JobState.INDEXING_EMBEDDINGS, "exporting item embeddings")
-        await self._export_embeddings(
-            ctx, scratch, training_job_id=training_job_id, model=result.model
+        await rail.enter(JobState.INDEXING_EMBEDDINGS, "building the candidate index")
+        bundle = await self._build_bundle(
+            ctx,
+            scratch,
+            training_job_id=training_job_id,
+            model_id=settings.model_id,
+            snapshot_id=snapshot_id,
+            model=result.model,
+            dataset=split.train,
+        )
+        await rail.note(
+            f"{bundle.item_count:,} items · {bundle.embedding_dim} dimensions",
+            items=bundle.item_count,
+            embedding_dim=bundle.embedding_dim,
         )
 
         # ---- registering
@@ -384,10 +441,23 @@ class TrainingPipeline:
             epoch=result.best_epoch,
             values=measured.as_dict(),
         )
-        # The checkpoint is the run's product until Phase 10 turns it into a
-        # version. Removing it here would mean a resumed job and a registered
-        # one need different artifacts; leaving it means registration reads
-        # exactly what training wrote.
+        verdict = await self._register(
+            ctx,
+            training_job_id=training_job_id,
+            model_id=settings.model_id,
+            snapshot_id=snapshot_id,
+            bundle=bundle,
+            measured=measured,
+            baseline=baseline,
+        )
+        await rail.note(
+            f"version registered as {verdict.status.value}",
+            model_version_id=str(bundle.model_version_id),
+            version_status=verdict.status.value,
+        )
+        # The checkpoint is left in place. Removing it here would mean a resumed
+        # job and a registered one need different artifacts; leaving it means a
+        # re-run of `registering` reads exactly what training wrote.
 
         return StageOutcome(
             snapshot_id=snapshot_id,
@@ -397,6 +467,8 @@ class TrainingPipeline:
             metrics={key: float(value) for key, value in measured.as_dict().items()},
             baseline={key: float(value) for key, value in baseline.as_dict().items()},
             beats_baseline=measured.beats(baseline),
+            model_version_id=bundle.model_version_id,
+            version_status=verdict.status.value,
         )
 
     # ------------------------------------------------------------ the pieces
@@ -597,44 +669,122 @@ class TrainingPipeline:
         baseline = evaluate_popularity(split.train, split.test, k=self._k)
         return measured, baseline
 
-    async def _export_embeddings(
+    async def _build_bundle(
         self,
         ctx: JobContext,
         scratch: pathlib.Path,
         *,
         training_job_id: uuid.UUID,
+        model_id: uuid.UUID,
+        snapshot_id: uuid.UUID,
         model: DGSR,
-    ) -> None:
-        """Write the item matrix the candidate index will be built from.
+        dataset: Dataset,
+    ) -> _BundleOutcome:
+        """Seal the item matrix into a bundle and put it in the store.
 
         Dot-product scoring means a version *is* an item matrix (ADR 0023), so
-        this stage produces the one artifact serving needs and Phase 10's
-        `CandidateIndex` loads. It is a `safetensors` file for the reason ADR
-        0025 gives, and it is exported here rather than at registration because
-        this is the stage the console named.
-        """
-        from safetensors.torch import save_file
+        this stage produces the one artifact serving needs and the one the
+        `CandidateIndex` is built from. It is written here rather than at
+        registration because this is the stage the console named — and because a
+        version whose bytes do not exist yet is a version that could be
+        activated before there is anything to activate.
 
-        path = scratch / "items.safetensors"
+        The version identifier is allocated *before* the upload, so the object's
+        key and the row that will describe it agree. A crash between the two
+        leaves an object with no row, which the retention sweep owns; the other
+        order would leave a row pointing at nothing, which a tenant would meet
+        as a failed activation.
+        """
+        existing = await self._registered_version(ctx, training_job_id=training_job_id)
+        version_id = existing or uuid7()
+
         matrix = await anyio.to_thread.run_sync(functools.partial(_export_matrix, model))
-        await anyio.to_thread.run_sync(
+        path = scratch / bundle_ops.BUNDLE_NAME
+        contract = bundle_ops.FeatureContract(
+            feature_builder_version=self._builder.VERSION,
+            static_feature_dim=STATIC_FEATURE_DIM,
+            category_count=dataset.n_categories,
+        )
+        manifest = await anyio.to_thread.run_sync(
             functools.partial(
-                save_file,
-                {"item_embeddings": matrix},
-                str(path),
-                metadata={
-                    "tenant_id": str(ctx.tenant_id),
-                    "training_job_id": str(training_job_id),
-                    "feature_builder_version": str(self._builder.VERSION),
-                },
+                bundle_ops.write_bundle,
+                path,
+                embeddings=matrix,
+                item_refs=list(dataset.item_refs),
+                tenant_id=ctx.tenant_id,
+                model_version_id=version_id,
+                training_job_id=training_job_id,
+                snapshot_id=snapshot_id,
+                feature_contract=contract,
+                notes={"model_id": str(model_id)},
             )
         )
-        key = keys.bundle_key(ctx.tenant_id, training_job_id, "items.safetensors")
-        self._store.put_file(key, path)
+        key = keys.bundle_key(ctx.tenant_id, version_id, bundle_ops.BUNDLE_NAME)
+        digest = self._store.put_file(key, path)
         logger.info(
-            "training_embeddings_exported",
-            extra={"key": key, "digest": digest_file(path)},
+            "training_bundle_exported",
+            extra={"key": key, "digest": digest, "items": manifest.item_count},
         )
+        return _BundleOutcome(
+            model_version_id=version_id,
+            uri=self._store.uri(key),
+            digest=digest,
+            embedding_dim=manifest.embedding_dim,
+            item_count=manifest.item_count,
+            feature_contract={
+                **contract.as_dict(),
+                # The rendered form the detail page draws (L1758). Stored beside
+                # the numbers rather than derived at read time, because the
+                # vocabulary belongs to the builder that produced it and a
+                # renderer in the API would have to know every past one.
+                "features": list(FEATURE_CONTRACT_NAMES),
+            },
+        )
+
+    async def _registered_version(
+        self, ctx: JobContext, *, training_job_id: uuid.UUID
+    ) -> uuid.UUID | None:
+        """This run's version identifier, if an earlier attempt allocated one."""
+        async with ctx.control() as control:
+            found = await registration.existing_version(control, training_job_id=training_job_id)
+        return None if found is None else found[0]
+
+    async def _register(
+        self,
+        ctx: JobContext,
+        *,
+        training_job_id: uuid.UUID,
+        model_id: uuid.UUID,
+        snapshot_id: uuid.UUID,
+        bundle: _BundleOutcome,
+        measured: Metrics,
+        baseline: Metrics,
+    ) -> lifecycle.Verdict:
+        """Write the version, then let the floor decide about it.
+
+        The verdict is returned rather than logged here so it reaches the job's
+        progress, which is where a tenant watching the rail sees whether the run
+        produced something they can deploy.
+        """
+        async with ctx.control() as control:
+            _version_id, verdict = await registration.register(
+                control,
+                tenant_id=ctx.tenant_id,
+                registration=registration.Registration(
+                    model_version_id=bundle.model_version_id,
+                    model_id=model_id,
+                    training_job_id=training_job_id,
+                    snapshot_id=snapshot_id,
+                    artifact_uri=bundle.uri,
+                    artifact_digest=bundle.digest,
+                    feature_contract=bundle.feature_contract,
+                    embedding_dim=bundle.embedding_dim,
+                    measured=measured.as_dict(),
+                    baseline=baseline.as_dict(),
+                ),
+                floor=self._floor,
+            )
+        return verdict
 
     async def _record_metrics(
         self,
@@ -690,7 +840,8 @@ class TrainingPipeline:
             row = (
                 await control.execute(
                     sa.text(
-                        "SELECT interaction_window_days, max_epochs FROM training_jobs "
+                        "SELECT interaction_window_days, max_epochs, model_id "
+                        "  FROM training_jobs "
                         "WHERE training_job_id = :training_job_id"
                     ),
                     {"training_job_id": training_job_id},
@@ -698,7 +849,7 @@ class TrainingPipeline:
             ).first()
         if row is None:
             raise PermanentJobError("job_failed")
-        return _RunSettings(window_days=int(row[0]), max_epochs=int(row[1]))
+        return _RunSettings(window_days=int(row[0]), max_epochs=int(row[1]), model_id=row[2])
 
     @contextlib.contextmanager
     def _scratch(self) -> Iterator[pathlib.Path]:
@@ -717,6 +868,10 @@ class TrainingPipeline:
 class _RunSettings:
     window_days: int
     max_epochs: int
+    #: The family the version belongs to. Read from the row rather than looked
+    #: up per tenant, because a run registers against the model it was requested
+    #: for even if the tenant has since acquired another.
+    model_id: uuid.UUID
 
 
 class _Flag:
@@ -792,6 +947,7 @@ def _copy(exc: PermanentJobError | None) -> str:
 __all__ = [
     "BASELINE_EPOCH",
     "CURVE_METRICS",
+    "FEATURE_CONTRACT_NAMES",
     "Rail",
     "StageOutcome",
     "TrainingPipeline",

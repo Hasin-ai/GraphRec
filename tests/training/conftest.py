@@ -79,8 +79,21 @@ def _empty_training(owner_engine) -> Iterator[None]:
     In dependency order, children first. `models` is included: the service
     creates a tenant's `default` model lazily, and a leftover one would make the
     "created on first request" assertion pass for the wrong reason.
+
+    The registry's two tables lead, and are not optional here. A completed run
+    now registers a `model_versions` row, and that row holds a `RESTRICT`
+    reference to the `training_jobs` row below it — so leaving them out does not
+    merely leave the registry dirty, it makes *this* teardown fail with a
+    foreign-key error in whichever test happened to be next.
     """
-    tables = ("training_metrics", "dataset_snapshots", "training_jobs", "models")
+    tables = (
+        "model_evaluation_metrics",
+        "model_versions",
+        "training_metrics",
+        "dataset_snapshots",
+        "training_jobs",
+        "models",
+    )
 
     def wipe() -> None:
         for table in tables:

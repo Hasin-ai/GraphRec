@@ -50,6 +50,7 @@ PINNED = [
     ("0009_metering", "USAGE_TYPES", UsageType),
     ("0009_metering", "MEASUREMENT_STATUSES", MeasurementStatus),
     ("0010_training", "TRAINING_STATES", "JobState"),
+    ("0011_registry", "VERSION_STATUSES", "ModelVersionStatus"),
 ]
 
 

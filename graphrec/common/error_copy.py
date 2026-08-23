@@ -242,6 +242,27 @@ ERROR_COPY: dict[str, str] = {
     "job_already_cancelling": (
         "This job is already being cancelled. It will stop at its next stage boundary."
     ),
+    # ------------------------------------------------- model registry verdicts
+    # The `actions` block on `/models/:versionId` already has its copy under
+    # "model versions" below — those are the prototype's own strings and are
+    # reused rather than restated here. What the prototype has no string for is
+    # the verdict itself, because its versions arrive already judged.
+    #
+    # (derived) — `model_versions.failure_note` for a version the floor turned
+    # down. It names both numbers because "below the floor" without them is a
+    # sentence a tenant can do nothing with, and CON-01 makes the popularity
+    # baseline a floor rather than a peer.
+    "model_version_below_baseline": (
+        "This version scored {measured} on {metric} against a popularity baseline of "
+        "{baseline}, so it was not made eligible to serve."
+    ),
+    # (derived) — the same verdict when the model cleared the baseline but not
+    # the absolute floor. Distinct because the two say different things about
+    # what to do next: beat the baseline by training differently, clear the
+    # floor by having more data.
+    "model_version_below_minimum": (
+        "This version scored {measured} on {metric}, below the {minimum} required to serve."
+    ),
     # ---------------------------------------------------------------- jobs
     # A job's terminal failure reason is rendered in the console (dc.html L1696,
     # "Failure reason"). It is therefore approved copy, never an exception

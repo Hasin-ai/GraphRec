@@ -27,6 +27,7 @@ from apps.control_api.routers import (
     ingestion,
     platform_auth,
     products,
+    registry,
     tenants,
     training,
     usage,
@@ -153,6 +154,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     v1.include_router(ingestion.router)
     v1.include_router(usage.router)
     v1.include_router(training.router)
+    v1.include_router(registry.router)
     # Snapshots hang off `/v1/datasets`, not `/v1/training-jobs`. A snapshot
     # outlives the run that produced it and is referenced by a model version, so
     # addressing it through the job would be addressing it through one of its
