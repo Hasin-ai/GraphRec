@@ -18,12 +18,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.control_api.deps import (
     CurrentTenant,
+    TenantAudit,
     get_session,
     get_settings_dep,
     get_token_service,
 )
 from apps.control_api.schemas import (
     AcceptInvitationRequest,
+    ChangeOwnPasswordRequest,
     ConfirmRecoveryRequest,
     MeResponse,
     RecoveryRequestedResponse,
@@ -33,6 +35,7 @@ from apps.control_api.schemas import (
     SessionResponse,
     SignInRequest,
     TenantResponse,
+    UpdateProfileRequest,
     UserResponse,
 )
 from graphrec.auth.tokens import TokenService
@@ -370,8 +373,7 @@ async def accept_invitation(
         )
 
 
-@router.get("/me", response_model=MeResponse, summary="The signed-in user")
-async def me(principal: CurrentTenant) -> MeResponse:
+def _me(principal: CurrentTenant) -> MeResponse:
     return MeResponse(
         tenant_user_id=principal.user.tenant_user_id,
         tenant_id=principal.tenant_id,
@@ -380,6 +382,72 @@ async def me(principal: CurrentTenant) -> MeResponse:
         role=principal.user.role,
         status=principal.user.status,
     )
+
+
+@router.get("/me", response_model=MeResponse, summary="The signed-in user")
+async def me(principal: CurrentTenant) -> MeResponse:
+    return _me(principal)
+
+
+@router.patch("/me", response_model=MeResponse, summary="Edit one's own display name")
+async def update_me(
+    body: UpdateProfileRequest,
+    principal: CurrentTenant,
+    service: Service,
+    audit: TenantAudit,
+) -> MeResponse:
+    """`/account`, top half. Any tenant user, their own record, one field.
+
+    There is no `{tenant_user_id}` in the path and there must not be: the target
+    is the principal, taken from the verified token. A path that named a user
+    would be a second way to edit somebody else, sitting next to `/users` which
+    is gate-3 protected, and only one of the two would be checked.
+    """
+    async with audit.action(
+        AuditAction.ACCESS,
+        resource_type="tenant_user",
+        resource_ref=principal.user.tenant_user_id,
+        details={"operation": "update_profile"},
+    ):
+        await service.update_own_profile(
+            principal.session, user=principal.user, display_name=body.display_name
+        )
+    return _me(principal)
+
+
+@router.post(
+    "/me:change-password",
+    response_model=MeResponse,
+    summary="Change one's own authentication material",
+)
+async def change_own_password(
+    body: ChangeOwnPasswordRequest,
+    principal: CurrentTenant,
+    service: Service,
+    audit: TenantAudit,
+) -> MeResponse:
+    """`/account`, bottom half. Requires the current password despite the session.
+
+    Audited as `access` on the user's own row with no detail beyond the
+    operation. What was changed is not recorded because there is nothing safe to
+    record about it, and *that* it was changed, by whom and when is the whole
+    value of the row.
+    """
+    async with audit.action(
+        AuditAction.ACCESS,
+        resource_type="tenant_user",
+        resource_ref=principal.user.tenant_user_id,
+        details={"operation": "change_password"},
+    ):
+        await service.change_own_password(
+            principal.session,
+            user=principal.user,
+            current_password=body.current_password,
+            password=body.password,
+            password_confirmation=body.password_confirmation,
+            keep_session=body.keep_session,
+        )
+    return _me(principal)
 
 
 __all__ = ["router"]

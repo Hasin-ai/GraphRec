@@ -144,6 +144,15 @@ class RegistryService:
             query = query.where(ModelVersion.status == status.value)
         return list((await session.scalars(query)).all())
 
+    async def count_versions(
+        self, session: AsyncSession, *, status: ModelVersionStatus | None = None
+    ) -> int:
+        """How many versions match, ignoring `limit`. See `list_versions`."""
+        query = sa.select(sa.func.count()).select_from(ModelVersion)
+        if status is not None:
+            query = query.where(ModelVersion.status == status.value)
+        return await session.scalar(query) or 0
+
     async def summary(self, session: AsyncSession) -> VersionSummary:
         """One grouped count, not five. Under RLS the whole table is the
         tenant's, so this is a single scan of a small relation."""

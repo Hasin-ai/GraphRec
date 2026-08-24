@@ -86,6 +86,22 @@ class Severity(StrEnum):
     CRITICAL = "critical"
 
 
+class Credential(StrEnum):
+    """credential vocabulary."""
+
+    USABLE = "usable"
+    EXPIRED = "expired"
+    REVOKED = "revoked"
+
+
+class Submission(StrEnum):
+    """submission vocabulary."""
+
+    PROCESSING = "processing"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
 class Availability(StrEnum):
     """From seed() products[].avail."""
 
@@ -278,6 +294,16 @@ BADGE_TONES: dict[str, dict[str, str]] = {
         "warning": "warn",
         "error": "danger",
         "critical": "danger",
+    },
+    "credential": {
+        "usable": "ok",
+        "expired": "warn",
+        "revoked": "danger",
+    },
+    "submission": {
+        "processing": "info",
+        "succeeded": "ok",
+        "failed": "danger",
     },
 }
 

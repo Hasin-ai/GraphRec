@@ -134,6 +134,30 @@ export function requireRole(me: Me, allowed: readonly TenantRole[]): void {
   }
 }
 
+/**
+ * Gate 3 as a child loader, for the routes that are not open to both roles.
+ *
+ * It reads `/v1/me` through the query client rather than through the parent
+ * route's data because a loader has no ancestor data to read: React Router
+ * runs a route's loaders in parallel, not in sequence. The read is free — the
+ * tenant guard on the shell has already put `me` in the cache, and
+ * `fetchQuery` returns it without a request.
+ *
+ * This is the mechanism §13 requires: a Tenant Administrator who types
+ * `/products` is refused by a route guard and lands on `/403`, rather than
+ * arriving at a page whose buttons happen to be missing.
+ */
+export function requireRoleLoader(
+  queryClient: QueryClient,
+  allowed: readonly TenantRole[],
+): () => Promise<null> {
+  return async () => {
+    const me = await queryClient.fetchQuery(meQuery);
+    requireRole(me, allowed);
+    return null;
+  };
+}
+
 /** Gates 1 and 3 for the platform realm, in one loader. */
 export async function platformGuard(
   queryClient: QueryClient,

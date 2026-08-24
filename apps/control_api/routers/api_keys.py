@@ -122,7 +122,11 @@ async def list_credentials(
     """`?state=usable` backs the /integration page (BACKEND_PLAN §12.3)."""
     now = dt.datetime.now(dt.UTC)
     rows = await service.list_for_tenant(principal.session, state=state)
-    return CredentialListResponse(credentials=[_view(row, now=now) for row in rows])
+    # Unpaginated: a tenant holds a handful of credentials, not a page of them.
+    # `total` is here for the same reason `UserListResponse` carries one.
+    return CredentialListResponse(
+        credentials=[_view(row, now=now) for row in rows], total=len(rows)
+    )
 
 
 @router.post(

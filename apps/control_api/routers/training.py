@@ -283,7 +283,8 @@ async def list_training_jobs(
     per row would be one query per row for a column nobody draws.
     """
     jobs = await service.list_jobs(principal.session, state=state, limit=limit)
-    return TrainingJobListResponse(jobs=[_render(job, None) for job in jobs])
+    total = await service.count_jobs(principal.session, state=state)
+    return TrainingJobListResponse(jobs=[_render(job, None) for job in jobs], total=total)
 
 
 @router.get(

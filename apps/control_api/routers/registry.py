@@ -144,7 +144,8 @@ async def list_model_versions(
         for version in versions
     }
     return ModelVersionListResponse(
-        versions=[_row(version, types[version.model_id], context) for version in versions]
+        versions=[_row(version, types[version.model_id], context) for version in versions],
+        total=await service.count_versions(principal.session, status=status),
     )
 
 

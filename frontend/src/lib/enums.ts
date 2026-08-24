@@ -61,6 +61,16 @@ export type Severity =
   | 'error'
   | 'critical';
 
+export type credential =
+  | 'usable'
+  | 'expired'
+  | 'revoked';
+
+export type submission =
+  | 'processing'
+  | 'succeeded'
+  | 'failed';
+
 export type Availability =
   | 'in_stock'
   | 'low_stock'
@@ -157,6 +167,8 @@ export const BADGE_TONES: Record<string, Record<string, BadgeTone>> = {
   user: { invited: 'info', locked: 'warn', disabled: 'danger', active: 'ok' },
   outcome: { cancelled: 'neu', denied: 'warn', failed: 'danger', succeeded: 'ok' },
   sev: { info: 'info', warning: 'warn', error: 'danger', critical: 'danger' },
+  credential: { usable: 'ok', expired: 'warn', revoked: 'danger' },
+  submission: { processing: 'info', succeeded: 'ok', failed: 'danger' },
 };
 
 export const SCOPE_LABELS: Record<CredentialScope, string> = {

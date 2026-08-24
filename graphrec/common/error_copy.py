@@ -52,6 +52,11 @@ ERROR_COPY: dict[str, str] = {
     "password_confirmation_mismatch": (
         "The new authentication material and its confirmation do not match."
     ),
+    # (derived) — the prototype's /account form renders the field marker only,
+    # so the banner half follows the register of `invalid_credentials` without
+    # repeating its hedge: the caller here is authenticated, so there is nothing
+    # to conceal about whether the account exists.
+    "current_password_invalid": "That is not your current authentication material.",
     # ---------------------------------------------------------- authorization
     # L1063
     "insufficient_role": (
@@ -96,6 +101,12 @@ ERROR_COPY: dict[str, str] = {
     "last_active_administrator": "The last active administrator cannot be demoted or disabled.",
     # L1249
     "user_already_disabled": "A disabled user is already unable to authenticate.",
+    # (derived) — no prototype path reaches this, because the console only
+    # offers Resend on a row whose status is `invited`. It exists for the direct
+    # caller who does not read the status first.
+    "user_not_invited": (
+        "That user has already accepted their invitation, so there is nothing to resend."
+    ),
     # ---------------------------------------------------------- credentials
     # L1137
     # L1136

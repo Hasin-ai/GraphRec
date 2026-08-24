@@ -356,6 +356,50 @@
         "title": "CancelTrainingRequest",
         "type": "object"
       },
+      "ChangeOwnPasswordRequest": {
+        "additionalProperties": false,
+        "description": "`POST /v1/me:change-password`. The current one is required, session or not.",
+        "properties": {
+          "current_password": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Current Password",
+            "type": "string"
+          },
+          "keep_session": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The caller's own refresh token, so the session they are typing in survives. Every other session for the account is revoked.",
+            "title": "Keep Session"
+          },
+          "password": {
+            "maxLength": 1024,
+            "minLength": 12,
+            "title": "Password",
+            "type": "string"
+          },
+          "password_confirmation": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Password Confirmation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "current_password",
+          "password",
+          "password_confirmation"
+        ],
+        "title": "ChangeOwnPasswordRequest",
+        "type": "object"
+      },
       "ChangeRoleRequest": {
         "additionalProperties": false,
         "properties": {
@@ -666,10 +710,15 @@
             },
             "title": "Credentials",
             "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
           }
         },
         "required": [
-          "credentials"
+          "credentials",
+          "total"
         ],
         "title": "CredentialListResponse",
         "type": "object"
@@ -1628,6 +1677,10 @@
       },
       "ModelVersionListResponse": {
         "properties": {
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
           "versions": {
             "items": {
               "$ref": "#/components/schemas/ModelVersionListItem"
@@ -1637,7 +1690,8 @@
           }
         },
         "required": [
-          "versions"
+          "versions",
+          "total"
         ],
         "title": "ModelVersionListResponse",
         "type": "object"
@@ -1793,6 +1847,86 @@
           "failed_deployment"
         ],
         "title": "ModelVersionSummaryResponse",
+        "type": "object"
+      },
+      "OnboardingResponse": {
+        "description": "`GET /v1/onboarding` \u2014 BUILD_PROMPT \u00a710.9's first console-only endpoint.\n\n`completed` and `total` are computed here rather than left to the client, so\nthat \"3 of 8\" cannot disagree with the ticks beside it.",
+        "properties": {
+          "completed": {
+            "title": "Completed",
+            "type": "integer"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/OnboardingStepBody"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "steps",
+          "completed",
+          "total"
+        ],
+        "title": "OnboardingResponse",
+        "type": "object"
+      },
+      "OnboardingStepBody": {
+        "description": "One step of the \u00a73.5 story, with the state that decides how it renders.",
+        "properties": {
+          "complete": {
+            "title": "Complete",
+            "type": "boolean"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "permitted": {
+            "description": "Whether the *caller* may perform this step, given their role.",
+            "title": "Permitted",
+            "type": "boolean"
+          },
+          "required_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The role that may perform this step, or null when any tenant user may. A caller who does not hold it still sees the step \u2014 it is somebody else's, not missing.",
+            "title": "Required Role"
+          },
+          "route": {
+            "description": "The console route that performs this step.",
+            "title": "Route",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "detail",
+          "route",
+          "complete",
+          "permitted"
+        ],
+        "title": "OnboardingStepBody",
         "type": "object"
       },
       "PlanBody": {
@@ -4067,10 +4201,15 @@
             },
             "title": "Jobs",
             "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
           }
         },
         "required": [
-          "jobs"
+          "jobs",
+          "total"
         ],
         "title": "TrainingJobListResponse",
         "type": "object"
@@ -4439,6 +4578,23 @@
         "title": "UpdatePlanRequest",
         "type": "object"
       },
+      "UpdateProfileRequest": {
+        "additionalProperties": false,
+        "description": "`PATCH /v1/me`. One field, because one field is all a user may change.",
+        "properties": {
+          "display_name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "display_name"
+        ],
+        "title": "UpdateProfileRequest",
+        "type": "object"
+      },
       "UsageItemBody": {
         "description": "One row of the usage table.\n\nThree fields are nullable and all three are nullable for the same reason.\n`measured` is `null` when we could not measure; `remaining` is `null` when\neither side of the subtraction is unknown; `effective_limit` is `null` when\nthe type is not bounded at all. The console renders each as a phrase \u2014 \"not\ncalculable\", \"unavailable\" \u2014 never as a zero (L1806, footnote L1824).\n\nA client that coalesces any of these to `0` has reintroduced exactly the\ndefect this contract exists to prevent.",
         "properties": {
@@ -4634,6 +4790,10 @@
       },
       "UserListResponse": {
         "properties": {
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
           "users": {
             "items": {
               "$ref": "#/components/schemas/UserResponse"
@@ -4643,12 +4803,14 @@
           }
         },
         "required": [
-          "users"
+          "users",
+          "total"
         ],
         "title": "UserListResponse",
         "type": "object"
       },
       "UserResponse": {
+        "description": "One tenant user, plus the one derived fact the console cannot compute.\n\n`is_last_active_administrator` is BUILD_PROMPT \u00a710.9's fifth console-only\nfield. The prototype worked it out client-side (`isLast`, dc.html L1243)\nbecause it held the whole user list; a real client holding one page of it\ncannot, and a client holding all of it would still be racing the server. It\nis the server's answer to \"would demoting or disabling this person leave the\ntenant with nobody who can administer it\", and the console renders it as a\ndisabled control with a reason rather than as a request that gets refused.",
         "properties": {
           "created_at": {
             "format": "date-time",
@@ -4662,6 +4824,11 @@
           "email": {
             "title": "Email",
             "type": "string"
+          },
+          "is_last_active_administrator": {
+            "default": false,
+            "title": "Is Last Active Administrator",
+            "type": "boolean"
           },
           "last_authenticated_at": {
             "anyOf": [
@@ -5939,6 +6106,98 @@
         "tags": [
           "auth"
         ]
+      },
+      "patch": {
+        "description": "`/account`, top half. Any tenant user, their own record, one field.\n\nThere is no `{tenant_user_id}` in the path and there must not be: the target\nis the principal, taken from the verified token. A path that named a user\nwould be a second way to edit somebody else, sitting next to `/users` which\nis gate-3 protected, and only one of the two would be checked.",
+        "operationId": "update_me_v1_me_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProfileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Edit one's own display name",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/v1/me:change-password": {
+      "post": {
+        "description": "`/account`, bottom half. Requires the current password despite the session.\n\nAudited as `access` on the user's own row with no detail beyond the\noperation. What was changed is not recorded because there is nothing safe to\nrecord about it, and *that* it was changed, by whom and when is the whole\nvalue of the row.",
+        "operationId": "change_own_password_v1_me_change_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeOwnPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Change one's own authentication material",
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/v1/metrics/summary": {
@@ -6285,6 +6544,33 @@
         "summary": "Ask for the retained previous version back",
         "tags": [
           "serving"
+        ]
+      }
+    },
+    "/v1/onboarding": {
+      "get": {
+        "description": "Eight existence queries in one transaction, so the answers agree with each other.\n\nEight round trips is the cost of the guarantee. The alternative \u2014 one query\nwith eight correlated subselects \u2014 is faster and unreadable, and this runs\nonce per visit to a page somebody opens a few times a day.",
+        "operationId": "get_onboarding_v1_onboarding_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnboardingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "The \u00a73.5 checklist",
+        "tags": [
+          "onboarding"
         ]
       }
     },
@@ -8436,6 +8722,55 @@
         ]
       }
     },
+    "/v1/users/{tenant_user_id}": {
+      "get": {
+        "description": "`/users/:userId` reads this. Open to both roles, exactly as the list is.\n\nNo `tenant_id` predicate: the session is bound, so another tenant's user\nreturns no row and becomes a 404 \u2014 the same answer an identifier belonging\nto nobody gets. That equality is the point (\u00a713), and adding a predicate\nhere would eventually turn one of those into a 403.",
+        "operationId": "get_user_v1_users__tenant_user_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Tenant User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "One user in the tenant",
+        "tags": [
+          "users"
+        ]
+      }
+    },
     "/v1/users/{tenant_user_id}/role": {
       "patch": {
         "description": "May refuse with 409 `last_active_administrator` \u2014 see the service.\n\nThat refusal is audited too, as `cancelled`: an administrator who tried to\ndemote the last administrator and was stopped is a thing worth being able to\nsee afterwards, and it is exactly the row that the refusal's own rollback\nwould have destroyed had it been written on this transaction.",
@@ -8548,6 +8883,55 @@
           }
         ],
         "summary": "Change a status",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/v1/users/{tenant_user_id}:resend-invitation": {
+      "post": {
+        "description": "`/users/:userId`'s Resend invitation dialog.\n\nA colon verb rather than `PUT /invitations/{id}`, because this does not\nreplace a resource the caller can name \u2014 the caller names the *user*, and\nwhich invitation row exists for them is the server's business. It refuses\nwith 409 `user_not_invited` for anyone already active, locked or disabled.",
+        "operationId": "resend_invitation_v1_users__tenant_user_id__resend_invitation_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Tenant User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Issue a fresh invitation to a user who has not accepted",
         "tags": [
           "users"
         ]

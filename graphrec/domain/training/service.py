@@ -388,6 +388,19 @@ class TrainingService:
             query = query.where(TrainingJob.state == state.value)
         return list((await session.scalars(query)).all())
 
+    async def count_jobs(self, session: AsyncSession, *, state: JobState | None = None) -> int:
+        """How many runs match, ignoring `limit`. The "of M" in the table header.
+
+        Counted rather than derived from `len(list_jobs(...))`, because that
+        number is capped by the limit and would quietly report 50 for a tenant
+        with four hundred runs — a wrong number is worse than no number, and
+        this one appears next to a pager.
+        """
+        query = sa.select(sa.func.count()).select_from(TrainingJob)
+        if state is not None:
+            query = query.where(TrainingJob.state == state.value)
+        return await session.scalar(query) or 0
+
     async def snapshot_of(
         self, session: AsyncSession, *, training_job_id: uuid.UUID
     ) -> DatasetSnapshot | None:

@@ -66,6 +66,27 @@ def _js_string_map(source: str, name: str) -> dict[str, str]:
     return dict(re.findall(r"'([^']*)'\s*:\s*'([^']*)'", match.group(1)))
 
 
+#: Badge tones for vocabularies the prototype never badged.
+#:
+#: `GROUPS` in the prototype carries a tone per value for the seven things it
+#: drew a badge for. Two more became badge-worthy once the console was wired to
+#: a real API: a credential's server-derived `state` (BUILD_PROMPT §10.9's sixth
+#: console-only field — the prototype computed `expires < today` client-side and
+#: rendered it as text) and a submission's `status`, which the prototype only
+#: ever showed mid-flight.
+#:
+#: They are declared here rather than written into `Badge` because §10.5's rule
+#: is that a badge's tone is looked up in the generated map and never
+#: hard-coded per value. That rule is about where the mapping lives, not about
+#: which file the prototype happened to put it in — so the mapping stays
+#: generated, stays in one place, and stays pinned by
+#: `tests/contract/test_enum_parity.py`.
+DECLARED_TONES: dict[str, dict[str, str]] = {
+    "credential": {"usable": "ok", "expired": "warn", "revoked": "danger"},
+    "submission": {"processing": "info", "succeeded": "ok", "failed": "danger"},
+}
+
+
 def _parse_groups(source: str) -> dict[str, dict[str, str]]:
     """Extract `const GROUPS={ job:{queued:'neu',...}, ... }` as group -> value -> tone."""
     match = re.search(r"const\s+GROUPS\s*=\s*\{(.*?)\n\}\s*;", source, re.DOTALL)
@@ -78,6 +99,7 @@ def _parse_groups(source: str) -> dict[str, dict[str, str]]:
         if entries:
             groups[group_name] = dict(entries)
     groups.pop("plain", None)  # a renderer escape hatch, not a vocabulary
+    groups.update(DECLARED_TONES)
     return groups
 
 

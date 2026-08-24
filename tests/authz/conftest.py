@@ -208,3 +208,41 @@ def operator_token(api, realm) -> str:
 
 def auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture(scope="module")
+def fresh_tenant(owner_engine, seed_engine, api):
+    """A tenant of one's own, for tests that change what they read.
+
+    `realm` is session-scoped and every sign-in in this suite draws on it, so a
+    test that changes a password, a role or a status there is changing what a
+    later test authenticates with. This hands out a private tenant instead —
+    same shape, same two users, deleted afterwards — and returns it already
+    signed in as both roles, because every caller needs that immediately.
+    """
+    with owner_engine.connect() as conn:
+        plan_id = conn.execute(
+            sa.text("SELECT plan_id FROM pricing_plans WHERE plan_code = 'GROWTH'")
+        ).scalar_one()
+
+    created: list[uuid.UUID] = []
+
+    def factory(label: str = "cns") -> dict:
+        tenant = _make_tenant(
+            seed_engine, label=label, status=TenantStatus.ACTIVE.value, plan_id=plan_id
+        )
+        created.append(tenant["tenant_id"])  # type: ignore[arg-type]
+        tenant["admin_token"] = _sign_in(api, tenant, "admin")
+        tenant["dev_token"] = _sign_in(api, tenant, "dev")
+        return tenant
+
+    yield factory
+
+    with owner_engine.begin() as conn:
+        conn.execute(sa.text("ALTER TABLE tenants NO FORCE ROW LEVEL SECURITY"))
+        try:
+            conn.execute(
+                sa.text("DELETE FROM tenants WHERE tenant_id = ANY(:ids)"), {"ids": created}
+            )
+        finally:
+            conn.execute(sa.text("ALTER TABLE tenants FORCE ROW LEVEL SECURITY"))

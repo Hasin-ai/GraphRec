@@ -109,6 +109,17 @@ class TenantResponse(BaseModel):
 
 
 class UserResponse(BaseModel):
+    """One tenant user, plus the one derived fact the console cannot compute.
+
+    `is_last_active_administrator` is BUILD_PROMPT §10.9's fifth console-only
+    field. The prototype worked it out client-side (`isLast`, dc.html L1243)
+    because it held the whole user list; a real client holding one page of it
+    cannot, and a client holding all of it would still be racing the server. It
+    is the server's answer to "would demoting or disabling this person leave the
+    tenant with nobody who can administer it", and the console renders it as a
+    disabled control with a reason rather than as a request that gets refused.
+    """
+
     tenant_user_id: uuid.UUID
     email: str
     display_name: str
@@ -116,6 +127,7 @@ class UserResponse(BaseModel):
     status: str
     created_at: dt.datetime
     last_authenticated_at: dt.datetime | None = None
+    is_last_active_administrator: bool = False
 
 
 class MeResponse(BaseModel):
@@ -222,12 +234,75 @@ class ChangeRoleRequest(_Body):
     role: TenantRole
 
 
+# ------------------------------------------------------------- onboarding
+
+
+class OnboardingStepBody(BaseModel):
+    """One step of the §3.5 story, with the state that decides how it renders."""
+
+    key: str
+    title: str
+    detail: str
+    route: str = Field(description="The console route that performs this step.")
+    complete: bool
+    required_role: str | None = Field(
+        default=None,
+        description=(
+            "The role that may perform this step, or null when any tenant user "
+            "may. A caller who does not hold it still sees the step — it is "
+            "somebody else's, not missing."
+        ),
+    )
+    permitted: bool = Field(
+        description="Whether the *caller* may perform this step, given their role."
+    )
+
+
+class OnboardingResponse(BaseModel):
+    """`GET /v1/onboarding` — BUILD_PROMPT §10.9's first console-only endpoint.
+
+    `completed` and `total` are computed here rather than left to the client, so
+    that "3 of 8" cannot disagree with the ticks beside it.
+    """
+
+    steps: list[OnboardingStepBody]
+    completed: int
+    total: int
+
+
+class UpdateProfileRequest(_Body):
+    """`PATCH /v1/me`. One field, because one field is all a user may change."""
+
+    display_name: str = Field(min_length=1, max_length=200)
+
+
+class ChangeOwnPasswordRequest(_Body):
+    """`POST /v1/me:change-password`. The current one is required, session or not."""
+
+    current_password: str = Field(min_length=1, max_length=1024)
+    password: str = Field(min_length=12, max_length=1024)
+    password_confirmation: str = Field(min_length=1, max_length=1024)
+    keep_session: str | None = Field(
+        default=None,
+        # The same bound `RefreshRequest.refresh_token` uses, because it is the
+        # same value. 512 was the invitation-token bound copied one field too
+        # far, and it made this field unable to hold anything a caller could
+        # actually put in it.
+        max_length=4096,
+        description=(
+            "The caller's own refresh token, so the session they are typing in "
+            "survives. Every other session for the account is revoked."
+        ),
+    )
+
+
 class ChangeStatusRequest(_Body):
     status: UserStatus
 
 
 class UserListResponse(BaseModel):
     users: list[UserResponse]
+    total: int
 
 
 # ------------------------------------------------------------- credentials
@@ -306,6 +381,7 @@ class IssuedCredentialResponse(BaseModel):
 
 class CredentialListResponse(BaseModel):
     credentials: list[CredentialResponse]
+    total: int
 
 
 class ScopeDescriptor(BaseModel):
@@ -790,6 +866,7 @@ class TrainingJobResponse(BaseModel):
 
 class TrainingJobListResponse(BaseModel):
     jobs: list[TrainingJobResponse]
+    total: int
 
 
 # ------------------------------------------------------------- model registry
@@ -913,6 +990,7 @@ class ModelVersionListItem(BaseModel):
 
 class ModelVersionListResponse(BaseModel):
     versions: list[ModelVersionListItem]
+    total: int
 
 
 class ModelVersionSummaryResponse(BaseModel):

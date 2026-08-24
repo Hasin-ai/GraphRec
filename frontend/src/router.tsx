@@ -38,12 +38,36 @@ import { InviteAcceptRoute } from './routes/public/InviteAccept';
 import { AdminLoginRoute } from './routes/public/AdminLogin';
 import { TenantStatusRoute } from './routes/account/TenantStatus';
 import { HomeRoute } from './routes/Home';
+import { CredentialsRoute } from './routes/credentials/Credentials';
+import { IntegrationRoute } from './routes/integration/Integration';
+import { AccountRoute } from './routes/account/Account';
+import { UsersRoute } from './routes/users/Users';
+import { UserDetailRoute } from './routes/users/UserDetail';
+import { AuditRoute } from './routes/audit/Audit';
+import { ProductsRoute } from './routes/products/Products';
+import { ProductFormRoute } from './routes/products/ProductForm';
+import { ProductSyncRoute } from './routes/products/ProductSync';
+import { ProductDetailRoute } from './routes/products/ProductDetail';
+import { SubmitEventsRoute } from './routes/events/SubmitEvents';
+import { SubmissionDetailRoute } from './routes/submissions/SubmissionDetail';
+import { TrainingRoute } from './routes/training/Training';
+import { TrainingDetailRoute } from './routes/training/TrainingDetail';
+import { ModelsRoute } from './routes/models/Models';
+import { ModelDetailRoute } from './routes/models/ModelDetail';
+import { UsageRoute } from './routes/usage/Usage';
+import { ServiceStatusRoute } from './routes/status/ServiceStatus';
 import { adminIndexLoader } from './routes/AdminIndex';
 import { rootLoader } from './routes/root';
 
-import { platformGuard, tenantGuard, tenantStatusGuard } from './guards';
+import { platformGuard, requireRoleLoader, tenantGuard, tenantStatusGuard } from './guards';
 
 export function createRouter(queryClient: QueryClient) {
+  // The two role sets, named once. §4's table gives the Tenant Administrator
+  // no catalogue access at all — that asymmetry is intentional and comes from
+  // the use-case diagrams, so a developer route is not "administrator plus
+  // developer" and must not be widened into one.
+  const admin = requireRoleLoader(queryClient, ['tenant_administrator']);
+  const developer = requireRoleLoader(queryClient, ['tenant_developer']);
   return createBrowserRouter([
     {
       path: '/',
@@ -91,8 +115,35 @@ export function createRouter(queryClient: QueryClient) {
       loader: ({ request }) => tenantGuard(queryClient, request),
       errorElement: <RouteErrorBoundary />,
       children: [
+        // Open to both roles.
         { path: '/home', element: <HomeRoute /> },
-        // Phase 14 adds the remaining 29 tenant routes here.
+        { path: '/credentials', element: <CredentialsRoute /> },
+        { path: '/integration', element: <IntegrationRoute /> },
+        { path: '/account', element: <AccountRoute /> },
+
+        // Tenant Administrator.
+        { path: '/users', loader: admin, element: <UsersRoute /> },
+        { path: '/users/:userId', loader: admin, element: <UserDetailRoute /> },
+        { path: '/audit', loader: admin, element: <AuditRoute /> },
+        { path: '/training', loader: admin, element: <TrainingRoute /> },
+        { path: '/training/:jobId', loader: admin, element: <TrainingDetailRoute /> },
+        { path: '/models', loader: admin, element: <ModelsRoute /> },
+        { path: '/models/:versionId', loader: admin, element: <ModelDetailRoute /> },
+        { path: '/usage', loader: admin, element: <UsageRoute /> },
+        { path: '/service-status', loader: admin, element: <ServiceStatusRoute /> },
+
+        // Tenant Developer. `/products/new` and `/products/sync` precede
+        // `/products/:productId` so that neither is read as an identifier.
+        { path: '/products', loader: developer, element: <ProductsRoute /> },
+        { path: '/products/new', loader: developer, element: <ProductFormRoute /> },
+        { path: '/products/sync', loader: developer, element: <ProductSyncRoute /> },
+        { path: '/products/:productId', loader: developer, element: <ProductDetailRoute /> },
+        { path: '/events/submit', loader: developer, element: <SubmitEventsRoute /> },
+        {
+          path: '/submissions/:submissionId',
+          loader: developer,
+          element: <SubmissionDetailRoute />,
+        },
       ],
     },
 

@@ -532,6 +532,40 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
+        /**
+         * Edit one's own display name
+         * @description `/account`, top half. Any tenant user, their own record, one field.
+         *
+         *     There is no `{tenant_user_id}` in the path and there must not be: the target
+         *     is the principal, taken from the verified token. A path that named a user
+         *     would be a second way to edit somebody else, sitting next to `/users` which
+         *     is gate-3 protected, and only one of the two would be checked.
+         */
+        patch: operations["update_me_v1_me_patch"];
+        trace?: never;
+    };
+    "/v1/me:change-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change one's own authentication material
+         * @description `/account`, bottom half. Requires the current password despite the session.
+         *
+         *     Audited as `access` on the user's own row with no detail beyond the
+         *     operation. What was changed is not recorded because there is nothing safe to
+         *     record about it, and *that* it was changed, by whom and when is the whole
+         *     value of the row.
+         */
+        post: operations["change_own_password_v1_me_change_password_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
         patch?: never;
         trace?: never;
     };
@@ -702,6 +736,30 @@ export interface paths {
          *     weaker copy of a check RLS already made.
          */
         post: operations["rollback_model_v1_models__model_id__rollback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/onboarding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The §3.5 checklist
+         * @description Eight existence queries in one transaction, so the answers agree with each other.
+         *
+         *     Eight round trips is the cost of the guarantee. The alternative — one query
+         *     with eight correlated subselects — is faster and unreadable, and this runs
+         *     once per visit to a page somebody opens a few times a day.
+         */
+        get: operations["get_onboarding_v1_onboarding_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1449,6 +1507,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/users/{tenant_user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One user in the tenant
+         * @description `/users/:userId` reads this. Open to both roles, exactly as the list is.
+         *
+         *     No `tenant_id` predicate: the session is bound, so another tenant's user
+         *     returns no row and becomes a 404 — the same answer an identifier belonging
+         *     to nobody gets. That equality is the point (§13), and adding a predicate
+         *     here would eventually turn one of those into a 403.
+         */
+        get: operations["get_user_v1_users__tenant_user_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/users/{tenant_user_id}/role": {
         parameters: {
             query?: never;
@@ -1489,6 +1572,31 @@ export interface paths {
         head?: never;
         /** Change a status */
         patch: operations["change_status_v1_users__tenant_user_id__status_patch"];
+        trace?: never;
+    };
+    "/v1/users/{tenant_user_id}:resend-invitation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issue a fresh invitation to a user who has not accepted
+         * @description `/users/:userId`'s Resend invitation dialog.
+         *
+         *     A colon verb rather than `PUT /invitations/{id}`, because this does not
+         *     replace a resource the caller can name — the caller names the *user*, and
+         *     which invitation row exists for them is the server's business. It refuses
+         *     with 409 `user_not_invited` for anyone already active, locked or disabled.
+         */
+        post: operations["resend_invitation_v1_users__tenant_user_id__resend_invitation_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
 }
@@ -1670,6 +1778,23 @@ export interface components {
             /** Reason */
             reason: string;
         };
+        /**
+         * ChangeOwnPasswordRequest
+         * @description `POST /v1/me:change-password`. The current one is required, session or not.
+         */
+        ChangeOwnPasswordRequest: {
+            /** Current Password */
+            current_password: string;
+            /**
+             * Keep Session
+             * @description The caller's own refresh token, so the session they are typing in survives. Every other session for the account is revoked.
+             */
+            keep_session?: string | null;
+            /** Password */
+            password: string;
+            /** Password Confirmation */
+            password_confirmation: string;
+        };
         /** ChangeRoleRequest */
         ChangeRoleRequest: {
             role: components["schemas"]["TenantRole"];
@@ -1786,6 +1911,8 @@ export interface components {
         CredentialListResponse: {
             /** Credentials */
             credentials: components["schemas"]["CredentialResponse"][];
+            /** Total */
+            total: number;
         };
         /**
          * CredentialResponse
@@ -2220,6 +2347,8 @@ export interface components {
         };
         /** ModelVersionListResponse */
         ModelVersionListResponse: {
+            /** Total */
+            total: number;
             /** Versions */
             versions: components["schemas"]["ModelVersionListItem"][];
         };
@@ -2296,6 +2425,50 @@ export interface components {
             failed_deployment: number;
             /** Retired */
             retired: number;
+        };
+        /**
+         * OnboardingResponse
+         * @description `GET /v1/onboarding` — BUILD_PROMPT §10.9's first console-only endpoint.
+         *
+         *     `completed` and `total` are computed here rather than left to the client, so
+         *     that "3 of 8" cannot disagree with the ticks beside it.
+         */
+        OnboardingResponse: {
+            /** Completed */
+            completed: number;
+            /** Steps */
+            steps: components["schemas"]["OnboardingStepBody"][];
+            /** Total */
+            total: number;
+        };
+        /**
+         * OnboardingStepBody
+         * @description One step of the §3.5 story, with the state that decides how it renders.
+         */
+        OnboardingStepBody: {
+            /** Complete */
+            complete: boolean;
+            /** Detail */
+            detail: string;
+            /** Key */
+            key: string;
+            /**
+             * Permitted
+             * @description Whether the *caller* may perform this step, given their role.
+             */
+            permitted: boolean;
+            /**
+             * Required Role
+             * @description The role that may perform this step, or null when any tenant user may. A caller who does not hold it still sees the step — it is somebody else's, not missing.
+             */
+            required_role?: string | null;
+            /**
+             * Route
+             * @description The console route that performs this step.
+             */
+            route: string;
+            /** Title */
+            title: string;
         };
         /** PlanBody */
         PlanBody: {
@@ -3267,6 +3440,8 @@ export interface components {
         TrainingJobListResponse: {
             /** Jobs */
             jobs: components["schemas"]["TrainingJobResponse"][];
+            /** Total */
+            total: number;
         };
         /**
          * TrainingJobResponse
@@ -3406,6 +3581,14 @@ export interface components {
             } | null;
         };
         /**
+         * UpdateProfileRequest
+         * @description `PATCH /v1/me`. One field, because one field is all a user may change.
+         */
+        UpdateProfileRequest: {
+            /** Display Name */
+            display_name: string;
+        };
+        /**
          * UsageItemBody
          * @description One row of the usage table.
          *
@@ -3494,10 +3677,23 @@ export interface components {
         UsageType: "events" | "recommendations" | "training" | "products" | "storage" | "service_capacity";
         /** UserListResponse */
         UserListResponse: {
+            /** Total */
+            total: number;
             /** Users */
             users: components["schemas"]["UserResponse"][];
         };
-        /** UserResponse */
+        /**
+         * UserResponse
+         * @description One tenant user, plus the one derived fact the console cannot compute.
+         *
+         *     `is_last_active_administrator` is BUILD_PROMPT §10.9's fifth console-only
+         *     field. The prototype worked it out client-side (`isLast`, dc.html L1243)
+         *     because it held the whole user list; a real client holding one page of it
+         *     cannot, and a client holding all of it would still be racing the server. It
+         *     is the server's answer to "would demoting or disabling this person leave the
+         *     tenant with nobody who can administer it", and the console renders it as a
+         *     disabled control with a reason rather than as a request that gets refused.
+         */
         UserResponse: {
             /**
              * Created At
@@ -3508,6 +3704,11 @@ export interface components {
             display_name: string;
             /** Email */
             email: string;
+            /**
+             * Is Last Active Administrator
+             * @default false
+             */
+            is_last_active_administrator: boolean;
             /** Last Authenticated At */
             last_authenticated_at?: string | null;
             /** Role */
@@ -4286,6 +4487,72 @@ export interface operations {
             };
         };
     };
+    update_me_v1_me_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_own_password_v1_me_change_password_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeOwnPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     read_metrics_summary_v1_metrics_summary_get: {
         parameters: {
             query?: never;
@@ -4490,6 +4757,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_onboarding_v1_onboarding_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnboardingResponse"];
                 };
             };
         };
@@ -5723,6 +6010,37 @@ export interface operations {
             };
         };
     };
+    get_user_v1_users__tenant_user_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenant_user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     change_role_v1_users__tenant_user_id__role_patch: {
         parameters: {
             query?: never;
@@ -5780,6 +6098,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resend_invitation_v1_users__tenant_user_id__resend_invitation_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenant_user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationResponse"];
                 };
             };
             /** @description Validation Error */

@@ -12,7 +12,7 @@ import datetime as dt
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from graphrec.auth.passwords import hash_password, needs_rehash, verify_password
 from graphrec.auth.tokens import Realm, TokenService, TokenType, digest_token
@@ -521,6 +521,64 @@ class IdentityService:
         await session.flush()
         return IssuedInvitation(user=user, invitation=invitation, token=token)
 
+    async def reissue_invitation(
+        self,
+        session: AsyncSession,
+        *,
+        tenant_id: uuid.UUID,
+        target_user_id: uuid.UUID,
+    ) -> IssuedInvitation:
+        """Re-invite somebody who never accepted. A new token, not the old one.
+
+        The old token cannot be resent because it was never stored — only its
+        digest was, which is the same reason a credential secret is shown once.
+        So "resend" is necessarily "issue a fresh one", and the old invitation is
+        revoked in the same transaction rather than left to expire on its own. An
+        invitation an administrator believes they have replaced must not still
+        open the account.
+
+        Refuses anyone who is not `invited`: reissuing against an active account
+        would mint a token that sets a password without knowing the old one,
+        which is account takeover wearing an administrator's hat. The
+        administrator who wants that outcome has `set_user_status` and the
+        recovery flow, both of which are audited as what they are.
+        """
+        user = await self._locked_user(session, target_user_id)
+        if user.status != UserStatus.INVITED.value:
+            raise ConflictError("user_not_invited")
+
+        # Revoked, not deleted. The runtime role holds no DELETE on this table
+        # by design (migration 0002), and the design is right: the row is the
+        # record that somebody was invited on a particular day, and an
+        # administrator investigating how an account came to exist needs the
+        # superseded attempts as much as the one that worked. `is_open` already
+        # treats a revoked row as closed, so the token it names stops working in
+        # the same statement.
+        await session.execute(
+            update(Invitation)
+            .where(
+                Invitation.tenant_id == tenant_id,
+                Invitation.email == user.email,
+                Invitation.accepted_at.is_(None),
+                Invitation.revoked_at.is_(None),
+            )
+            .values(revoked_at=utcnow())
+        )
+
+        token = f"{INVITATION_TOKEN_PREFIX}{new_token()}"
+        invitation = Invitation(
+            invitation_id=uuid7(),
+            tenant_id=tenant_id,
+            email=user.email,
+            role=user.role,
+            token_digest=digest_token(token),
+            invited_by=None,
+            expires_at=utcnow() + self._invitation_ttl,
+        )
+        session.add(invitation)
+        await session.flush()
+        return IssuedInvitation(user=user, invitation=invitation, token=token)
+
     # -------------------------------------------------------- accepting one
 
     async def accept_invitation(
@@ -589,6 +647,90 @@ class IdentityService:
         return user
 
     # ------------------------------------------------------------- recovery
+
+    # ------------------------------------------------------- one's own record
+
+    async def update_own_profile(
+        self,
+        session: AsyncSession,
+        *,
+        user: TenantUser,
+        display_name: str,
+    ) -> TenantUser:
+        """`/account`. The only field a user may change about themselves.
+
+        Not role, not status, not email. Role and status are an administrator's
+        decisions and changing your own would make gate 3 self-service; email is
+        the account identifier, and changing it is an identity transfer rather
+        than an edit, with an `(tenant, email)` uniqueness constraint and a
+        re-verification story neither the SRS nor this system has.
+        """
+        cleaned = display_name.strip()
+        if not cleaned:
+            raise ValidationError("display_name_required").with_field(
+                "display_name", "A display name is required."
+            )
+        user.display_name = cleaned
+        await session.flush()
+        return user
+
+    async def change_own_password(
+        self,
+        session: AsyncSession,
+        *,
+        user: TenantUser,
+        current_password: str,
+        password: str,
+        password_confirmation: str,
+        keep_session: str | None = None,
+    ) -> TenantUser:
+        """`/account`'s change-authentication-material form. Three inputs, in order.
+
+        The confirmation is compared before the current password is verified, for
+        the same reason it is in `confirm_recovery`: the comparison reveals
+        nothing, so checking it first costs nothing, and checking it last means a
+        typo has already spent a verification attempt.
+
+        The current password is then verified even though the caller is holding a
+        valid session. A session proves the account was open at some point on
+        this device; it does not prove the person at the keyboard now is the
+        owner. Requiring the old password is what makes an unattended screen a
+        smaller problem than it would otherwise be.
+
+        Every *other* refresh session is revoked, and `keep_session` names the
+        one to spare. Revoking all of them would sign the user out of the tab
+        they are typing in, which trains people to distrust the button; revoking
+        none of them would leave a thief signed in, which is the whole point of
+        changing a password.
+        """
+        if password != password_confirmation:
+            raise ValidationError("password_confirmation_mismatch").with_field(
+                "password_confirmation",
+                "The new authentication material and its confirmation do not match.",
+            )
+        if not verify_password(user.credential_digest, password=current_password):
+            raise ValidationError("current_password_invalid").with_field(
+                "current_password", "That is not your current authentication material."
+            )
+
+        user.credential_digest = hash_password(password)
+        user.failed_attempts = 0
+
+        now = utcnow()
+        kept = digest_token(keep_session) if keep_session else None
+        sessions = await session.scalars(
+            select(RefreshSession)
+            .where(RefreshSession.tenant_user_id == user.tenant_user_id)
+            .where(RefreshSession.revoked_at.is_(None))
+            .with_for_update()
+        )
+        for existing in sessions:
+            if kept is not None and existing.token_digest == kept:
+                continue
+            existing.revoked_at = now
+
+        await session.flush()
+        return user
 
     async def request_recovery(
         self, session: AsyncSession, *, tenant_id: uuid.UUID, email: str

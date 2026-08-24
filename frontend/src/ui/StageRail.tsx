@@ -1,6 +1,17 @@
 import { JOB_STAGES } from '../lib/enums';
 
 export interface StageRailProps {
+  /**
+   * The stages, in order. Defaults to the nine training stages.
+   *
+   * Overridden only by the submission page, whose lifecycle is a different
+   * four-stage vocabulary from the same generator. The alternative — a second
+   * rail component — would have meant two sets of state classes to keep in
+   * step, and the stages are the only thing that differs.
+   */
+  stages?: readonly string[];
+  /** Names the list for a screen reader; the vocabulary decides the wording. */
+  label?: string;
   /** The stage the server named, e.g. `training`. `null` before the job starts. */
   current: string | null;
   /** True once the job has failed, which paints the current stage as the failure. */
@@ -18,12 +29,18 @@ export interface StageRailProps {
  * percentage, because the backend does not report one and a made-up one is a
  * lie that a reader will time their afternoon by.
  */
-export function StageRail({ current, failed = false, complete = false }: StageRailProps) {
-  const index = current ? JOB_STAGES.indexOf(current as (typeof JOB_STAGES)[number]) : -1;
+export function StageRail({
+  current,
+  failed = false,
+  complete = false,
+  stages = JOB_STAGES,
+  label = 'Training stages',
+}: StageRailProps) {
+  const index = current ? stages.indexOf(current) : -1;
 
   return (
-    <ol className="stagerail" aria-label="Training stages">
-      {JOB_STAGES.map((stage, position) => {
+    <ol className="stagerail" aria-label={label}>
+      {stages.map((stage, position) => {
         const state = complete
           ? 'done'
           : position < index
@@ -40,7 +57,7 @@ export function StageRail({ current, failed = false, complete = false }: StageRa
             aria-current={state === 'current' || state === 'failed' ? 'step' : undefined}
           >
             <span className="stagerail__index">
-              {position + 1}/{JOB_STAGES.length}
+              {position + 1}/{stages.length}
             </span>
             <span>{stage.replace(/_/g, ' ')}</span>
             <span className="visually-hidden">
