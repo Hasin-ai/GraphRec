@@ -63,9 +63,13 @@ def test_a_suspended_tenant_cannot_sign_in(api, realm) -> None:
     # Sign-in itself succeeds at gate 1 — the credentials are real — and the
     # refusal comes at the first authenticated request. What must not happen is a
     # 200 from a tenant screen.
+    #
+    # `/v1/me` and not `/v1/tenant`: the latter is the one read gate 2 exempts,
+    # so that `/account/tenant-status` has a status to render. Asserting the gate
+    # against the one endpoint that is exempt from it would be asserting nothing.
     if response.status_code == 200:
         token = response.json()["access_token"]
-        follow_up = api.get("/v1/tenant", headers=auth(token))
+        follow_up = api.get("/v1/me", headers=auth(token))
         assert follow_up.status_code == 403
         assert follow_up.json()["error"]["code"] == "tenant_not_active"
 
@@ -82,8 +86,49 @@ def test_the_suspension_message_says_it_is_not_tenant_actionable(api, realm) -> 
     )
     if signed.status_code != 200:
         pytest.skip("sign-in refuses a suspended tenant outright; gate 2 is covered above")
-    body = api.get("/v1/tenant", headers=auth(signed.json()["access_token"])).json()["error"]
+    body = api.get("/v1/me", headers=auth(signed.json()["access_token"])).json()["error"]
     assert "Platform Administrator" in body["reason"]
+
+
+def test_a_suspended_tenant_may_still_read_its_own_status_and_nothing_else(api, realm) -> None:
+    """The gate-2 exemption, and its exact width.
+
+    `docs/BUILD_PROMPT.md` L372: 403 `tenant_not_active` on everything **except**
+    `/v1/auth/*` and `GET /v1/tenant`. Without the exception the console's own
+    gate-2 landing page cannot render — it is told to state the tenant's
+    lifecycle position and has nowhere to read it from — so a gate that refused
+    it would refuse the explanation of itself.
+
+    Both halves are asserted here, because the exemption is only safe if it is
+    one read: the status comes back, and the next thing the same token asks for
+    does not.
+    """
+    signed = api.post(
+        "/v1/auth/sign-in",
+        json={
+            "tenant_code": realm["frozen"]["code"],
+            "email": realm["frozen"]["admin_email"],
+            "password": PASSWORD,
+        },
+    )
+    if signed.status_code != 200:
+        pytest.skip("sign-in refuses a suspended tenant outright; gate 2 is covered above")
+    token = signed.json()["access_token"]
+
+    status_page = api.get("/v1/tenant", headers=auth(token))
+    assert status_page.status_code == 200, status_page.text
+    assert status_page.json()["status"] == "suspended"
+
+    for path in ("/v1/me", "/v1/products", "/v1/api-keys", "/v1/training-jobs", "/v1/usage"):
+        refused = api.get(path, headers=auth(token))
+        assert refused.status_code == 403, f"{path} answered {refused.status_code}"
+        assert refused.json()["error"]["code"] == "tenant_not_active"
+
+
+def test_the_exemption_is_still_behind_gate_one(api) -> None:
+    """It exempts gate 2 and not gate 1. An anonymous caller gets 401, not a
+    status page for a tenant they named."""
+    assert api.get("/v1/tenant").status_code == 401
 
 
 def test_a_freshly_registered_tenant_is_pending_and_cannot_work(api, owner_engine) -> None:

@@ -54,11 +54,18 @@ from graphrec.domain.serving.activation import ActivationService
 from graphrec.domain.serving.deployment import DeploymentService
 from graphrec.domain.serving.metrics import MetricsService
 
+# Imported at runtime, not under TYPE_CHECKING, because `Store` below puts it
+# inside an `Annotated[...]` that FastAPI has to resolve to build the OpenAPI
+# document. A string forward reference to a name that only exists for the type
+# checker leaves the parameter undefined, and FastAPI falls back to reading it
+# as a query parameter — which fails at schema generation rather than at import,
+# so nothing notices until something asks for `/openapi.json`.
+from graphrec.storage.store import ArtifactStore
+
 if TYPE_CHECKING:
     from graphrec.db.models import DeploymentRevision, ServingReplica
     from graphrec.domain.serving.deployment import DeploymentView
     from graphrec.domain.serving.metrics import ServingMetrics
-    from graphrec.storage.store import ArtifactStore
 
 router = APIRouter(tags=["serving"])
 
@@ -89,7 +96,7 @@ def _store(request: Request) -> ArtifactStore | None:
 Deployments = Annotated[DeploymentService, Depends(_deployments)]
 Metrics = Annotated[MetricsService, Depends(_metrics)]
 Activations = Annotated[ActivationService, Depends(_activation)]
-Store = Annotated["ArtifactStore | None", Depends(_store)]
+Store = Annotated[ArtifactStore | None, Depends(_store)]
 
 
 # ----------------------------------------------------------------- rendering

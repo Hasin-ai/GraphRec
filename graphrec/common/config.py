@@ -136,6 +136,13 @@ class Settings(BaseSettings):
     # want to shorten, and because "the earlier link stops working" (dc.html
     # L1247) is a promise about revocation, not about expiry.
     invitation_ttl_seconds: int = 604_800
+    # An hour, and deliberately far shorter than an invitation's week. An
+    # invitation is an arrangement between two people who already know each
+    # other; a recovery proof is the answer to somebody claiming to have lost
+    # control of an account, and the window in which a stolen one is useful is
+    # the thing to keep small. Neither the SRS nor the prototype names a
+    # figure, so this is derived and stated here rather than buried.
+    recovery_ttl_seconds: int = 3_600
 
     # ------------------------------------------------------------ credentials
 

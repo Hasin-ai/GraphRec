@@ -1,0 +1,197 @@
+/**
+ * The four shells, the page frame they wrap, and the standalone pages that have
+ * no shell at all. Every value here resolves to a token in `tokens.css` — this
+ * file introduces no colour, radius, spacing or font of its own, so swapping
+ * design systems stays the single-file change §10.7 asks for.
+ */
+
+/* ----------------------------------------------------------- app shell */
+
+.shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.shell__main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--color-bg);
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  border-bottom: var(--border-hairline);
+  background: var(--color-surface);
+}
+
+.topbar__identity {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.topbar__name {
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.page {
+  flex: 1;
+  width: 100%;
+  max-width: var(--content-max);
+  padding: var(--space-6) var(--space-5) var(--space-8);
+}
+
+.page__head {
+  margin-bottom: var(--space-5);
+}
+
+.page__title {
+  font-size: var(--font-size-xl);
+  margin: 0;
+}
+
+.page__lede {
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+  max-width: 62ch;
+}
+
+/* ------------------------------------------------- standalone (public) */
+
+.standalone {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5);
+  padding: var(--space-6) var(--space-4);
+  background: var(--color-bg);
+}
+
+.standalone__brand {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--font-size-lg);
+  letter-spacing: -0.02em;
+}
+
+.card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--color-surface);
+  border: var(--border-hairline);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-5);
+}
+
+.card--wide {
+  max-width: 560px;
+}
+
+.card__title {
+  font-size: var(--font-size-lg);
+  margin: 0 0 var(--space-2);
+}
+
+.card__lede {
+  margin: 0 0 var(--space-4);
+  color: var(--text-muted);
+}
+
+/* A vertical run of form fields, banners and actions. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.stack--tight {
+  gap: var(--space-3);
+}
+
+.form-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.form-actions .btn {
+  flex: 1;
+}
+
+.card__foot {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: var(--border-hairline);
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: space-between;
+}
+
+/* --------------------------------------------- state gate and errors */
+
+.gate {
+  width: 100%;
+  max-width: 560px;
+  background: var(--color-surface);
+  border: var(--border-hairline);
+  border-left: var(--border-heavy);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+}
+
+.gate__status {
+  margin: var(--space-3) 0;
+}
+
+.gate__reason {
+  margin: 0;
+  padding: var(--space-3);
+  background: var(--color-bg);
+  border-left: var(--border-heavy);
+  color: var(--color-text);
+}
+
+.errorpage {
+  max-width: 62ch;
+}
+
+.errorpage__code {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin: 0 0 var(--space-2);
+}
+
+.errorpage__reference {
+  margin-top: var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  word-break: break-all;
+}

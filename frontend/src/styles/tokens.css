@@ -1,0 +1,180 @@
+/*
+ * Every colour, radius, spacing and font in the console resolves through a
+ * custom property declared in this file. Nothing else in `src/` may name a
+ * hex value, a pixel radius or a font family.
+ *
+ * The reason is written on the folder the prototype lives in: it is called
+ * "Design system decision pending". The design system has not been chosen.
+ * Building against tokens means choosing it later is an edit to this file and
+ * to nothing else — not a sweep through nineteen primitives and thirty-six
+ * routes. The values below are the Modernist palette the prototype already
+ * renders with, so a screenshot of a route here is comparable to the same
+ * route in `GraphRec Console.dc.html`.
+ *
+ * Both themes are defined here in full. Dark is not a filter applied to light
+ * and not a set of `@media` overrides scattered through component files; it is
+ * the same token names bound to different values under `[data-theme="dark"]`,
+ * which is what makes a component that only reads tokens themeable without
+ * knowing a theme exists.
+ */
+
+:root {
+  /* --- Modernist base (from _ds/modernist-.../styles.css) ------------- */
+  --color-bg: #f3f2f2;
+  --color-surface: #eae9e9;
+  --color-text: #201e1d;
+  --color-accent: #ec3013;
+  --color-accent-2: #e15b47;
+  --color-divider: color-mix(in srgb, #201e1d 40%, transparent);
+
+  --color-neutral-100: #f8f4f4;
+  --color-neutral-200: #eae7e7;
+  --color-neutral-300: #d7d3d3;
+  --color-neutral-400: #bab6b6;
+  --color-neutral-500: #9b9797;
+  --color-neutral-600: #7d7979;
+  --color-neutral-700: #605d5d;
+  --color-neutral-800: #444141;
+  --color-neutral-900: #2d2b2b;
+
+  --color-accent-100: #fff2ef;
+  --color-accent-200: #ffe0d9;
+  --color-accent-300: #ffc4b8;
+  --color-accent-400: #ff9783;
+  --color-accent-500: #ff563c;
+  --color-accent-600: #dd2b0f;
+  --color-accent-700: #ae1800;
+  --color-accent-800: #7c1405;
+  --color-accent-900: #4d170e;
+
+  --color-accent-2-100: #fff2ef;
+  --color-accent-2-200: #ffe0da;
+  --color-accent-2-300: #ffc4b9;
+  --color-accent-2-400: #ff9784;
+  --color-accent-2-500: #ef6853;
+  --color-accent-2-600: #c94b39;
+  --color-accent-2-700: #9e3526;
+  --color-accent-2-800: #71261b;
+  --color-accent-2-900: #471d16;
+
+  --font-heading: "Archivo", system-ui, sans-serif;
+  --font-heading-weight: 800;
+  --font-body: "Archivo", system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+
+  --shadow-sm: 0 1px 2px color-mix(in srgb, #2d2b2b 14%, transparent);
+  --shadow-md: 0 3px 10px color-mix(in srgb, #2d2b2b 16%, transparent);
+  --shadow-lg: 0 12px 32px color-mix(in srgb, #2d2b2b 22%, transparent);
+
+  /* --- Semantic tones (the prototype's own `:root` block) -------------
+   * Five tones, each a foreground and a background. Badges, banners and
+   * status text all draw from these rather than from the accent ramp,
+   * because "this failed" and "this is the brand colour" are different
+   * ideas that happen to both be red in the light theme and must not be
+   * assumed to stay that way.
+   */
+  --ok: #3f6b4a;
+  --ok-bg: #e7eee8;
+  --warn: #8a6414;
+  --warn-bg: #f3ead6;
+  --danger: #ae1800;
+  --danger-bg: #ffe0d9;
+  --info: #3d5a70;
+  --info-bg: #e5eaee;
+  --neu: #605d5d;
+  --neu-bg: #eae7e7;
+
+  /* --- Console-level tokens -------------------------------------------
+   * Not part of the design system's own vocabulary; derived from it so
+   * that a swap carries them along.
+   */
+  --text-muted: var(--color-neutral-700);
+  --text-faint: var(--color-neutral-600);
+  --border-hairline: 1px solid var(--color-divider);
+  --border-heavy: 2px solid var(--color-divider);
+  --focus-ring: 2px solid var(--color-accent);
+  --focus-ring-offset: 2px;
+
+  --font-size-xs: 10.5px;
+  --font-size-sm: 12px;
+  --font-size-md: 13px;
+  --font-size-base: 15px;
+  --font-size-lg: 19px;
+  --font-size-xl: 24px;
+  --line-height-base: 1.55;
+
+  --sidebar-width: 232px;
+  --content-max: 1180px;
+  --overlay: color-mix(in srgb, #201e1d 45%, transparent);
+}
+
+:root[data-theme="dark"] {
+  --color-bg: #1a1918;
+  --color-surface: #232221;
+  --color-text: #f2efec;
+  --color-divider: color-mix(in srgb, #f2efec 32%, transparent);
+
+  --color-accent: #ff5c3d;
+  --color-accent-100: #3b201a;
+  --color-accent-200: #4d251c;
+  --color-accent-300: #6b3324;
+  --color-accent-400: #93452c;
+  --color-accent-500: #ff563c;
+  --color-accent-600: #ff7a5f;
+  --color-accent-700: #ff9783;
+  --color-accent-800: #ffc4b8;
+  --color-accent-900: #ffe0d9;
+
+  --color-accent-2: #ef6853;
+  --color-accent-2-100: #37201b;
+  --color-accent-2-200: #47261f;
+  --color-accent-2-300: #653428;
+  --color-accent-2-400: #8c4635;
+  --color-accent-2-500: #ef6853;
+  --color-accent-2-600: #ff8a76;
+  --color-accent-2-700: #ffa494;
+  --color-accent-2-800: #ffc4b9;
+  --color-accent-2-900: #ffe0da;
+
+  /* The neutral ramp inverts: 100 stays "closest to the page" and 900 stays
+   * "furthest from it", so a component asking for `--color-neutral-700` as a
+   * muted foreground gets a muted foreground in both themes rather than a
+   * near-invisible one in the other. */
+  --color-neutral-100: #2c2a29;
+  --color-neutral-200: #333130;
+  --color-neutral-300: #3f3d3c;
+  --color-neutral-400: #565352;
+  --color-neutral-500: #7d7979;
+  --color-neutral-600: #9b9797;
+  --color-neutral-700: #bab6b6;
+  --color-neutral-800: #d7d3d3;
+  --color-neutral-900: #efecec;
+
+  --ok: #9cc194;
+  --ok-bg: #212a20;
+  --warn: #dcb469;
+  --warn-bg: #332815;
+  --danger: #eb9c8c;
+  --danger-bg: #3a201a;
+  --info: #a4c0d8;
+  --info-bg: #1f2932;
+  --neu: #b0acac;
+  --neu-bg: #2f2d2c;
+
+  --shadow-sm: 0 1px 2px color-mix(in srgb, #000 40%, transparent);
+  --shadow-md: 0 3px 10px color-mix(in srgb, #000 46%, transparent);
+  --shadow-lg: 0 12px 32px color-mix(in srgb, #000 56%, transparent);
+
+  --overlay: color-mix(in srgb, #000 62%, transparent);
+}

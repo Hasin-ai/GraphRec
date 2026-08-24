@@ -16,18 +16,28 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.control_api.deps import CurrentTenant, get_session, get_token_service
+from apps.control_api.deps import (
+    CurrentTenant,
+    get_session,
+    get_settings_dep,
+    get_token_service,
+)
 from apps.control_api.schemas import (
     AcceptInvitationRequest,
+    ConfirmRecoveryRequest,
     MeResponse,
+    RecoveryRequestedResponse,
     RefreshRequest,
     RegisterTenantRequest,
+    RequestRecoveryRequest,
     SessionResponse,
     SignInRequest,
     TenantResponse,
     UserResponse,
 )
 from graphrec.auth.tokens import TokenService
+from graphrec.common.config import Settings
+from graphrec.common.delivery import deliver_recovery
 from graphrec.common.enums import AuditAction
 from graphrec.common.errors import AuthError, ConflictError, GraphRecError
 from graphrec.domain.audit import Actor, AuditTrail, record
@@ -36,8 +46,15 @@ from graphrec.domain.identity import IdentityService
 router = APIRouter(tags=["auth"])
 
 
-def _service(tokens: Annotated[TokenService, Depends(get_token_service)]) -> IdentityService:
-    return IdentityService(tokens)
+def _service(
+    tokens: Annotated[TokenService, Depends(get_token_service)],
+    settings: Annotated[Settings, Depends(get_settings_dep)],
+) -> IdentityService:
+    return IdentityService(
+        tokens,
+        invitation_ttl_seconds=settings.invitation_ttl_seconds,
+        recovery_ttl_seconds=settings.recovery_ttl_seconds,
+    )
 
 
 Service = Annotated[IdentityService, Depends(_service)]
@@ -225,6 +242,94 @@ async def sign_out(body: RefreshRequest, session: Session, service: Service) -> 
     async with session.begin():
         await service.revoke_tenant_session(session, refresh_token=body.refresh_token)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+#: The one sentence step 1 returns, whatever happened. Held as a constant so a
+#: test can assert that the two code paths return the identical string rather
+#: than two strings that merely look alike (dc.html L1588).
+RECOVERY_REQUESTED = "If that identifier matches an account, recovery instructions have been sent."
+
+
+@router.post(
+    "/auth/recovery",
+    response_model=RecoveryRequestedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Request a recovery proof",
+)
+async def request_recovery(
+    body: RequestRecoveryRequest, session: Session, service: Service
+) -> RecoveryRequestedResponse:
+    """Accepted, always. What follows from it is not the caller's business.
+
+    202 rather than 200 because that is what actually happened: a request was
+    accepted for out-of-band handling, and whether anything was sent is
+    something the caller is not told. A 200 would imply a completed action and
+    invite the reading that a 404 exists for the other case.
+
+    Three things are the same on both paths and each is deliberate:
+
+    * the status code,
+    * the response body — `RECOVERY_REQUESTED` and nothing derived from the
+      lookup,
+    * and the absence of an audit row. A refusal recorded here would be an
+      `outcome: cancelled` row that appeared only for identifiers that do not
+      exist, which is an enumeration oracle for anyone who can read the tenant's
+      own audit page.
+
+    The timing is *not* equalised, and this is the honest limitation: an unknown
+    tenant code returns before any row is read. Recovery is rate-limited at the
+    edge rather than padded here, because padding an endpoint that writes rows
+    to a fixed duration is a promise this code cannot keep under load.
+    """
+    async with session.begin():
+        tenant_id = await session.scalar(
+            select(func.tenant_lookup.resolve_tenant_code(body.tenant_code))
+        )
+        issued = (
+            None
+            if tenant_id is None
+            else await service.request_recovery(session, tenant_id=tenant_id, email=body.email)
+        )
+    if issued is not None:
+        # After the commit, not inside it. A proof handed to a transport and
+        # then rolled back is a proof that works for the person holding it and
+        # matches no digest in the database.
+        deliver_recovery(email=issued.user.email, token=issued.token, expires_at=issued.expires_at)
+    return RecoveryRequestedResponse(detail=RECOVERY_REQUESTED)
+
+
+@router.post(
+    "/auth/recovery:confirm",
+    response_model=UserResponse,
+    summary="Consume a recovery proof and set new authentication material",
+)
+async def confirm_recovery(
+    body: ConfirmRecoveryRequest, session: Session, service: Service
+) -> UserResponse:
+    """Step 2. Unauthenticated by necessity, exactly like accepting an invitation.
+
+    No session is issued. The prototype's button reads "Set and return to sign
+    in" (dc.html L1039), and signing in afterwards is what proves the password
+    just set is the password the user meant. It also means the account is not
+    handed a live session by a request that carried no proof of identity beyond
+    a token from an email.
+    """
+    async with session.begin():
+        user = await service.confirm_recovery(
+            session,
+            token=body.token,
+            password=body.password,
+            password_confirmation=body.password_confirmation,
+        )
+        return UserResponse(
+            tenant_user_id=user.tenant_user_id,
+            email=user.email,
+            display_name=user.display_name,
+            role=user.role,
+            status=user.status,
+            created_at=user.created_at,
+            last_authenticated_at=user.last_authenticated_at,
+        )
 
 
 @router.post(

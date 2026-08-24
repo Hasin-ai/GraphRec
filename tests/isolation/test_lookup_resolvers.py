@@ -31,6 +31,7 @@ LOOKUP_ROLE = "graphrec_lookup"
 RESOLVERS = (
     "tenant_lookup.resolve_tenant_code",
     "tenant_lookup.resolve_invitation",
+    "tenant_lookup.resolve_recovery_token",
     "tenant_lookup.resolve_api_key_prefix",
 )
 
@@ -80,6 +81,12 @@ def test_the_lookup_role_holds_only_column_level_selects(owner_engine) -> None:
         ("tenants", "status", "SELECT"),
         ("invitations", "tenant_id", "SELECT"),
         ("invitations", "token_digest", "SELECT"),
+        # `recovery_tokens` gets the same two columns and no more (migration
+        # 0014). Not `tenant_user_id`, which would let this role map a digest to
+        # an account, and not `expires_at` or `consumed_at`, which are lifecycle
+        # questions the domain answers under the ordinary policy after binding.
+        ("recovery_tokens", "tenant_id", "SELECT"),
+        ("recovery_tokens", "token_digest", "SELECT"),
         # Three columns on `api_keys`, and `key_hash` is deliberately not among
         # them. The resolver says which tenant owns a prefix; the secret is
         # verified afterwards, inside that tenant's context, against the row
@@ -108,6 +115,7 @@ def test_the_lookup_policies_are_select_only(owner_engine) -> None:
     assert commands == {
         ("tenants", "SELECT"),
         ("invitations", "SELECT"),
+        ("recovery_tokens", "SELECT"),
         ("api_keys", "SELECT"),
     }
 

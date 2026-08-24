@@ -20,7 +20,14 @@ from graphrec.common.clock import utcnow
 from graphrec.common.enums import TenantRole, TenantStatus, UserStatus
 from graphrec.common.errors import AuthError, ConflictError, NotFoundError, ValidationError
 from graphrec.common.ids import new_token, uuid7
-from graphrec.db.models import Invitation, PlatformUser, RefreshSession, Tenant, TenantUser
+from graphrec.db.models import (
+    Invitation,
+    PlatformUser,
+    RecoveryToken,
+    RefreshSession,
+    Tenant,
+    TenantUser,
+)
 from graphrec.db.tenant_context import bind_tenant
 
 if TYPE_CHECKING:
@@ -34,6 +41,9 @@ if TYPE_CHECKING:
 #: a human triaging a support ticket, who can tell an invitation from a recovery
 #: proof (`rec_…`) without knowing either secret.
 INVITATION_TOKEN_PREFIX = "inv_"
+#: The prototype's own placeholder for a recovery proof (dc.html L1039:
+#: `rec_…`). Same cosmetic role, same digest-of-the-whole-string storage.
+RECOVERY_TOKEN_PREFIX = "rec_"
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +61,23 @@ class IssuedInvitation:
 
 
 @dataclass(frozen=True, slots=True)
+class IssuedRecovery:
+    """A recovery proof and the account it will reset.
+
+    This object exists so the router can hand the proof to whatever delivers it
+    out of band. It must not be put in an HTTP response: unlike an invitation,
+    where an administrator who is already authenticated relays the token to
+    somebody they chose, a recovery request comes from an unauthenticated
+    stranger who typed an email address. Returning the proof would turn
+    `POST /v1/auth/recovery` into "reset anybody's password".
+    """
+
+    user: TenantUser
+    token: str
+    expires_at: dt.datetime
+
+
+@dataclass(frozen=True, slots=True)
 class IssuedSession:
     """What a successful sign-in hands back. The refresh token is shown once."""
 
@@ -61,9 +88,16 @@ class IssuedSession:
 
 
 class IdentityService:
-    def __init__(self, tokens: TokenService, *, invitation_ttl_seconds: int = 604_800) -> None:
+    def __init__(
+        self,
+        tokens: TokenService,
+        *,
+        invitation_ttl_seconds: int = 604_800,
+        recovery_ttl_seconds: int = 3_600,
+    ) -> None:
         self._tokens = tokens
         self._invitation_ttl = dt.timedelta(seconds=invitation_ttl_seconds)
+        self._recovery_ttl = dt.timedelta(seconds=recovery_ttl_seconds)
 
     # ------------------------------------------------------- registration
 
@@ -551,5 +585,140 @@ class IdentityService:
         user.role = invitation.role
         user.status = UserStatus.ACTIVE.value
         invitation.accepted_at = utcnow()
+        await session.flush()
+        return user
+
+    # ------------------------------------------------------------- recovery
+
+    async def request_recovery(
+        self, session: AsyncSession, *, tenant_id: uuid.UUID, email: str
+    ) -> IssuedRecovery | None:
+        """Mint a recovery proof, or decline to and say nothing about it.
+
+        `None` means "no proof was issued" and the caller must answer exactly as
+        it answers a success. The prototype states the contract (dc.html L1035):
+        the response "states the next action without confirming whether an
+        account exists". So the three reasons for `None` — no such user, an
+        account that cannot sign in, a tenant that resolved to nothing — are
+        indistinguishable from the outside and are not logged as distinct events
+        either.
+
+        A tenant code is asked for alongside the email for the reason
+        `SignInRequest` gives: email is unique *per tenant*, so an email alone
+        does not name an account. Recovery that guessed a tenant would be
+        resetting the wrong person's password.
+
+        Any proof already outstanding for this account is revoked before the new
+        one is written. Two live links is one more than the number the user
+        asked for, and the second click on an older mail should fail rather than
+        quietly work.
+        """
+        await bind_tenant(session, tenant_id)
+
+        user = await session.scalar(
+            select(TenantUser).where(TenantUser.email == email.strip().lower())
+        )
+        if user is None or not user.can_authenticate:
+            return None
+
+        now = utcnow()
+        outstanding = await session.scalars(
+            select(RecoveryToken)
+            .where(RecoveryToken.tenant_user_id == user.tenant_user_id)
+            .where(RecoveryToken.consumed_at.is_(None))
+            .where(RecoveryToken.revoked_at.is_(None))
+            .with_for_update()
+        )
+        for previous in outstanding:
+            previous.revoked_at = now
+
+        token = f"{RECOVERY_TOKEN_PREFIX}{new_token()}"
+        expires_at = now + self._recovery_ttl
+        session.add(
+            RecoveryToken(
+                recovery_token_id=uuid7(),
+                tenant_user_id=user.tenant_user_id,
+                platform_user_id=None,
+                tenant_id=tenant_id,
+                token_digest=digest_token(token),
+                expires_at=expires_at,
+            )
+        )
+        await session.flush()
+        return IssuedRecovery(user=user, token=token, expires_at=expires_at)
+
+    async def confirm_recovery(
+        self,
+        session: AsyncSession,
+        *,
+        token: str,
+        password: str,
+        password_confirmation: str,
+    ) -> TenantUser:
+        """Consume a proof and set new authentication material. No credential.
+
+        Step for step this is `accept_invitation`, and deliberately so — the two
+        are the same problem, and the order is the same security property:
+
+        1. Compare the confirmation first. It reveals nothing, and checking it
+           last would mean a typo consumed the single-use proof.
+        2. Digest the proof and resolve its tenant through
+           `tenant_lookup.resolve_recovery_token` (migration 0014). The proof
+           itself never reaches the database.
+        3. Bind the tenant context, and only then read anything.
+        4. Apply the lifecycle rules under a row lock, so two clicks on the same
+           link cannot both win.
+
+        Every refusal is `recovery_token_invalid`, whatever the cause. "Already used"
+        would disclose that the account exists and that somebody just reset it.
+
+        The last step is the one that is easy to leave out: **every refresh
+        session for the account is revoked.** Somebody recovering an account has
+        usually lost control of it, and a reset that left a stolen refresh token
+        working would have changed the lock without collecting the key.
+        """
+        if password != password_confirmation:
+            raise ValidationError("password_confirmation_mismatch").with_field(
+                "password_confirmation",
+                "The new authentication material and its confirmation do not match.",
+            )
+
+        digest = digest_token(token)
+        tenant_id = await session.scalar(select(func.tenant_lookup.resolve_recovery_token(digest)))
+        if tenant_id is None:
+            raise AuthError("recovery_token_invalid")
+
+        await bind_tenant(session, tenant_id)
+
+        now = utcnow()
+        recovery = await session.scalar(
+            select(RecoveryToken).where(RecoveryToken.token_digest == digest).with_for_update()
+        )
+        if recovery is None or not recovery.is_usable(now) or recovery.tenant_user_id is None:
+            raise AuthError("recovery_token_invalid")
+
+        user = await session.scalar(
+            select(TenantUser)
+            .where(TenantUser.tenant_user_id == recovery.tenant_user_id)
+            .with_for_update()
+        )
+        if user is None or not user.can_authenticate:
+            # An administrator who locked the account since the proof was issued
+            # has decided; a link in an old mail does not overrule that.
+            raise AuthError("recovery_token_invalid")
+
+        user.credential_digest = hash_password(password)
+        user.failed_attempts = 0
+        recovery.consumed_at = now
+
+        sessions = await session.scalars(
+            select(RefreshSession)
+            .where(RefreshSession.tenant_user_id == user.tenant_user_id)
+            .where(RefreshSession.revoked_at.is_(None))
+            .with_for_update()
+        )
+        for existing in sessions:
+            existing.revoked_at = now
+
         await session.flush()
         return user

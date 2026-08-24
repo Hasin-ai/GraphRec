@@ -182,6 +182,42 @@ class InvitationResponse(BaseModel):
     invitation_token: str
 
 
+class RequestRecoveryRequest(_Body):
+    """Step 1 of recovery: which account, and nothing else.
+
+    A tenant code as well as an email, for the reason `SignInRequest` gives at
+    length — email is unique per tenant, so an email on its own does not name an
+    account, and recovery that guessed would reset the wrong person's password.
+    """
+
+    tenant_code: str = Field(min_length=2, max_length=32)
+    email: EmailStr
+
+
+class RecoveryRequestedResponse(BaseModel):
+    """The one answer step 1 ever gives.
+
+    There is no field here that varies with whether the account exists. That is
+    the whole schema: a boolean `sent`, or an `expires_at` that were only
+    present on success, would be the disclosure the route is built to avoid
+    (dc.html L1035).
+    """
+
+    detail: str
+
+
+class ConfirmRecoveryRequest(_Body):
+    """Step 2: the proof and the new material. Mirrors `AcceptInvitationRequest`.
+
+    No `email` and no `tenant_code`, for the same reason — both are properties
+    of the proof, and asking for either would let a caller assert them.
+    """
+
+    token: str = Field(min_length=1, max_length=512)
+    password: str = Field(min_length=12, max_length=1024)
+    password_confirmation: str = Field(min_length=1, max_length=1024)
+
+
 class ChangeRoleRequest(_Body):
     role: TenantRole
 

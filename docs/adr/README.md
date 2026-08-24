@@ -110,15 +110,32 @@ which is a listed gate, though 0024 constrains one: the metric floor D8's
 `eligible` state depends on has to be calibrated against full-catalogue numbers,
 which are roughly a third of the sampled-protocol figures a paper would quote.
 
-The next gate is D4, before Phase 10, and it is the one with an unresolved
-conflict of authorities above.
+**Phase 13 carried a gate and three decisions.** BUILD_PROMPT marks Phase 13 🛑
+*"CONFIRM the design system (§10.7) before starting"*, and §10.7 answers its own
+gate: build against CSS custom properties only, use the Modernist tokens for
+now, and **ask which system to use before Phase 14**. That question is therefore
+still open and is asked at the top of Phase 14 rather than treated as closed
+here. The three decisions the phase reached are **ADR 0031** (`GET /v1/tenant`
+is the single route exempt from gate 2, because the gate-2 landing page cannot
+otherwise read the state that sent the reader to it), **ADR 0032** (a recovery
+proof is never returned in a response, unlike an invitation token, because the
+requester is an anonymous stranger rather than an authenticated administrator)
+and **ADR 0033** (the access token lives in memory and only the refresh token is
+stored, in `sessionStorage`, never `localStorage`).
+
+Every listed gate D1–D12 is now closed. What remains open is §10.7's
+design-system question and the numbered list below.
 
 ## Open questions with no recommendation
 
 These have no proposed answer, only a stated need for one.
 
-1. **Email delivery.** SMTP, or an administrator CLI that prints the recovery
-   link? Affects account recovery and invitation, and therefore Phase 3.
+1. ~~**Email delivery.**~~ **Answered in Phase 13 — an administrator CLI.**
+   BUILD_PROMPT L90 settles it, and `scripts/recovery_token.py` implements it;
+   `graphrec.common.delivery` logs a deliberately alarming `WARNING` naming
+   itself unfit for anything real when no transport is configured. What is *not*
+   answered is delivery for a real deployment, which is an operational choice
+   rather than an architectural one. See **ADR 0032**.
 2. **The 15-minute training cooldown.** Is it a real product rule or an artefact
    of the prototype? Affects Phase 9 — Phase 7 meters training usage but does not
    admit training jobs, so the cooldown is not yet enforced anywhere.
@@ -136,3 +153,11 @@ These have no proposed answer, only a stated need for one.
    immutable and billing-adjacent, and tenant deletion has no semantics yet. The
    `ON DELETE CASCADE` on `usage_events.tenant_id` currently answers "no", which
    is a default rather than a decision.
+7. **How does a platform operator recover an account?** Their rows carry
+   `tenant_id IS NULL`, the recovery resolver returns a tenant id, and so the
+   endpoint cannot see them. Today the answer is another operator with database
+   access. Affects Phase 15 and any real deployment. See **ADR 0032**.
+8. **Which design system?** §10.7 defers the choice between the Modernist tokens
+   the console is built against and the Claude palette in
+   FRONTEND_BUILD_PROMPT §11, and asks for an answer before Phase 14. Because
+   every value resolves through `tokens.css`, the answer changes one file.

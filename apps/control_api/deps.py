@@ -24,8 +24,8 @@ handler holds an identifier and must turn "no row" into the right 404.
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator, Callable, Coroutine, Iterable
-from contextlib import asynccontextmanager
+from collections.abc import AsyncGenerator, AsyncIterator, Callable, Coroutine, Iterable
+from contextlib import aclosing, asynccontextmanager
 from dataclasses import dataclass
 from typing import Annotated, Any, TypeVar
 
@@ -201,17 +201,28 @@ def _bearer_token(credentials: HTTPAuthorizationCredentials | None, code: str) -
 # ------------------------------------------------------- gate 1: identity
 
 
-async def current_tenant_principal(
+async def _tenant_principal(
     request: Request,
-    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
-    tokens: Annotated[TokenService, Depends(get_token_service)],
-) -> AsyncIterator[TenantPrincipal]:
-    """Gates 1 and 2 for the tenant realm, and it binds the database context.
+    credentials: HTTPAuthorizationCredentials | None,
+    tokens: TokenService,
+    *,
+    require_operable: bool,
+) -> AsyncGenerator[TenantPrincipal, None]:
+    """Gate 1 for the tenant realm, gate 2 when asked, and the context binding.
+
+    Annotated `AsyncGenerator` rather than `AsyncIterator` because the two
+    wrappers below hand it to `contextlib.aclosing`, which needs `aclose` in the
+    type and not merely at runtime. Widening this back to `AsyncIterator` breaks
+    them, and the reason it breaks them is the reason they exist.
 
     The sequence matters. The token is verified first, because until it is, `tid`
     is attacker-controlled bytes. Only then is it used to bind `app.tenant_id`,
     and every query afterwards — including the one that loads the tenant itself —
     runs inside that binding.
+
+    `require_operable` is the only thing that varies, and only two callers ever
+    set it false — see `current_tenant_principal_any_state` for why the exemption
+    exists and why it is this narrow.
     """
     token = _bearer_token(credentials, "invalid_credentials")
     try:
@@ -237,7 +248,7 @@ async def current_tenant_principal(
             raise AuthError("invalid_credentials")
 
         # ------------------------------------------- gate 2: tenant state
-        if not tenant.is_operable:
+        if require_operable and not tenant.is_operable:
             raise ForbiddenError("tenant_not_active")
 
         if not user.can_authenticate:
@@ -249,6 +260,60 @@ async def current_tenant_principal(
         actor_id_var.set(str(claims.user_id))
 
         yield TenantPrincipal(claims=claims, user=user, tenant=tenant, session=bound)
+
+
+async def current_tenant_principal(
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
+    tokens: Annotated[TokenService, Depends(get_token_service)],
+) -> AsyncIterator[TenantPrincipal]:
+    """Gates 1 and 2. What every tenant-realm route uses, with two exceptions.
+
+    `aclosing` is load-bearing, not decoration. FastAPI finalises a dependency
+    generator by throwing `GeneratorExit` in at the `yield`; that unwinds this
+    frame but leaves the inner generator suspended inside its own `async with
+    sessionmaker()`. Nothing then closes the session, and the connection lives
+    until the garbage collector reaps it — which surfaces, much later and in
+    some unrelated test, as `BaseConnection.__del__` complaining. Closing the
+    inner generator here keeps the session's lifetime tied to the request's.
+    """
+    inner = _tenant_principal(request, credentials, tokens, require_operable=True)
+    async with aclosing(inner) as gate:
+        async for principal in gate:
+            yield principal
+
+
+async def current_tenant_principal_any_state(
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
+    tokens: Annotated[TokenService, Depends(get_token_service)],
+) -> AsyncIterator[TenantPrincipal]:
+    """Gate 1 without gate 2. The exemption `GET /v1/tenant` needs to exist at all.
+
+    Gate 2 sends a member of a non-active tenant to `/account/tenant-status`,
+    which "states the tenant's lifecycle position and that a Platform
+    Administrator controls the transition" (FRONTEND_BUILD_PROMPT §7). That page
+    has to read the status from somewhere, and the only endpoint that carries it
+    is this one — so a `GET /v1/tenant` behind gate 2 makes the gate-2 landing
+    page unrenderable, which is exactly the circularity `docs/BUILD_PROMPT.md`
+    L372 forecloses: *403 `tenant_not_active` on everything **except**
+    `/v1/auth/*` and `GET /v1/tenant`*.
+
+    The exemption is narrow on purpose:
+
+    * Gate 1 is unchanged. An unauthenticated caller still gets 401, and a token
+      for another tenant still resolves to nothing under RLS.
+    * The disabled-account check is unchanged. A locked user of a suspended
+      tenant is refused here, not shown a status page.
+    * It exempts **one read**. Nothing that writes, and nothing that returns a
+      tenant-owned resource, may use this. A suspended tenant's products,
+      credentials and jobs are all still behind gate 2, which is the point of
+      suspending it.
+    """
+    inner = _tenant_principal(request, credentials, tokens, require_operable=False)
+    async with aclosing(inner) as gate:
+        async for principal in gate:
+            yield principal
 
 
 # --------------------------------------- gate 1: identity, credential realm
@@ -647,6 +712,7 @@ __all__ = [
     "TenantStatus",
     "current_platform_principal",
     "current_tenant_principal",
+    "current_tenant_principal_any_state",
     "get_session",
     "get_settings_dep",
     "get_token_service",

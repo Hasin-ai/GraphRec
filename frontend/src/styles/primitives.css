@@ -1,0 +1,602 @@
+/*
+ * The nineteen primitives, styled once. Components carry class names and no
+ * inline colour; the values here all come from `tokens.css`.
+ */
+
+/* --- Button ---------------------------------------------------------- */
+.btn {
+  font-family: var(--font-body);
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  line-height: 1;
+  padding: var(--space-2) var(--space-4);
+  border: var(--border-hairline);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  white-space: nowrap;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--color-neutral-200);
+}
+
+.btn:disabled {
+  /* Gate 5 disables a control in place. It must still be readable — a control
+   * the reader cannot see is a control whose stated reason has nothing to
+   * attach to — so this dims rather than hides. */
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-accent-100);
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: var(--color-accent-600);
+  border-color: var(--color-accent-600);
+}
+
+.btn--secondary {
+  background: var(--color-surface);
+  border-color: var(--color-divider);
+}
+
+.btn--danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--danger-bg);
+}
+
+.btn--ghost {
+  border-color: transparent;
+}
+
+.btn--sm {
+  font-size: var(--font-size-sm);
+  padding: var(--space-1) var(--space-2);
+}
+
+/* --- Field (Input / Select / Textarea share this) --------------------- */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-4);
+}
+
+.field__label {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.field__control {
+  font-family: var(--font-body);
+  font-size: var(--font-size-base);
+  padding: var(--space-2) var(--space-3);
+  border: var(--border-hairline);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+  width: 100%;
+}
+
+.field__control:disabled {
+  background: var(--color-neutral-200);
+  opacity: 0.7;
+}
+
+.field__control--invalid {
+  border-color: var(--danger);
+}
+
+/* Hint and error occupy the same slot: an error replaces the hint rather than
+ * displacing it, so a form does not reflow as it is validated. */
+.field__hint,
+.field__error {
+  font-size: var(--font-size-sm);
+}
+
+.field__hint {
+  color: var(--text-muted);
+}
+
+.field__error {
+  color: var(--danger);
+}
+
+.field--mono .field__control {
+  font-family: var(--font-mono);
+}
+
+/* --- Table ------------------------------------------------------------ */
+.table-scroll {
+  overflow-x: auto;
+  border: var(--border-hairline);
+  background: var(--color-bg);
+}
+
+.table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--font-size-md);
+}
+
+.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-surface);
+  text-align: left;
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 700;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: var(--border-heavy);
+  white-space: nowrap;
+}
+
+.table tbody td {
+  padding: var(--space-3);
+  border-bottom: var(--border-hairline);
+  vertical-align: top;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.table__sort {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  gap: var(--space-1);
+}
+
+.table__num,
+.table__mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.table__actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Row actions are revealed on hover *and* on focus-within — a keyboard user
+ * never hovers, and a control that only appears on hover is a control they
+ * cannot reach. */
+.table__actions > * {
+  opacity: 0;
+}
+
+.table tbody tr:hover .table__actions > *,
+.table tbody tr:focus-within .table__actions > * {
+  opacity: 1;
+}
+
+/* --- Badge ------------------------------------------------------------ */
+.badge {
+  display: inline-block;
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 700;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+.badge--ok {
+  color: var(--ok);
+  background: var(--ok-bg);
+}
+.badge--warn {
+  color: var(--warn);
+  background: var(--warn-bg);
+}
+.badge--danger {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+.badge--info {
+  color: var(--info);
+  background: var(--info-bg);
+}
+.badge--neu {
+  color: var(--neu);
+  background: var(--neu-bg);
+}
+
+/* --- Dialog ----------------------------------------------------------- */
+.dialog__scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: var(--space-8) var(--space-4);
+  z-index: 50;
+  overflow-y: auto;
+}
+
+.dialog {
+  background: var(--color-bg);
+  border: var(--border-heavy);
+  box-shadow: var(--shadow-lg);
+  width: 480px;
+  max-width: 100%;
+}
+
+.dialog--wide {
+  width: 640px;
+}
+
+.dialog__head {
+  padding: var(--space-4);
+  border-bottom: var(--border-hairline);
+}
+
+.dialog__body {
+  padding: var(--space-4);
+}
+
+.dialog__foot {
+  padding: var(--space-4);
+  border-top: var(--border-hairline);
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* --- Banner ----------------------------------------------------------- */
+.banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-left: 3px solid;
+  font-size: var(--font-size-md);
+  margin-bottom: var(--space-4);
+}
+
+.banner--info {
+  color: var(--info);
+  background: var(--info-bg);
+  border-color: var(--info);
+}
+.banner--success {
+  color: var(--ok);
+  background: var(--ok-bg);
+  border-color: var(--ok);
+}
+.banner--warning {
+  color: var(--warn);
+  background: var(--warn-bg);
+  border-color: var(--warn);
+}
+.banner--danger {
+  color: var(--danger);
+  background: var(--danger-bg);
+  border-color: var(--danger);
+}
+
+.banner__body {
+  flex: 1;
+}
+
+/* --- Skeleton --------------------------------------------------------- */
+.skeleton {
+  background: var(--color-neutral-300);
+  animation: gr-pulse 1.4s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+
+/* --- EmptyState ------------------------------------------------------- */
+.empty {
+  border: var(--border-hairline);
+  background: var(--color-surface);
+  padding: var(--space-8);
+  text-align: center;
+}
+
+.empty__headline {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--font-size-lg);
+  margin-bottom: var(--space-2);
+}
+
+.empty__body {
+  color: var(--text-muted);
+  margin-bottom: var(--space-4);
+}
+
+/* --- Breadcrumbs ------------------------------------------------------ */
+.crumbs {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  margin-bottom: var(--space-3);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: baseline;
+}
+
+.crumbs__sep {
+  color: var(--color-neutral-500);
+}
+
+/* --- Sidebar ---------------------------------------------------------- */
+.sidebar {
+  width: var(--sidebar-width);
+  flex: 0 0 var(--sidebar-width);
+  background: var(--color-surface);
+  border-right: var(--border-heavy);
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.sidebar__brand {
+  padding: 20px 20px 16px;
+  border-bottom: var(--border-heavy);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.sidebar__wordmark {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--font-size-lg);
+  letter-spacing: -0.02em;
+}
+
+.sidebar__scope {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.sidebar__group {
+  padding: var(--space-3) 0;
+  border-bottom: var(--border-hairline);
+}
+
+.sidebar__group-label {
+  padding: 0 20px var(--space-2);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.sidebar__link {
+  display: block;
+  padding: var(--space-2) 20px;
+  color: var(--color-text);
+  font-size: var(--font-size-md);
+  border-left: 3px solid transparent;
+}
+
+.sidebar__link:hover {
+  background: var(--color-neutral-200);
+  text-decoration: none;
+}
+
+.sidebar__link--active {
+  border-left-color: var(--color-accent);
+  font-weight: 600;
+  background: var(--color-neutral-200);
+}
+
+.sidebar__foot {
+  margin-top: auto;
+  padding: var(--space-3) 20px;
+  border-top: var(--border-hairline);
+}
+
+/* --- StatCard --------------------------------------------------------- */
+.stat {
+  border: var(--border-hairline);
+  background: var(--color-bg);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.stat__label {
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.stat__value {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--font-size-xl);
+  font-variant-numeric: tabular-nums;
+}
+
+.stat__note {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+/* --- Tabs ------------------------------------------------------------- */
+.tabs {
+  display: flex;
+  gap: var(--space-1);
+  border-bottom: var(--border-heavy);
+  margin-bottom: var(--space-4);
+}
+
+.tabs__tab {
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  font-size: var(--font-size-md);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.tabs__tab[aria-selected='true'] {
+  color: var(--color-text);
+  font-weight: 600;
+  border-bottom-color: var(--color-accent);
+}
+
+/* --- Pagination ------------------------------------------------------- */
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+/* --- FilterBar -------------------------------------------------------- */
+.filterbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: var(--border-hairline);
+  margin-bottom: var(--space-4);
+}
+
+.filterbar .field {
+  margin-bottom: 0;
+}
+
+/* --- CopyField -------------------------------------------------------- */
+.copyfield {
+  display: inline-flex;
+  align-items: stretch;
+  border: var(--border-hairline);
+  background: var(--color-surface);
+  max-width: 100%;
+}
+
+.copyfield__value {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  padding: var(--space-1) var(--space-2);
+  overflow-x: auto;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+}
+
+.copyfield__btn {
+  border: none;
+  border-left: var(--border-hairline);
+  background: transparent;
+  font: inherit;
+  font-size: var(--font-size-sm);
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+  color: var(--color-text);
+}
+
+/* --- StageRail -------------------------------------------------------- */
+.stagerail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--space-4);
+  border: var(--border-hairline);
+}
+
+.stagerail__stage {
+  flex: 1 1 0;
+  min-width: 92px;
+  padding: var(--space-2) var(--space-3);
+  border-right: var(--border-hairline);
+  font-size: var(--font-size-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stagerail__stage:last-child {
+  border-right: none;
+}
+
+.stagerail__stage--done {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.stagerail__stage--current {
+  background: var(--info-bg);
+  color: var(--info);
+  font-weight: 700;
+}
+
+.stagerail__stage--failed {
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.stagerail__stage--pending {
+  color: var(--text-faint);
+}
+
+.stagerail__index {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+}
+
+/* --- DefinitionList --------------------------------------------------- */
+.deflist {
+  display: grid;
+  grid-template-columns: minmax(140px, 220px) 1fr;
+  gap: 0;
+  margin: 0 0 var(--space-4);
+  border-top: var(--border-hairline);
+}
+
+.deflist__term {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  padding: var(--space-2) var(--space-3) var(--space-2) 0;
+  border-bottom: var(--border-hairline);
+}
+
+.deflist__value {
+  padding: var(--space-2) 0;
+  border-bottom: var(--border-hairline);
+  font-size: var(--font-size-md);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
