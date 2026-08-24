@@ -14,7 +14,6 @@ import type { S } from '../../api/schema';
 import { readRefreshToken } from '../../api/session';
 import { Badge, Banner, Button, DefinitionList, Input } from '../../ui';
 import { TENANT_ROLE_LABELS } from '../../lib/enums';
-import type { TenantRole } from '../../lib/enums';
 import { useSubmit } from '../../lib/useSubmit';
 
 export function AccountRoute() {
@@ -36,7 +35,7 @@ export function AccountRoute() {
           <DefinitionList
             items={[
               { term: 'Email', value: me.email },
-              { term: 'Role', value: TENANT_ROLE_LABELS[me.role as TenantRole] ?? me.role },
+              { term: 'Role', value: TENANT_ROLE_LABELS[me.role] ?? me.role },
               { term: 'Status', value: <Badge domain="user" value={me.status} /> },
             ]}
           />

@@ -49,13 +49,20 @@ from graphrec.common.config import get_settings
 from graphrec.common.enums import TenantStatus
 from graphrec.common.logging import configure_logging, get_logger, tenant_id_var
 from graphrec.db.engine import create_platform_engine, create_sessionmaker, create_worker_engine
-from graphrec.db.models import ModelDeployment, Tenant
+from graphrec.db.models import Job, ModelDeployment, Tenant
 from graphrec.db.tenant_context import bind_tenant
 from graphrec.domain.serving.deployment import DeploymentService
 from graphrec.domain.serving.reconciler import (
     acquire_leadership,
     converge,
     release_leadership,
+)
+from graphrec.jobs.states import JobType, QueueStatus
+from graphrec.observability.exposition import start_metrics_server
+from graphrec.observability.metrics import (
+    JOB_QUEUE_DEPTH,
+    JOB_QUEUE_OLDEST_SECONDS,
+    SERVING_REPLICAS,
 )
 from graphrec.serving_driver import build_serving_driver
 
@@ -140,6 +147,11 @@ class Reconciler:
             logger.exception("reconciler_pass_failed")
             return
 
+        try:
+            await self._survey_queue()
+        except Exception:  # a gauge is never worth stopping convergence for
+            logger.warning("queue_survey_failed", exc_info=True)
+
         breaches = [result for result in results if result.floor_breached]
         if breaches:
             # NR-NF-08. Reported at warning rather than raised: the pass that
@@ -173,7 +185,56 @@ class Reconciler:
                 tenant_id_var.reset(token)
             if result is not None:
                 results.append(result)
+                _publish_replicas(tenant_id, result)
         return results
+
+    async def _survey_queue(self) -> None:
+        """Publish queue depth and the age of the oldest queued job.
+
+        Here rather than in the job worker, and for the same reason the replica
+        gauges are here: the reconciler is a singleton by election, so there is
+        exactly one publisher. Two workers each publishing "the depth is 40"
+        would give Prometheus two series that a rule has to `max()` over, and
+        would report 40 for a queue that had drained the moment one of them
+        stopped scraping.
+
+        Read as the platform role, which holds `SELECT` on six columns of `jobs`
+        across every tenant (migration 0006) and cannot read a payload. A survey
+        that needed the tenant role would have to be run once per tenant.
+
+        Depth *and* age, because depth alone cannot tell a busy queue from a
+        stuck one: forty jobs arriving and draining looks exactly like forty
+        jobs nobody has claimed, until you ask how old the oldest one is.
+        """
+        async with self._platform_sessionmaker() as session:
+            depths = await session.execute(
+                sa.select(Job.job_type, Job.status, sa.func.count())
+                .where(Job.status.in_([QueueStatus.QUEUED.value, QueueStatus.RUNNING.value]))
+                .group_by(Job.job_type, Job.status)
+            )
+            observed = {(row[0], row[1]): row[2] for row in depths.all()}
+
+            oldest = await session.execute(
+                sa.select(Job.job_type, sa.func.min(Job.created_at))
+                .where(Job.status == QueueStatus.QUEUED.value)
+                .group_by(Job.job_type)
+            )
+            waiting = {row[0]: row[1] for row in oldest.all()}
+
+        now = dt.datetime.now(dt.UTC)
+        # Every known job type is written on every pass, including the ones with
+        # nothing queued. A gauge that is only written when it is non-zero stays
+        # at its last value forever, so a queue that drained would keep alerting
+        # and a queue that never had work would silently have no series at all.
+        for job_type in JobType:
+            for status in (QueueStatus.QUEUED, QueueStatus.RUNNING):
+                JOB_QUEUE_DEPTH.labels(job_type=job_type.value, status=status.value).set(
+                    observed.get((job_type.value, status.value), 0)
+                )
+            since = waiting.get(job_type.value)
+            JOB_QUEUE_OLDEST_SECONDS.labels(job_type=job_type.value).set(
+                (now - since).total_seconds() if since is not None else 0.0
+            )
 
     async def _tenants(self) -> list[tuple[uuid.UUID, str]]:
         """Every tenant with a deployment row, and its lifecycle status.
@@ -229,9 +290,28 @@ class Reconciler:
             await asyncio.wait_for(self._stopping.wait(), timeout=self._interval)
 
 
+def _publish_replicas(tenant_id: uuid.UUID, result: ConvergenceResult) -> None:
+    """The gauges behind §24's "`ready < 1` for an active tenant" alert.
+
+    Published from the reconciler rather than from the replicas themselves,
+    because the number the alert is about is *zero* ready replicas, and zero
+    replicas publish nothing. A gauge that can only be written by the thing it
+    describes cannot report that the thing is gone.
+
+    `tenant_id` as a label is the one identifier in the whole metric set. It is
+    unavoidable — the alert is per tenant — and it is bounded by the estate,
+    which is a number an operator can name. Prometheus is on the private network
+    (§9.1) and is not a tenant-facing surface.
+    """
+    labels = SERVING_REPLICAS.labels
+    labels(tenant_id=str(tenant_id), state="desired").set(result.desired_replicas)
+    labels(tenant_id=str(tenant_id), state="ready").set(result.ready_replicas)
+
+
 async def run() -> None:
     settings = get_settings()
     configure_logging(settings.log_level, settings.log_format)
+    start_metrics_server(settings, app="reconciler")
 
     driver = build_serving_driver(
         settings.serving_driver, compose_file=settings.serving_compose_file

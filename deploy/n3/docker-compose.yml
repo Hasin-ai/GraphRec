@@ -1,0 +1,136 @@
+# N3 — Serving + storage. BACKEND_PLAN §9.1.
+#
+# Caddy, the object store, the exporters — and the network the per-tenant
+# inference replicas join. **The replicas themselves are not in this file.**
+# They are started by the reconciler through `ServingDriver`, one Compose
+# project per tenant, from `deploy/single/docker-compose.serving.yml`. There is
+# no per-tenant file here and therefore no per-tenant file that can drift.
+#
+# **One public port: 443.** Recommendations and feedback only. The object store
+# is on WireGuard, reachable from N1 and N2 and from nothing else — an object
+# store on a public port is every tenant's uploads on a public port.
+
+name: graphrec-n3
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+services:
+  minio:
+    image: minio/minio:RELEASE.2024-10-13T13-34-11Z
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER_FILE: /run/secrets/s3_access_key
+      MINIO_ROOT_PASSWORD_FILE: /run/secrets/s3_secret_key
+    secrets:
+      - s3_access_key
+      - s3_secret_key
+    volumes:
+      - minio_data:/data
+    ports:
+      - "${WG_N3:?set WG_N3 to this node's WireGuard address}:9000:9000"
+      # The MinIO console, on WireGuard and on a separate port. It is an
+      # administrative interface over every tenant's artifacts; it does not go
+      # near the public listener.
+      - "${WG_N3}:9001:9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    # The object store holds the only state on this node that is not a cache.
+    # Bundles on local disk are re-fetchable; these are not.
+    stop_grace_period: 60s
+    logging: *logging
+    networks:
+      - graphrec
+
+  # The Docker API, over TLS, for the reconciler on N1.
+  #
+  # Not the raw socket. Access to `/var/run/docker.sock` is root on the host,
+  # and the reconciler needs exactly one capability: manage the
+  # `graphrec-serve-*` projects. This proxy is what narrows that — the allow
+  # list below is the whole of what N1 can do to this node.
+  docker_proxy:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    restart: unless-stopped
+    environment:
+      CONTAINERS: "1"
+      POST: "1"
+      # Everything else stays denied by omission: no EXEC, no volume
+      # management, no image build, no swarm. A reconciler that could `exec`
+      # into a serving container could read another tenant's bundle.
+      EXEC: "0"
+      VOLUMES: "0"
+      IMAGES: "1"
+      NETWORKS: "1"
+      INFO: "1"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "${WG_N3}:2376:2375"
+    logging: *logging
+    networks:
+      - graphrec
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    # The one public listener on this node. `inference` replicas are resolved by
+    # Docker's DNS on the shared network — see the Caddyfile for why the upstream
+    # is a service name rather than a list of addresses.
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      GRAPHREC_API_DOMAIN: ${GRAPHREC_API_DOMAIN:?set the public hostname for N3}
+      GRAPHREC_ACME_EMAIL: ${GRAPHREC_ACME_EMAIL:?set an address for certificate expiry notices}
+    logging: *logging
+    networks:
+      - graphrec
+
+  node_exporter:
+    image: prom/node-exporter:v1.8.2
+    restart: unless-stopped
+    pid: host
+    # This is the exporter `DiskFillingUp` is really about. Artifacts, bundles
+    # and the object store all live on this node, and §9.4 names disk exhaustion
+    # the most likely real outage.
+    command:
+      - --path.rootfs=/host
+      - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+)($$|/)
+    volumes:
+      - /:/host:ro,rslave
+    ports:
+      - "${WG_N3}:9100:9100"
+    logging: *logging
+    networks:
+      - graphrec
+
+secrets:
+  s3_access_key:
+    file: /opt/graphrec/secrets/s3_access_key
+  s3_secret_key:
+    file: /opt/graphrec/secrets/s3_secret_key
+
+volumes:
+  minio_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  graphrec:
+    # Named, not defaulted, because the serving template joins it as an external
+    # network by exactly this name. A Compose-generated name would be
+    # `graphrec-n3_default`, and every tenant's replicas would come up on an
+    # island with no route to the object store.
+    name: graphrec

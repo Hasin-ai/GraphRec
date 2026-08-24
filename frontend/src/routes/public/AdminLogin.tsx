@@ -23,7 +23,7 @@ export function AdminLoginRoute() {
   const [password, setPassword] = useState('');
 
   const onSuccess = useCallback(() => {
-    navigate('/admin', { replace: true });
+    void navigate('/admin', { replace: true });
   }, [navigate]);
 
   const { pending, error, submit } = useSubmit(platformSignIn, onSuccess);

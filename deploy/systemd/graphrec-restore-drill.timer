@@ -1,0 +1,15 @@
+[Unit]
+Description=GraphRec restore drill, weekly
+Documentation=file:///opt/graphrec/docs/RUNBOOKS.md#restore-from-backup
+
+[Timer]
+# Sunday, after the nightly backup has certainly finished. The drill takes its
+# own backup rather than reusing that one, on purpose: what is being rehearsed
+# is the whole path, and a drill that only ever restored a file somebody else
+# produced would not catch `backup.sh` breaking.
+OnCalendar=Sun *-*-* 04:30:00
+RandomizedDelaySec=900
+Persistent=true
+
+[Install]
+WantedBy=timers.target

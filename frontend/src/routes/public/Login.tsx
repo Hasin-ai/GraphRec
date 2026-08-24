@@ -30,7 +30,7 @@ export function LoginRoute() {
   const notice = (location.state as { notice?: string } | null)?.notice;
 
   const onSuccess = useCallback(() => {
-    navigate(destination, { replace: true });
+    void navigate(destination, { replace: true });
   }, [navigate, destination]);
 
   const { pending, error, submit } = useSubmit(signIn, onSuccess);

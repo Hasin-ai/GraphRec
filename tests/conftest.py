@@ -116,8 +116,35 @@ def _sweep_counters(counter_cache) -> Iterator[None]:
     sessions and their queues with it.
     """
     yield
-    if counter_cache is None:
-        return
-    keys = list(counter_cache.scan_iter(match="usage:*", count=500))
+    if counter_cache is not None:
+        _drop(counter_cache, "usage:*")
+
+
+@pytest.fixture(autouse=True)
+def _sweep_rate_limits(counter_cache) -> Iterator[None]:
+    """One address makes every request in this suite, so the limits are reset
+    between tests rather than raised for them.
+
+    `TestClient` reports `testclient` as the peer and the tenant fixtures reuse a
+    handful of ids, so a suite of 1200 tests looks to the limiter exactly like
+    one caller trying eight hundred passwords — which is the case it was written
+    to stop. The two ways out are to widen the limits under `ci` and to clear the
+    counters between tests, and only the second leaves the thing under test
+    unchanged: the dependency still runs on every request, still reads the
+    production numbers, and still counts. What it does not do is remember the
+    previous test.
+
+    Swept before as well as after, because a test that fails mid-way leaves its
+    counts behind and the next one should not inherit them.
+    """
+    if counter_cache is not None:
+        _drop(counter_cache, "graphrec:ratelimit:*")
+    yield
+    if counter_cache is not None:
+        _drop(counter_cache, "graphrec:ratelimit:*")
+
+
+def _drop(client, pattern: str) -> None:
+    keys = list(client.scan_iter(match=pattern, count=500))
     if keys:
-        counter_cache.delete(*keys)
+        client.delete(*keys)

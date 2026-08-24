@@ -38,6 +38,7 @@ import logging
 from typing import TYPE_CHECKING, Protocol
 
 from graphrec.domain.metering import ledger
+from graphrec.observability.metrics import METERING_DEGRADED
 
 if TYPE_CHECKING:
     import uuid
@@ -148,6 +149,11 @@ class ResilientUsageCounters:
     different consequence: the counter is left stale, which the next
     reconciliation corrects. Both are logged at warning, once per failure, so an
     unreachable Redis is visible in operations rather than only in latency.
+
+    And counted, not only logged. Degrading silently is how a cache stays broken
+    for a week: every request still succeeds, every number is still right, and
+    the only evidence is a ledger query per quota check that nobody is watching
+    the latency of. `graphrec_metering_degraded_total` is the evidence.
     """
 
     def __init__(self, inner: UsageCounters) -> None:
@@ -157,6 +163,7 @@ class ResilientUsageCounters:
         try:
             return await self._inner.read(key)
         except Exception:
+            METERING_DEGRADED.inc()
             logger.warning("usage_counter_read_failed", extra={"key": key}, exc_info=True)
             return None
 
@@ -164,12 +171,14 @@ class ResilientUsageCounters:
         try:
             await self._inner.seed(key, value)
         except Exception:
+            METERING_DEGRADED.inc()
             logger.warning("usage_counter_seed_failed", extra={"key": key}, exc_info=True)
 
     async def add(self, key: str, delta: decimal.Decimal) -> None:
         try:
             await self._inner.add(key, delta)
         except Exception:
+            METERING_DEGRADED.inc()
             logger.warning("usage_counter_add_failed", extra={"key": key}, exc_info=True)
 
 

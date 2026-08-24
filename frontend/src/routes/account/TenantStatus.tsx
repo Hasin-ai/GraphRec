@@ -32,7 +32,9 @@ const FALLBACK =
  * button would suggest otherwise.
  */
 export function TenantStatusRoute() {
-  const tenant = useLoaderData() as TenantSummary;
+  // `useLoaderData` is untyped without react-router's generated route
+  // types, so this assertion is the component's type and not decoration.
+  const tenant = useLoaderData<TenantSummary>();
   const revalidator = useRevalidator();
   const checking = revalidator.state === 'loading';
 

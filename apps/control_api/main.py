@@ -46,17 +46,25 @@ from graphrec.http import (
     RequestContextMiddleware,
     install_error_handlers,
 )
+from graphrec.http.rate_limit import RateLimiter
+from graphrec.observability.exposition import start_metrics_server
+from graphrec.observability.middleware import MetricsMiddleware
 from graphrec.storage.factory import create_artifact_store
 
 logger = get_logger(__name__)
 
 API_PREFIX = "/v1"
 
+#: The `app` label on every metric this process publishes. One dashboard row.
+APP_NAME = "control_api"
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings: Settings = app.state.settings
     configure_logging(level=settings.log_level, fmt=settings.log_format)
+    # On its own port, never on this app's. See `graphrec.observability.exposition`.
+    start_metrics_server(settings, app=APP_NAME, version=app.version)
     logger.info(
         "api_starting",
         extra={
@@ -118,6 +126,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         bulk_limit=settings.max_bulk_body_bytes,
     )
     app.add_middleware(RequestContextMiddleware)
+    # Inside the request id, outside everything else: a request that a body
+    # limit rejects is still a request this process served, and a latency
+    # histogram that silently omits its rejections reads better than the service
+    # behaved.
+    app.add_middleware(MetricsMiddleware, app_name=APP_NAME)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_allowed_origins,
@@ -154,6 +167,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # delete what it retires. A control API configured without one still reads
     # the registry; it just says so rather than pretending the check passed.
     app.state.artifact_store = create_artifact_store(settings)
+
+    # One limiter, holding the client the application already has. Built here
+    # rather than per request so that a Redis outage is one warning per request
+    # rather than one connection attempt per request as well.
+    app.state.rate_limiter = RateLimiter(app.state.redis)
 
     app.state.tokens = TokenService(
         private_key_path=settings.jwt_private_key_path,

@@ -1,0 +1,489 @@
+{
+  "uid": "graphrec-platform",
+  "title": "GraphRec / Platform",
+  "description": "The asynchronous half: the queue, the workers, the control API and the metering path. Depth and age are separate panels on purpose \u2014 depth alone cannot distinguish a busy queue from a stuck one, and the two have different runbooks.",
+  "tags": [
+    "graphrec",
+    "platform",
+    "jobs"
+  ],
+  "editable": false,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timezone": "utc",
+  "panels": [
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Queue depth",
+      "description": "Published by the reconciler, which is a singleton by advisory-lock election and writes every job type and status on every pass including the zeros. A gauge only written when non-zero keeps its last value forever.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "graphrec-prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "graphrec-prometheus"
+          },
+          "expr": "sum by (job_type) (graphrec_job_queue_depth{status=\"queued\"})",
+          "legendFormat": "{{job_type}} queued",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "graphrec-prometheus"
+          },
+          "expr": "sum by (job_type) (graphrec_job_queue_depth{status=\"running\"})",
+          "legendFormat": "{{job_type}} running",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 6
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 50
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Oldest queued job",
+      "description": "The stuck-versus-busy discriminator. Falling means it is draining; flat or rising with workers alive means nothing is claiming.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "graphrec-prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "graphrec-prometheus"
+          },
+          "expr": "graphrec_job_queue_oldest_seconds",
+          "legendFormat": "{{job_type}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 6
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1800
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Job outcomes",
+      "description": "`failed` is terminal; `retrying` is a job that will be attempted again. Kept apart so a flaky upload retried twice and then succeeded does not read as a failure.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "graphrec-prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 7
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "graphrec-prometheus"
+          },
+          "expr": "sum by (outcome) (rate(graphrec_jobs_finished_total[15m]))",
+          "legendFormat": "{{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 6
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Job duration p95",
+      "description": "By type. A queue draining slowly because each job now takes ten times as long is a different incident from one with too few workers, and this is the panel that separates them.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "graphrec-prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 7
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "graphrec-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, job_type) (rate(graphrec_job_duration_seconds_bucket[30m])))",
+          "legendFormat": "{{job_type}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 6
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Control API latency p95",
+      "description": "By route template. The console's slow page is visible here and nowhere else \u2014 inference latency says nothing about it.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "graphrec-prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 14
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "graphrec-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(graphrec_http_request_duration_seconds_bucket{app=\"control_api\"}[5m])))",
+          "legendFormat": "{{route}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 6
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Control API errors",
+      "description": "5xx separated from 4xx. A 4xx spike is usually a client or an integration; a 5xx spike is ours.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "graphrec-prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 6,
+        "x": 12,
+        "y": 14
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "graphrec-prometheus"
+          },
+          "expr": "sum(rate(graphrec_http_requests_total{app=\"control_api\",status=~\"5..\"}[5m]))",
+          "legendFormat": "5xx",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "graphrec-prometheus"
+          },
+          "expr": "sum(rate(graphrec_http_requests_total{app=\"control_api\",status=~\"4..\"}[5m]))",
+          "legendFormat": "4xx",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 6
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Metering fallback",
+      "description": "Counts of the usage counters falling back to the ledger. Every number stays correct and gets slower, so this panel is the only symptom \u2014 which is the whole reason the counter exists.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "graphrec-prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 6,
+        "x": 18,
+        "y": 14
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "graphrec-prometheus"
+          },
+          "expr": "rate(graphrec_metering_degraded_total[10m])",
+          "legendFormat": "degraded",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 6
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "id": 17,
+      "type": "table",
+      "title": "Build",
+      "description": "Which version each process is running. During an ordered deploy (N1, then N3, then N2) they are legitimately different for a few minutes; hours later they are not.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "graphrec-prometheus"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 21
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "graphrec-prometheus"
+          },
+          "expr": "graphrec_build_info",
+          "legendFormat": "{{app}} {{version}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {}
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  }
+}

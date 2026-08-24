@@ -133,3 +133,7 @@ diagrams/_build/
 .claude/
 .serena/
 .DS_Store
+
+# Backups, artifacts and anything else a script writes at runtime. A backup
+# in the repository is a tenant database in the repository.
+var/

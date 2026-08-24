@@ -1,0 +1,110 @@
+# N1's public edge. Console, control API and ingestion, on 443.
+#
+# One site block, not two. The console and the API share an origin so that the
+# browser's session cookie is same-origin and CORS never enters the picture —
+# a console on a second hostname would need `Access-Control-Allow-Credentials`,
+# which is the configuration people get wrong in the direction of `*`.
+{
+	email {$GRAPHREC_ACME_EMAIL}
+	# Certificates are Caddy's business. There is no manual renewal step in any
+	# runbook here, deliberately: an expired certificate is an outage that a
+	# calendar reminder is not a control for.
+	servers {
+		# The console is a browser client; the API is not. Both want the
+		# request identifier preserved, which `header_up` below does.
+		trusted_proxies static private_ranges
+	}
+}
+
+{$GRAPHREC_CONSOLE_DOMAIN} {
+	encode zstd gzip
+
+	# --- TLS ----------------------------------------------------------------
+	#
+	# §24 asks for TLS 1.3 on both public surfaces, so it is pinned here rather
+	# than left at Caddy's default of "1.2 and up". The default is a reasonable
+	# default and it is not what was asked for, and the difference is invisible
+	# until somebody runs a scanner against the edge.
+	#
+	# The cost is real and is accepted: a client that cannot do 1.3 cannot
+	# connect at all, and the failure it sees is a handshake error rather than
+	# an HTTP status, so nothing here can explain itself to it. Every browser
+	# from 2020 on and every HTTP client this console ships speaks 1.3.
+	#
+	# `protocols` sets the minimum; the maximum is left open so that a Caddy
+	# which learns a newer version does not need this line changed.
+	tls {
+		protocols tls1.3
+	}
+
+	# --- security headers ---------------------------------------------------
+	#
+	# Set at the edge rather than in the application, because they must be on
+	# the static console assets too and those never reach FastAPI.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# The console is a single-page application with no inline scripts and
+		# no third-party origins. `connect-src 'self'` is what makes the
+		# same-origin decision above load-bearing rather than incidental.
+		Content-Security-Policy "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+		# Caddy announces itself by default. It is not a secret and it is not
+		# useful to a client either.
+		-Server
+	}
+
+	# --- the API ------------------------------------------------------------
+
+	@api path /v1/* /healthz /readyz /openapi.json /.well-known/*
+	handle @api {
+		# Ingestion submits batches. The application enforces its own
+		# per-endpoint body bounds (D7) and returns a structured error; this is
+		# the outer limit that stops a body large enough to matter from reaching
+		# Python at all. A directive in its own right, not a `reverse_proxy`
+		# subdirective — it has to apply before the body is read.
+		request_body {
+			max_size 32MB
+		}
+
+		# No `header_up` for `X-Request-Id` or `X-Forwarded-*`: Caddy passes
+		# request headers through by default and sets the forwarded set itself,
+		# and restating them is a line that can drift from the behaviour.
+		reverse_proxy control_api:8010 {
+			# Longer than the application's own 15 s statement timeout, so a
+			# slow query surfaces as the application's error rather than as a
+			# 504 with no request identifier in it.
+			transport http {
+				read_timeout 60s
+				write_timeout 60s
+			}
+		}
+	}
+
+	# --- the console --------------------------------------------------------
+	#
+	# Everything else is the SPA. `try_files` with the fallback to index.html is
+	# what makes a deep link like /products/sku-1 work on a hard refresh: the
+	# server has no such file, and the router is what resolves it.
+	handle {
+		root * /srv/console
+		try_files {path} /index.html
+		file_server
+	}
+
+	# Structured, to stdout, where the Docker log driver picks it up. The
+	# application logs JSON for the same reason; two formats in one stream is
+	# two parsers.
+	log {
+		output stdout
+		format json
+	}
+}
+
+# Anything arriving on 80, including an IP-address request with no Host header,
+# is redirected rather than served. Caddy does this automatically for the site
+# above; this block covers the rest so that nothing is answered in the clear.
+:80 {
+	redir https://{$GRAPHREC_CONSOLE_DOMAIN}{uri} permanent
+}

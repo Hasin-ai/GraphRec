@@ -20,7 +20,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
-from apps.control_api.deps import CurrentTenant, TenantAudit, get_settings_dep
+from apps.control_api.deps import (
+    ApiKeyRateLimit,
+    CurrentTenant,
+    TenantAudit,
+    get_settings_dep,
+)
 from apps.control_api.schemas import (
     CreateCredentialRequest,
     CredentialListResponse,
@@ -134,6 +139,11 @@ async def list_credentials(
     response_model=IssuedCredentialResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create a credential",
+    # Every route here that mints or invalidates a secret, and none that only
+    # read: `MAX_ACTIVE_API_KEYS_PER_TENANT` bounds how many can exist at once
+    # but not how fast they can be cycled, and each cycle is an argon2 hash and
+    # an audit row.
+    dependencies=[ApiKeyRateLimit],
 )
 async def create_credential(
     body: CreateCredentialRequest,
@@ -183,6 +193,7 @@ async def describe_credential(
 
 @router.post(
     "/api-keys/{key_id}:rotate",
+    dependencies=[ApiKeyRateLimit],
     response_model=IssuedCredentialResponse,
     summary="Rotate a credential",
 )

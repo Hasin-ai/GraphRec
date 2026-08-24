@@ -1,0 +1,21 @@
+# Provisioned, not clicked. A dashboard that references a datasource created by
+# hand is a dashboard that renders on one Grafana and nowhere else, and the
+# usual symptom is a fresh install showing every panel empty with no error.
+#
+# The UID is fixed for the same reason: every dashboard JSON in this directory
+# names `graphrec-prometheus`, and a generated UID would differ per install.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: graphrec-prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    # Matches `evaluation_interval` in prometheus.yml. A dashboard that queries
+    # at a finer step than the data arrives draws gaps between real points and
+    # reads as an outage.
+    jsonData:
+      timeInterval: 30s
+    editable: false

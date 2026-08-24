@@ -13,6 +13,7 @@ import { screen, waitFor } from '@testing-library/react';
 import { SubmissionDetailRoute } from './SubmissionDetail';
 import { DEVELOPER_ME, renderGuarded, respondWith } from '../../test/tenant';
 import { resetSessionsForTest } from '../../api/session';
+import { requestUrl } from '../../test/request';
 
 const SUBMISSION_ID = '00000000-0000-4000-8000-0000000000e1';
 
@@ -46,7 +47,7 @@ const SUCCEEDED = {
 function countSubmissionCalls(): number {
   return vi
     .mocked(globalThis.fetch)
-    .mock.calls.filter(([url]) => String(url).includes('/v1/submissions/')).length;
+    .mock.calls.filter(([url]) => requestUrl(url).includes('/v1/submissions/')).length;
 }
 
 function render() {

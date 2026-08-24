@@ -287,7 +287,10 @@ describe('the platform operator suspends a tenant', () => {
       ],
       ['GET /v1/platform/tenants/[^/:]+', () => detail()],
       [
-        'POST /v1/platform/tenants/[^/]+:change-status',
+        // The path the *document* serves, not the one this test used to
+        // invent. `src/api/contract.test.ts` is what now keeps the two in step;
+        // this mock was happy to answer a route the server has never had.
+        'POST /v1/platform/tenants/[^/]+:status',
         ({ body }) => {
           const sent = body as { status: string };
           tenant.status = sent.status;

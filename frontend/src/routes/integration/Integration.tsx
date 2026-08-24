@@ -23,21 +23,36 @@ import { SCOPE_SHORT_LABELS } from '../../lib/enums';
 import type { CredentialScope } from '../../lib/enums';
 import { formatDate } from '../../lib/format';
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'https://api.graphrec.example';
+// Two hosts, because there are two public ports (§9.1) and a customer calls
+// both. Catalogue and ingestion land on N1; recommendations and feedback land on
+// N3, which routes on the *hostname* — a tenant that pastes the control-plane
+// base URL in front of `/v1/recommendations` gets a 404 with nothing in it to
+// explain why. The published document says the same thing in its `servers`
+// block, and `Integration.test.tsx` holds the two together.
+const CONTROL_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'https://api.graphrec.example';
+const DATA_BASE_URL = 'https://<your-tenant>.serve.graphrec.example';
+
+type Host = 'control' | 'data';
 
 interface Endpoint {
   method: string;
   path: string;
+  /** Which of the two public hosts answers this. Not cosmetic — see `DATA_BASE_URL`. */
+  host: Host;
   scope: CredentialScope;
   summary: string;
   request?: string;
   response: string;
 }
 
-const ENDPOINTS: readonly Endpoint[] = [
+// Exported for `Integration.test.tsx`, which checks every row against
+// `openapi.json`. This page is the documentation a customer integrates from, so
+// a wrong path here is a wrong path in somebody else's service.
+export const ENDPOINTS: readonly Endpoint[] = [
   {
     method: 'POST',
     path: '/v1/products:bulk-upsert',
+    host: 'control',
     scope: 'catalog:write',
     summary:
       'Send your catalogue. Accepted for processing, not applied on the spot — the response is a submission you can poll.',
@@ -65,6 +80,7 @@ const ENDPOINTS: readonly Endpoint[] = [
   {
     method: 'POST',
     path: '/v1/events',
+    host: 'control',
     scope: 'events:write',
     summary:
       'One interaction. Resending the same event_id confirms the first one rather than counting it twice.',
@@ -80,6 +96,7 @@ const ENDPOINTS: readonly Endpoint[] = [
   {
     method: 'POST',
     path: '/v1/events/batches',
+    host: 'control',
     scope: 'events:write',
     summary: 'Up to a batch of interactions at once. Same idempotency rules, one submission back.',
     request: `{ "batch_id": "…", "events": [ /* as above */ ] }`,
@@ -88,6 +105,7 @@ const ENDPOINTS: readonly Endpoint[] = [
   {
     method: 'GET',
     path: '/v1/submissions/{submission_id}',
+    host: 'control',
     scope: 'events:write',
     summary: 'How a batch went, including a per-item list of anything rejected.',
     response: `{
@@ -101,22 +119,81 @@ const ENDPOINTS: readonly Endpoint[] = [
   {
     method: 'POST',
     path: '/v1/recommendations',
+    host: 'data',
     scope: 'recommendations:read',
-    summary: 'Ask for recommendations for one customer. This is the call in your hot path.',
-    request: `{ "customer_id": "customer-1", "limit": 10 }`,
+    summary: 'Ask for recommendations for one customer or one session. This is the call in your hot path.',
+    request: `{
+  "request_id": "01J8Z0K3QY7N4W",
+  "customer_id": "customer-1",
+  "top_n": 10
+}`,
     response: `{
-  "items": [ { "external_product_id": "sku-1", "score": 0.91 } ],
-  "model_version": 7,
-  "fallback": false
+  "request_id": "01J8Z0K3QY7N4W",
+  "model_version": { "version_id": "…", "version_number": 7 },
+  "strategy": "model",
+  "fallback_applied": false,
+  "items": [
+    { "external_product_id": "sku-1", "rank": 1, "score": 0.91, "candidate_source": "dgsr" }
+  ],
+  "ordering_policy_version": 1,
+  "latency_ms": 34
 }`,
   },
   {
     method: 'POST',
-    path: '/v1/recommendations/feedback',
+    path: '/v1/feedback/impressions',
+    host: 'data',
     scope: 'recommendations:read',
-    summary: 'Tell us what happened to a set of recommendations, so the next model is better.',
-    request: `{ "request_id": "…", "external_product_id": "sku-1", "outcome": "clicked" }`,
-    response: `{ "status": "accepted" }`,
+    summary:
+      'What you actually showed, and where. Send this before the clicks — an impression is what a click is attributed to.',
+    request: `{
+  "request_id": "01J8Z0K3QY7N4W",
+  "impressions": [ { "event_id": "imp-1", "external_product_id": "sku-1", "position": 1 } ]
+}`,
+    response: `{
+  "request_id": "01J8Z0K3QY7N4W",
+  "received": 1,
+  "accepted": 1,
+  "duplicates": 0,
+  "unknown_products": []
+}`,
+  },
+  {
+    method: 'POST',
+    path: '/v1/feedback/clicks',
+    host: 'data',
+    scope: 'recommendations:read',
+    summary: 'What was clicked. Resending an event_id is counted as a duplicate, not as a second click.',
+    request: `{
+  "request_id": "01J8Z0K3QY7N4W",
+  "events": [ { "event_id": "clk-1", "external_product_id": "sku-1" } ]
+}`,
+    response: `{
+  "request_id": "01J8Z0K3QY7N4W",
+  "received": 1,
+  "accepted": 1,
+  "duplicates": 0,
+  "unknown_products": []
+}`,
+  },
+  {
+    method: 'POST',
+    path: '/v1/feedback/conversions',
+    host: 'data',
+    scope: 'recommendations:read',
+    summary:
+      'What was bought, and for how much. `value` is optional; send it if you have it, because it is what revenue attribution is computed from.',
+    request: `{
+  "request_id": "01J8Z0K3QY7N4W",
+  "events": [ { "event_id": "ord-1", "external_product_id": "sku-1", "value": 19.99 } ]
+}`,
+    response: `{
+  "request_id": "01J8Z0K3QY7N4W",
+  "received": 1,
+  "accepted": 1,
+  "duplicates": 0,
+  "unknown_products": []
+}`,
   },
 ];
 
@@ -162,8 +239,14 @@ export function IntegrationRoute() {
       </div>
 
       <section className="card">
-        <h2 className="card__title">Base URL and authentication</h2>
-        <CopyField label="Base URL" value={BASE_URL} />
+        <h2 className="card__title">Base URLs and authentication</h2>
+        <CopyField label="Control plane — catalogue, events, submissions" value={CONTROL_BASE_URL} />
+        <CopyField label="Data plane — recommendations and feedback" value={DATA_BASE_URL} />
+        <p className="page__lede">
+          Two hosts, not one. Your tenant is part of the data-plane hostname, which is how a
+          recommendation request reaches your replicas and only yours — so the subdomain is not
+          decoration and a call to the control-plane host will not find these routes.
+        </p>
         <p className="page__lede">
           Every call carries your API key in the <code>Authorization</code> header. The key is
           issued once on <Link to="/credentials">Credentials</Link> and never shown again, so store
@@ -171,7 +254,7 @@ export function IntegrationRoute() {
           repository.
         </p>
         <pre className="snippet">
-          <code>{`curl -X POST ${BASE_URL}/v1/events \\
+          <code>{`curl -X POST ${CONTROL_BASE_URL}/v1/events \\
   -H "Authorization: Bearer grk_live_…" \\
   -H "Content-Type: application/json" \\
   -d '{"event_id":"…","customer_id":"…","external_product_id":"…","event_type":"view"}'`}</code>
@@ -260,7 +343,7 @@ function CredentialTable({ credentials }: { credentials: readonly Credential[] }
       header: 'May call',
       cell: (row) =>
         row.scopes
-          .map((scope) => SCOPE_SHORT_LABELS[scope as CredentialScope] ?? scope)
+          .map((scope) => SCOPE_SHORT_LABELS[scope] ?? scope)
           .join(', '),
     },
     {
@@ -290,6 +373,9 @@ function EndpointCard({ endpoint }: { endpoint: Endpoint }) {
         </code>
       </h3>
       <p className="page__lede">{endpoint.summary}</p>
+      <p className="page__lede">
+        On <code>{endpoint.host === 'data' ? DATA_BASE_URL : CONTROL_BASE_URL}</code>.
+      </p>
       <p className="page__lede">
         Requires <code>{endpoint.scope}</code>.
       </p>

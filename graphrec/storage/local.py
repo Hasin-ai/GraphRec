@@ -83,6 +83,20 @@ class LocalArtifactStore:
     def exists(self, key: str) -> bool:
         return self._path(key).is_file()
 
+    def probe(self) -> None:
+        """The root must exist and be writable.
+
+        Writable, not merely present: the failure this catches in practice is a
+        volume that did not mount, and an unmounted mountpoint is a perfectly
+        readable empty directory on the host filesystem underneath. A directory
+        that cannot be written to is one an upload will fail against, so the
+        probe asks the question the next put will ask.
+        """
+        if not self._root.is_dir():
+            raise StorageError(f"{self._root} is not a directory")
+        if not os.access(self._root, os.W_OK):
+            raise StorageError(f"{self._root} is not writable")
+
     def delete(self, key: str) -> None:
         self._path(key).unlink(missing_ok=True)
 

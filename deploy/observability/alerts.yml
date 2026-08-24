@@ -1,0 +1,174 @@
+# The alerts BACKEND_PLAN §24 names, and nothing else.
+#
+# Six are required there: inference P95 > 300 ms, fallback > 5%, queue depth,
+# job failure rate, disk > 80%, and `ready < 1` for an active tenant. Three more
+# are here because the six above are all silent in the failure that matters
+# most — a process that has stopped publishing. An alert set that cannot fire
+# when the exporter is gone is an alert set that reports healthiest during an
+# outage.
+#
+# Every rule has a `for`. An alert with no `for` fires on a single scrape, which
+# for a P95 over a five-minute window means it fires on one slow request during
+# a deploy, and an alert that has cried wolf once is an alert with a silence on
+# it. Every rule also carries `summary` and `runbook` annotations: an operator
+# woken at 03:00 needs the next action in the notification, not a dashboard to
+# go and interpret. `runbook` points at `docs/RUNBOOKS.md`.
+
+groups:
+  - name: graphrec-inference
+    interval: 30s
+    rules:
+      - alert: InferenceLatencyHigh
+        # §24: P95 > 300 ms. Computed over the histogram this platform
+        # publishes, whose buckets have a boundary *at* 0.3 precisely so this
+        # comparison is not decided by a bucket edge somewhere else.
+        expr: >
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(graphrec_http_request_duration_seconds_bucket{app="inference"}[5m]))
+          ) > 0.3
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Inference P95 is above 300 ms
+          description: >
+            P95 over the last five minutes is {{ $value | humanizeDuration }}.
+            The SRS budget is 300 ms.
+          runbook: docs/RUNBOOKS.md#inference-is-slow
+
+      - alert: FallbackRateHigh
+        # §24: fallback > 5%. `degraded="true"` only — see the comment on
+        # `graphrec_recommendations_total`. A cold user served popularity is
+        # the system working; the model store being unreachable is not, and
+        # they are the same `strategy`.
+        expr: >
+          sum(rate(graphrec_recommendations_total{degraded="true"}[15m]))
+          /
+          clamp_min(sum(rate(graphrec_recommendations_total[15m])), 0.001)
+          > 0.05
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: More than 5% of recommendations are falling back
+          description: >
+            {{ $value | humanizePercentage }} of responses in the last fifteen
+            minutes were served by the fallback lane.
+          runbook: docs/RUNBOOKS.md#the-fallback-lane-is-carrying-traffic
+
+      - alert: TenantHasNoReadyReplica
+        # §24: `ready < 1` for an active tenant. `desired > 0` is the "active"
+        # part: a tenant that is suspended, or has never deployed, has a desired
+        # count of zero and is not an incident.
+        expr: >
+          graphrec_serving_replicas{state="ready"} < 1
+          and on (tenant_id) graphrec_serving_replicas{state="desired"} > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Tenant {{ $labels.tenant_id }} has no ready serving replica
+          description: >
+            The deployment wants replicas and none are ready. Recommendations
+            for this tenant are being refused or served by the fallback lane.
+          runbook: docs/RUNBOOKS.md#a-tenant-has-no-ready-replica
+
+  - name: graphrec-jobs
+    interval: 30s
+    rules:
+      - alert: JobQueueDeep
+        # §24: queue depth. Depth *and* age, as two rules rather than one
+        # compound expression, so the notification says which of the two
+        # situations it is: a backlog that is draining, or one that is not.
+        expr: sum by (job_type) (graphrec_job_queue_depth{status="queued"}) > 50
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.job_type }} queue is {{ $value }} deep"
+          runbook: docs/RUNBOOKS.md#the-job-queue-is-backing-up
+
+      - alert: JobQueueStalled
+        expr: graphrec_job_queue_oldest_seconds > 1800
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "A {{ $labels.job_type }} job has been queued for 30 minutes"
+          description: >
+            Depth alone cannot tell a busy queue from a stuck one. This is the
+            stuck case: nothing has claimed the oldest job.
+          runbook: docs/RUNBOOKS.md#evict-a-stuck-job
+
+      - alert: JobFailureRateHigh
+        # §24: job failure rate. `outcome="failed"` is terminal only —
+        # `retrying` is a separate outcome, because a queue that retries a flaky
+        # upload twice and then succeeds has not failed, and an alert that said
+        # otherwise would fire on every transient network blip.
+        expr: >
+          sum(rate(graphrec_jobs_finished_total{outcome="failed"}[30m]))
+          /
+          clamp_min(sum(rate(graphrec_jobs_finished_total[30m])), 0.001)
+          > 0.1
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: More than 10% of jobs are failing terminally
+          runbook: docs/RUNBOOKS.md#jobs-are-failing
+
+      - alert: MeteringDegraded
+        # Not in §24's list, and it is here anyway: this is the failure that
+        # hides. Every request still succeeds and every number is still right,
+        # so the only symptom is a ledger query per quota check. UC-30 says a
+        # measurement gap is reported, and this is us reporting our own.
+        expr: rate(graphrec_metering_degraded_total[10m]) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Usage counters are falling back to the ledger
+          description: >
+            Redis is unreachable from at least one process. Counts stay correct
+            and get slower. See `ResilientUsageCounters`.
+          runbook: docs/RUNBOOKS.md#the-metering-cache-is-down
+
+  - name: graphrec-host
+    interval: 60s
+    rules:
+      - alert: DiskFillingUp
+        # §24: disk > 80%. From node_exporter, which is the one exporter this
+        # platform does not write: `graphrec_*` cannot describe the filesystem
+        # the process is about to run out of.
+        #
+        # `fstype` is filtered because a container host reports dozens of
+        # overlay and tmpfs mounts that are full by design, and an alert that
+        # fires permanently is an alert that is permanently silenced.
+        expr: >
+          (
+            1 - (
+              node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"}
+              / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs"}
+            )
+          ) > 0.8
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.mountpoint }} on {{ $labels.instance }} is over 80% full"
+          description: >
+            Artifacts and checkpoints are the usual cause. Lifecycle rules are
+            in the runbook.
+          runbook: docs/RUNBOOKS.md#disk-is-filling-up
+
+      - alert: TargetDown
+        # None of the rules above can fire when the thing they measure has
+        # stopped publishing. This is the rule that covers the others.
+        expr: up == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} on {{ $labels.instance }} is not being scraped"
+          runbook: docs/RUNBOOKS.md#a-target-is-down

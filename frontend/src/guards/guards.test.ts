@@ -9,6 +9,7 @@ import {
 } from './index';
 import { resetSessionsForTest, store } from '../api/session';
 import { ApiError } from '../api/errors';
+import { requestUrl } from '../test/request';
 
 const SESSION = {
   access_token: 'access-1',
@@ -103,7 +104,7 @@ describe('gate 2 — tenant state', () => {
 
     await locationOfThrow(() => tenantGuard(queryClient, route('/home')));
 
-    const urls = vi.mocked(globalThis.fetch).mock.calls.map(([url]) => String(url));
+    const urls = vi.mocked(globalThis.fetch).mock.calls.map(([url]) => requestUrl(url));
     expect(urls).toEqual(['/v1/tenant']);
   });
 

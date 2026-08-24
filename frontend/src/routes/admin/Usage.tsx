@@ -19,7 +19,7 @@ import { QueryState } from '../../components/QueryState';
 import { FilterBar, Select, Table } from '../../ui';
 import type { Column } from '../../ui';
 import { MEASUREMENT_STATUS_LABELS } from '../../lib/enums';
-import type { MeasurementStatus, UsageType } from '../../lib/enums';
+import type { UsageType } from '../../lib/enums';
 import { ABSENT, formatQuantity, humanise } from '../../lib/format';
 
 // `satisfies` rather than a hand-typed list of strings: `UsageType` is
@@ -61,7 +61,7 @@ export function AdminUsageRoute() {
           <>
             <span aria-hidden="true">{ABSENT}</span>
             <span className="gated__reason">
-              {MEASUREMENT_STATUS_LABELS[row.measurement_status as MeasurementStatus] ??
+              {MEASUREMENT_STATUS_LABELS[row.measurement_status] ??
                 humanise(row.measurement_status)}
             </span>
           </>

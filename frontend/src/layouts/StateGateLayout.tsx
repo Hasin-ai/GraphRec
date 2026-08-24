@@ -19,7 +19,7 @@ export function StateGateLayout() {
   async function handleSignOut() {
     await signOut();
     queryClient.clear();
-    navigate('/login', { replace: true });
+    void navigate('/login', { replace: true });
   }
 
   return (

@@ -104,6 +104,20 @@ class S3ArtifactStore:
             return False
         return True
 
+    def probe(self) -> None:
+        """`HEAD` the bucket.
+
+        The bucket rather than a key, because the two failures worth telling
+        apart at readiness are "the endpoint is unreachable" and "the endpoint
+        is fine but this bucket is not there or not ours", and `head_bucket`
+        distinguishes them from a successful call on an empty bucket. The
+        message is deliberately thin — see the module docstring on NR-NF-06.
+        """
+        try:
+            self._client.head_bucket(Bucket=self._bucket)
+        except Exception as exc:
+            raise StorageError(f"could not reach bucket {self._bucket}") from exc
+
     def delete(self, key: str) -> None:
         try:
             self._client.delete_object(Bucket=self._bucket, Key=key)

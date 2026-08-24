@@ -1,0 +1,52 @@
+#!/usr/sbin/nft -f
+#
+# N2 — Training. **No public port at all.**
+#
+# This is the strictest of the three and it is also the easiest to keep strict,
+# because nothing on this node has a reason to be reachable from the internet.
+# If a rule ever needs adding here, that is worth a second look rather than a
+# second rule.
+
+flush ruleset
+
+define wg_net = 10.10.0.0/24
+
+table inet filter {
+	chain input {
+		type filter hook input priority filter; policy drop;
+
+		ct state established,related accept
+		ct state invalid drop
+
+		iif lo accept
+
+		udp dport 51820 accept
+		tcp dport 22 ct state new limit rate 10/minute accept
+
+		# Prometheus, on N1, scraping this node. Two ports and no others: the
+		# node exporter and the training worker's own metrics listener.
+		iifname "wg0" ip saddr $wg_net tcp dport { 9100, 9464 } accept
+
+		ip protocol icmp icmp type { echo-request, destination-unreachable, time-exceeded } limit rate 10/second accept
+		ip6 nexthdr ipv6-icmp accept
+
+		limit rate 5/minute log prefix "nft-n2-input-drop " level info
+	}
+
+	chain forward {
+		type filter hook forward priority filter; policy drop;
+
+		ct state established,related accept
+		ct state invalid drop
+
+		iifname "docker0" accept
+		iifname "br-*" accept
+		iifname "wg0" ip saddr $wg_net accept
+
+		limit rate 5/minute log prefix "nft-n2-forward-drop " level info
+	}
+
+	chain output {
+		type filter hook output priority filter; policy accept;
+	}
+}

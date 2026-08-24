@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { anonymous, tenantApi } from './client';
 import { hasSession, readAccessToken, resetSessionsForTest, store } from './session';
 import { isApiError } from './errors';
+import { requestUrl } from '../test/request';
 
 const SESSION = {
   access_token: 'access-1',
@@ -106,7 +107,7 @@ describe('the API client', () => {
     store('tenant', SESSION);
     const fetchMock = vi.mocked(globalThis.fetch);
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-      const url = String(input);
+      const url = requestUrl(input);
       if (url === '/v1/auth/refresh') return json(200, { ...SESSION, access_token: 'access-2' });
       return json(401, envelope('invalid_credentials'));
     });

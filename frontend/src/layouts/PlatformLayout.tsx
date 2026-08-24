@@ -29,7 +29,7 @@ export function PlatformLayout() {
   function handleSignOut() {
     platformSignOut();
     queryClient.clear();
-    navigate('/admin/login', { replace: true });
+    void navigate('/admin/login', { replace: true });
   }
 
   return (

@@ -19,6 +19,7 @@ import {
   respondWith,
 } from '../../test/tenant';
 import { resetSessionsForTest } from '../../api/session';
+import { requestUrl } from '../../test/request';
 
 const LAST_ADMIN = {
   tenant_user_id: '00000000-0000-4000-8000-000000000001',
@@ -55,7 +56,7 @@ describe('/users', () => {
     expect(
       await screen.findByRole('heading', { name: /do not have access/i }),
     ).toBeVisible();
-    const asked = vi.mocked(globalThis.fetch).mock.calls.map(([url]) => String(url));
+    const asked = vi.mocked(globalThis.fetch).mock.calls.map(([url]) => requestUrl(url));
     expect(asked).toEqual(['/v1/me']);
   });
 

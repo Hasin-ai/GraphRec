@@ -1,0 +1,35 @@
+# N2 — Training.
+#
+# The one node whose failure is not an incident (§9.4, SYSTEM_DESIGN C-5), and
+# the unit reflects that: it *requires* the tunnel, because unlike N1 it has no
+# local state and nothing useful to do without N1's database and N3's object
+# store. Failing to start is the honest outcome.
+
+[Unit]
+Description=GraphRec N2 (training)
+Documentation=file:///opt/graphrec/deploy/README.md
+After=docker.service docker.socket network-online.target wg-quick@wg0.service
+Requires=docker.service wg-quick@wg0.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/graphrec/deploy/n2
+EnvironmentFile=/opt/graphrec/deploy/n2.env
+
+ExecStart=/usr/bin/docker compose up --detach --wait --wait-timeout 300
+ExecStop=/usr/bin/docker compose down
+ExecReload=/usr/bin/docker compose up --detach --wait --wait-timeout 300
+
+TimeoutStartSec=600
+# Longer than N1's. A training worker asked to stop finishes the epoch it is in
+# so the checkpoint is not wasted, and `stop_grace_period` on the container is
+# 300 s — systemd must outlast Compose or it kills the thing that was draining.
+TimeoutStopSec=420
+
+Restart=on-failure
+RestartSec=30s
+
+[Install]
+WantedBy=multi-user.target

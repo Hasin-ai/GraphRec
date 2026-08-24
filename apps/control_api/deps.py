@@ -24,7 +24,14 @@ handler holds an identifier and must turn "no row" into the right 404.
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncGenerator, AsyncIterator, Callable, Coroutine, Iterable
+from collections.abc import (
+    AsyncGenerator,
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Coroutine,
+    Iterable,
+)
 from contextlib import aclosing, asynccontextmanager
 from dataclasses import dataclass
 from typing import Annotated, Any, TypeVar
@@ -50,6 +57,7 @@ from graphrec.db.tenant_context import bind_tenant
 from graphrec.domain.audit import Actor, AuditTrail
 from graphrec.domain.credentials import CredentialService
 from graphrec.domain.metering.counters import UsageCounters
+from graphrec.http.rate_limit import Limit, RateLimiter
 
 T = TypeVar("T")
 
@@ -421,6 +429,81 @@ async def current_platform_principal(
             user=user,
             session=session,
         )
+
+
+# ------------------------------------------------------------- rate limits
+
+
+def _peer(request: Request) -> str:
+    """The caller key for a limit that applies before anybody is authenticated.
+
+    `request.client.host`, never `X-Forwarded-For` — the same rule
+    `auth.py::_client_address` follows and for the same reason: the header is
+    caller-controlled unless a trusted proxy overwrites it, and a spoofable key
+    is a limit that can be reset at will by the one caller it exists to slow.
+
+    Caddy sets the peer address on both edges (`trusted_proxies`), so behind the
+    real deployment this is the client. Behind a proxy that does not, every
+    caller shares one bucket — which fails towards refusing too much rather than
+    too little, and is visible immediately.
+    """
+    return request.client.host if request.client else "unknown"
+
+
+def rate_limit(name: str) -> Callable[[Request], Awaitable[None]]:
+    """A dependency that counts one request against the named class.
+
+    A factory rather than five copies, because the five settings are already
+    named by convention (`<name>_rate_limit`, `<name>_rate_window_seconds`) and
+    a hand-written dependency per class is five places for the wrong setting to
+    be read. The lookup is `getattr`, so a class whose settings do not exist
+    fails at import in the test that walks the five names, not at the first
+    request in production.
+    """
+
+    async def _dependency(request: Request) -> None:
+        settings: Settings = request.app.state.settings
+        limit = Limit(
+            name=name,
+            limit=getattr(settings, f"{name}_rate_limit"),
+            window_seconds=getattr(settings, f"{name}_rate_window_seconds"),
+        )
+        limiter: RateLimiter = request.app.state.rate_limiter
+        await limiter.check(limit, _peer(request))
+
+    return _dependency
+
+
+def tenant_rate_limit(name: str) -> Callable[..., Awaitable[None]]:
+    """The same, keyed on the tenant rather than on the address.
+
+    Everything past sign-in has an identity better than an address: a console
+    behind one office NAT would otherwise share a bucket between every employee,
+    and a tenant on a residential connection would get a new allowance whenever
+    their address changed. The dependency takes `CurrentTenant`, so the limit is
+    applied after authentication and before the handler.
+    """
+
+    async def _dependency(request: Request, principal: CurrentTenant) -> None:
+        settings: Settings = request.app.state.settings
+        limit = Limit(
+            name=name,
+            limit=getattr(settings, f"{name}_rate_limit"),
+            window_seconds=getattr(settings, f"{name}_rate_window_seconds"),
+        )
+        limiter: RateLimiter = request.app.state.rate_limiter
+        await limiter.check(limit, str(principal.tenant_id))
+
+    return _dependency
+
+
+#: The five §24 classes, as dependencies. Named here rather than at each route so
+#: that "which endpoints are limited?" is one grep against one list.
+LoginRateLimit = Depends(rate_limit("login"))
+RegistrationRateLimit = Depends(rate_limit("registration"))
+ApiKeyRateLimit = Depends(tenant_rate_limit("api_key"))
+UsageRateLimit = Depends(tenant_rate_limit("usage"))
+SubscriptionRateLimit = Depends(tenant_rate_limit("subscription"))
 
 
 UsageCountersDep = Annotated[UsageCounters, Depends(get_usage_counters)]

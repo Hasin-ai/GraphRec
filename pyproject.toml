@@ -5,7 +5,14 @@ description = "Multi-tenant recommendation platform-as-a-service"
 requires-python = ">=3.12,<3.13"
 
 dependencies = [
-    "fastapi>=0.115,<0.116",
+    "fastapi>=0.141,<0.142",
+    # Pinned directly, above FastAPI's own floor. FastAPI 0.141 asks only for
+    # `starlette>=0.46.0`, and 0.46.2 carries six advisories that `pip-audit`
+    # fails the `security` job on — among them one where `request.url.path` is
+    # attacker-controllable through a malformed `Host` header, which is
+    # precisely the value the metrics and audit paths read. An open floor in a
+    # dependency is not a pin; this is.
+    "starlette>=1.3.1,<2",
     "uvicorn[standard]>=0.32,<0.33",
     # `[email]` pulls in email-validator: an email is the account identifier here,
     # and `EmailStr` normalises and validates it rather than each caller inventing
@@ -22,7 +29,9 @@ dependencies = [
     "redis>=5.2,<6",
     "argon2-cffi>=23.1,<24",
     "pyjwt[crypto]>=2.10,<3",
-    "cryptography>=43.0,<44",
+    # 48.0.1 is the floor GHSA-537c-gmf6-5ccf sets. Kept as a range rather
+    # than a pin so a patch release arrives without a commit here.
+    "cryptography>=48.0.1,<51",
     "python-json-logger>=2.0,<3",
     "boto3>=1.35,<2",
     # CON-01 makes DGSR the model family, and `Ultimate §14` names PyTorch.
@@ -37,13 +46,27 @@ dependencies = [
     # exports bundles with it; Phase 8 writes checkpoints with it for the same
     # reason a checkpoint is also an artifact somebody could swap.
     "safetensors>=0.4,<1",
+    # Prometheus and Grafana sit on N1 (BACKEND_PLAN §9.1) and §24 asks for six
+    # named alerts, none of which can fire without an exposition endpoint. The
+    # client is here rather than hand-rolled because the format's hard parts are
+    # histogram bucket semantics and multiprocess collection, and getting either
+    # subtly wrong yields a dashboard that is confidently wrong.
+    "prometheus-client>=0.21,<1",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.3,<9",
-    "pytest-asyncio>=0.24,<0.25",
+    # 9.0.3 is PYSEC-2026-1845's floor, and pytest-asyncio 1.x is what
+    # supports pytest 9. `asyncio_mode = "auto"` survives the major bump; the
+    # 1224-test suite was run across it before these pins moved.
+    "pytest>=9.0.3,<10",
+    "pytest-asyncio>=1.0,<2",
     "httpx>=0.27,<0.28",
+    # Starlette 1.3 deprecated `TestClient` on httpx 0.x and the whole suite
+    # runs under `filterwarnings = error`, so the deprecation is a collection
+    # error rather than a warning. `httpx` stays for `tests/serving/test_load.py`,
+    # which drives the load generator directly.
+    "httpx2>=2.0",
     "testcontainers[postgres,redis]>=4.8,<5",
     "ruff>=0.7,<0.8",
     "mypy>=1.13,<2",

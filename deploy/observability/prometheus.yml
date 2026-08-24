@@ -1,0 +1,159 @@
+# What Prometheus scrapes, and how it finds the per-tenant replicas.
+#
+# The static targets are the fixed processes: one control API, two job workers,
+# one training worker, one reconciler, and the exporters. The inference replicas
+# are not static — there is one set per tenant and the reconciler creates and
+# destroys them — so they are discovered from Docker by the label the serving
+# template already sets (`com.graphrec.role: inference`), which means a new
+# tenant is scraped without anyone editing this file.
+#
+# Docker service discovery rather than a targets file the reconciler writes:
+# ADR 0028 records that the Compose driver is single-node, so the daemon that
+# knows about the replicas is on the same host as Prometheus. A file would be a
+# second copy of that knowledge, and second copies go stale during exactly the
+# incident you need them during.
+#
+# Nothing here is published to the internet. Prometheus itself has no host port
+# in `deploy/n1/`; it is reached through Grafana, and Grafana through Caddy on
+# the one public port N1 has (§9.1).
+#
+# ## Why some targets are names and some are addresses
+#
+# This file is mounted only by `deploy/n1/docker-compose.yml`, so Prometheus
+# runs on N1 and Compose DNS resolves N1's service names and nothing else. A
+# target on another node has to be an address on the tunnel, and Prometheus does
+# not interpolate environment variables into its configuration — there is no
+# `${WG_N2}` available here. The addresses are therefore literal, and the
+# WireGuard assignment is fixed by convention in `deploy/README.md`:
+#
+#     10.10.0.1  N1 control      10.10.0.2  N2 training      10.10.0.3  N3 serving
+#
+# Written down in two places on purpose, and pinned by
+# `tests/deploy/test_topology.py` so the two cannot drift. The failure this
+# prevents is the quiet one: a target that never resolves is a target that is
+# always down, `TargetDown` fires forever, and within a week nobody reads it.
+
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 30s
+  external_labels:
+    platform: graphrec
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+      # Absent in the demo deployment, and that is deliberate: alerts still
+      # evaluate and are visible in Prometheus's own UI. Wiring a notification
+      # channel is an operator decision — CON-05 makes this demonstration
+      # readiness, not an on-call rota.
+
+scrape_configs:
+  - job_name: control_api
+    static_configs:
+      # `control_api`, the Compose service name in `deploy/n1/`. This said
+      # `api` until Phase 16, which is a name no service has ever had.
+      - targets: ["control_api:9464"]
+        labels:
+          node: n1
+
+  - job_name: job_worker
+    static_configs:
+      - targets: ["job_worker:9464"]
+        labels:
+          node: n1
+
+  - job_name: reconciler
+    static_configs:
+      - targets: ["reconciler:9464"]
+        labels:
+          node: n1
+
+  # N2. Across the tunnel: the training worker is a different Compose project on
+  # a different host, so its service name means nothing here.
+  - job_name: training_worker
+    static_configs:
+      - targets: ["10.10.0.2:9464"]
+        labels:
+          node: n2
+
+  # Per-tenant serving. One target per replica, discovered by label.
+  - job_name: inference
+    docker_sd_configs:
+      # N3's socket proxy, not a local socket. The replicas run on N3 and
+      # Prometheus runs on N1, so the daemon that knows about them is one hop
+      # away. `deploy/n3/` publishes `tecnativa/docker-socket-proxy` on the
+      # tunnel with `EXEC` and `VOLUMES` disabled: this job needs to *list*
+      # containers, and a read-only proxy is the difference between a scrape
+      # config and remote code execution on the serving node.
+      - host: http://10.10.0.3:2376
+        refresh_interval: 15s
+        filters:
+          - name: label
+            values: ["com.graphrec.role=inference"]
+    relabel_configs:
+      # One target per published port, so drop everything that is not the
+      # exposition listener. Without this the same replica is also scraped on
+      # 8020, which answers the recommendation API and not `/metrics`.
+      - source_labels: [__meta_docker_port_private_port]
+        regex: "9464"
+        action: keep
+      # The *published* address, not `__meta_docker_network_ip`. The container's
+      # address is on N3's bridge network, which is not routable from N1 — the
+      # bug this replaced looked correct and scraped nothing. The serving
+      # template publishes 9464 on N3's tunnel address with an ephemeral host
+      # port, which is what makes a scaled service scrapable at all: a fixed
+      # host port would make the second replica a bind conflict.
+      - source_labels: [__meta_docker_port_public_ip, __meta_docker_port_public_port]
+        separator: ":"
+        target_label: __address__
+      # The tenant travels as a label so `TenantHasNoReadyReplica` can join
+      # against the reconciler's gauge. It is the same identifier the reconciler
+      # publishes, or the join silently matches nothing.
+      - source_labels: [__meta_docker_container_label_com_graphrec_tenant]
+        target_label: tenant_id
+      - source_labels: [__meta_docker_container_label_com_graphrec_version]
+        target_label: model_version_id
+      - source_labels: [__meta_docker_container_name]
+        target_label: replica
+      - target_label: node
+        replacement: n3
+
+  # The host itself: CPU, memory, and the filesystem `DiskFillingUp` reads.
+  # `graphrec_*` metrics cannot describe the disk the process is about to run
+  # out of, which is why this exporter is not optional.
+  - job_name: node
+    static_configs:
+      # All three. `DiskFillingUp` is the alert that has to cover N2 and N3 most
+      # of all: N2 holds the checkpoints and N3 holds the object store, and N1 —
+      # the only node this job used to cover — is the one with the least on it.
+      - targets: ["node_exporter:9100"]
+        labels:
+          node: n1
+      - targets: ["10.10.0.2:9100"]
+        labels:
+          node: n2
+      - targets: ["10.10.0.3:9100"]
+        labels:
+          node: n3
+
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres_exporter:9187"]
+        labels:
+          node: n1
+
+  - job_name: redis
+    static_configs:
+      - targets: ["redis_exporter:9121"]
+        labels:
+          node: n1
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

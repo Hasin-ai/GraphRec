@@ -6,6 +6,7 @@ import { StateGateLayout } from '../../layouts/StateGateLayout';
 import { tenantStatusGuard } from '../../guards';
 import { renderRoutes } from '../../test/harness';
 import { resetSessionsForTest, store } from '../../api/session';
+import { requestUrl } from '../../test/request';
 
 const SESSION = {
   access_token: 'access-1',
@@ -64,7 +65,7 @@ describe('/account/tenant-status', () => {
     render();
 
     expect(await screen.findByRole('heading', { name: 'Acme Ltd' })).toBeVisible();
-    expect(vi.mocked(globalThis.fetch).mock.calls.map(([url]) => String(url))).toEqual([
+    expect(vi.mocked(globalThis.fetch).mock.calls.map(([url]) => requestUrl(url))).toEqual([
       '/v1/tenant',
     ]);
   });

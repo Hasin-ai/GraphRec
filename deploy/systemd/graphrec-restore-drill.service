@@ -1,0 +1,31 @@
+# The rehearsal, on a schedule.
+#
+# BACKEND_PLAN §24 requires a restore drill "executed and verified". Executing
+# it once satisfies the checklist; executing it weekly is what keeps it true —
+# a restore path decays with every migration that adds a role, a grant or a
+# policy, and the failure is silent until the day it matters.
+#
+# Safe to run unattended: it restores into a scratch database named for the
+# time, compares it against the live one, and drops the scratch database in a
+# trap. `restore.sh` refuses to write over the live database without --force,
+# which this job does not pass.
+
+[Unit]
+Description=GraphRec restore drill
+Documentation=file:///opt/graphrec/docs/RUNBOOKS.md#restore-from-backup
+After=graphrec-n1.service
+Requires=graphrec-n1.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/graphrec
+EnvironmentFile=/opt/graphrec/deploy/backup.env
+ExecStart=/opt/graphrec/scripts/ops/restore_drill.sh
+
+TimeoutStartSec=7200
+User=root
+Nice=10
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=multi-user.target

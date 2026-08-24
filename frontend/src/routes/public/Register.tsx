@@ -29,7 +29,7 @@ export function RegisterRoute() {
 
   const onSuccess = useCallback(
     (tenant: TenantResponse) => {
-      navigate('/login', {
+      void navigate('/login', {
         replace: true,
         state: { notice: `${tenant.tenant_name} is registered. Sign in to continue.` },
       });

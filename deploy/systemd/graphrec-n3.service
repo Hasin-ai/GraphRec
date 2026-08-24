@@ -1,0 +1,40 @@
+# N3 — Serving + storage.
+#
+# This unit brings up the *edge and the object store*, not the per-tenant
+# inference replicas. Those are separate Compose projects started by the
+# reconciler on N1 through the Docker API, and they carry `restart:
+# unless-stopped` so the Docker daemon restores them on boot without this unit
+# knowing they exist.
+#
+# That division is deliberate. Desired state lives in `model_deployments`, and a
+# systemd unit that also started replicas would be a second source of truth for
+# which tenants are serving — one that is right until the first activation.
+
+[Unit]
+Description=GraphRec N3 (serving and storage)
+Documentation=file:///opt/graphrec/deploy/README.md
+After=docker.service docker.socket network-online.target wg-quick@wg0.service
+Requires=docker.service wg-quick@wg0.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/graphrec/deploy/n3
+EnvironmentFile=/opt/graphrec/deploy/n3.env
+
+ExecStart=/usr/bin/docker compose up --detach --wait --wait-timeout 300
+# `down` here stops the edge and the object store. It does **not** stop the
+# per-tenant serving projects, which is correct: taking N3's edge down for a
+# configuration change should not make every tenant re-download its bundle.
+ExecStop=/usr/bin/docker compose down
+ExecReload=/usr/bin/docker compose up --detach --wait --wait-timeout 300
+
+TimeoutStartSec=600
+TimeoutStopSec=300
+
+Restart=on-failure
+RestartSec=30s
+
+[Install]
+WantedBy=multi-user.target

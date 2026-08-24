@@ -52,14 +52,23 @@ export interface paths {
          * Readyz
          * @description Readiness. Each dependency is probed and reported independently.
          *
-         *     PostgreSQL is probed for real from Phase 2. Redis and object storage have no
-         *     client yet and are reported `unavailable` rather than `pass` — claiming a
-         *     check passed when it was never run is the failure mode this endpoint exists
-         *     to prevent, and it is why `unavailable` is a distinct value from `fail`.
+         *     All three are probed for real. The rule the module docstring states is the
+         *     one that matters here: a check that was not run is reported `unavailable`,
+         *     never `pass`, because a probe that lies about having run is worse than no
+         *     probe at all — it is the one that gets traffic routed to a process that
+         *     cannot serve it.
          *
-         *     The consequence, which is intended: this endpoint answers 503 until every
-         *     dependency is genuinely probed. A process that has not proven it can serve
-         *     should not be sent traffic.
+         *     `unavailable` and `fail` are kept apart because they mean different things
+         *     to whoever reads this. `fail` is a dependency without which this process
+         *     cannot do its job. `unavailable` is one it can degrade around, and Redis is
+         *     the only such dependency: metering falls back to an in-memory counter.
+         *     Neither is `pass`, so neither gets traffic — but an operator reading the
+         *     body can tell a cache outage from a database outage without leaving the
+         *     page.
+         *
+         *     The three probes run concurrently. Serially they would take up to three
+         *     timeouts to answer, and a readiness endpoint that takes six seconds to say
+         *     "not ready" has already been given up on by the thing that asked.
          */
         get: operations["readyz_readyz_get"];
         put?: never;
@@ -482,6 +491,67 @@ export interface paths {
         get: operations["get_event_batch_v1_events_batches__batch_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/feedback/clicks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Report clicked items */
+        post: operations["report_clicks_v1_feedback_clicks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/feedback/conversions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report conversions
+         * @description `value` is recorded here and ignored on clicks — a conversion has an
+         *     amount and a click does not.
+         */
+        post: operations["report_conversions_v1_feedback_conversions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/feedback/impressions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report the items that were shown
+         * @description A repeat is a success (`duplicate_confirmed`), not a conflict.
+         *
+         *     ASM-05: nothing recorded here influences a model or activates anything. The
+         *     module that writes it imports nothing that could.
+         */
+        post: operations["report_impressions_v1_feedback_impressions_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1178,6 +1248,54 @@ export interface paths {
          *     "disable".
          */
         post: operations["bulk_upsert_products_v1_products_bulk_upsert_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/recommendations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Recommend items for a customer or a session
+         * @description ER-F-05: `model_version` and `strategy` in every response, always.
+         *
+         *     A `400` when neither `customer_id` nor `session_id` is present: a request
+         *     identifying nobody is not a cold-start request, it is a request whose
+         *     feedback can never be attributed to anything.
+         */
+        post: operations["recommend_v1_recommendations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/recommendations/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Recommend items for an anonymous session
+         * @description XR-F-09. The same funnel with no customer to look up.
+         *
+         *     `strategy` comes back as `session` when the caller supplied recent events
+         *     and `cold_start` when they did not — the two are different answers to
+         *     different situations and the tenant needs to tell them apart.
+         */
+        post: operations["recommend_session_v1_recommendations_session_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2160,6 +2278,50 @@ export interface components {
             count: number;
             severity: components["schemas"]["Severity"];
         };
+        /**
+         * FeedbackItemBody
+         * @description One click or conversion. `value` is meaningful on conversions only and
+         *     is ignored on clicks rather than refused — a caller sending an order total
+         *     on a click has sent something harmless, not something invalid.
+         */
+        FeedbackItemBody: {
+            /** Event Id */
+            event_id: string;
+            /** External Product Id */
+            external_product_id: string;
+            /** Value */
+            value?: number | null;
+        };
+        /**
+         * FeedbackRequestBody
+         * @description `POST /v1/feedback/clicks` and `…/conversions`.
+         */
+        FeedbackRequestBody: {
+            /** Events */
+            events: components["schemas"]["FeedbackItemBody"][];
+            /** Request Id */
+            request_id: string;
+        };
+        /**
+         * FeedbackResponse
+         * @description `duplicate_confirmed` counted, not hidden.
+         *
+         *     A retried batch is the normal consequence of a timeout on the caller's side.
+         *     Reporting duplicates separately is what lets a client tell "you accepted my
+         *     twenty again" from "you counted my twenty twice".
+         */
+        FeedbackResponse: {
+            /** Accepted */
+            accepted: number;
+            /** Duplicates */
+            duplicates: number;
+            /** Received */
+            received: number;
+            /** Request Id */
+            request_id: string;
+            /** Unknown Products */
+            unknown_products: string[];
+        };
         /** GrantOverrideRequest */
         GrantOverrideRequest: {
             /** Expires At */
@@ -2181,6 +2343,29 @@ export interface components {
             status: string;
             /** Version */
             version: string;
+        };
+        /**
+         * ImpressionBody
+         * @description One shown item. `position` is the rank the caller actually rendered,
+         *     which need not be the rank returned — a page can drop an item.
+         */
+        ImpressionBody: {
+            /** Event Id */
+            event_id: string;
+            /** External Product Id */
+            external_product_id: string;
+            /** Position */
+            position: number;
+        };
+        /**
+         * ImpressionsRequestBody
+         * @description `POST /v1/feedback/impressions` — the `/integration` page's shape.
+         */
+        ImpressionsRequestBody: {
+            /** Impressions */
+            impressions: components["schemas"]["ImpressionBody"][];
+            /** Request Id */
+            request_id: string;
         };
         /**
          * InvitationResponse
@@ -2304,6 +2489,16 @@ export interface components {
             requests: number;
             /** Window Hours */
             window_hours: number;
+        };
+        /** ModelVersionBody */
+        ModelVersionBody: {
+            /**
+             * Version Id
+             * Format: uuid
+             */
+            version_id: string;
+            /** Version Number */
+            version_number: number;
         };
         /**
          * ModelVersionListItem
@@ -2859,6 +3054,94 @@ export interface components {
             status: components["schemas"]["CheckStatus"];
         };
         /**
+         * RecentEventBody
+         * @description One thing the customer just did, applied without retraining.
+         *
+         *     `occurred_at` is optional because a caller streaming a live session has the
+         *     order and not always the clock. Ordering is by position in the list, which
+         *     is what the caller controls and what the funnel reads.
+         */
+        RecentEventBody: {
+            /** Event Type */
+            event_type?: string | null;
+            /** External Product Id */
+            external_product_id: string;
+            /** Occurred At */
+            occurred_at?: string | null;
+        };
+        /**
+         * RecommendationRequestBody
+         * @description `POST /v1/recommendations`.
+         *
+         *     One of `customer_id` or `session_id` is required, and the check is in the
+         *     domain rather than in a validator here: the same rule governs
+         *     `/recommendations/session`, and a `model_validator` on each body would be
+         *     two statements of one requirement.
+         */
+        RecommendationRequestBody: {
+            /**
+             * Allow Fallback
+             * @default true
+             */
+            allow_fallback: boolean;
+            /** Context */
+            context?: {
+                [key: string]: string;
+            };
+            /** Customer Id */
+            customer_id?: string | null;
+            /** Exclude Product Ids */
+            exclude_product_ids?: string[];
+            /** Recent Events */
+            recent_events?: components["schemas"]["RecentEventBody"][];
+            /** Request Id */
+            request_id: string;
+            /** Session Id */
+            session_id?: string | null;
+            /**
+             * Top N
+             * @default 10
+             */
+            top_n: number;
+        };
+        /**
+         * RecommendationResponse
+         * @description The `200`. ER-F-05's two fields are `model_version` and `strategy`.
+         */
+        RecommendationResponse: {
+            /** Fallback Applied */
+            fallback_applied: boolean;
+            /** Items */
+            items: components["schemas"]["RecommendedItemBody"][];
+            /** Latency Ms */
+            latency_ms: number;
+            model_version: components["schemas"]["ModelVersionBody"] | null;
+            /** Ordering Policy Version */
+            ordering_policy_version: number;
+            /** Request Id */
+            request_id: string;
+            /** Strategy */
+            strategy: string;
+        };
+        /**
+         * RecommendedItemBody
+         * @description One item, its rank, its score and where it came from.
+         *
+         *     `candidate_source` is on every item rather than on the response, because a
+         *     single response mixes lanes: the graph supplied eight and the category lane
+         *     filled the last two, and a tenant tuning their surface needs to see which.
+         */
+        RecommendedItemBody: {
+            /** Candidate Source */
+            candidate_source: string;
+            /** External Product Id */
+            external_product_id: string;
+            /** Rank */
+            rank: number;
+            /** Score */
+            score: number;
+        };
+        /**
          * RecoveryRequestedResponse
          * @description The one answer step 1 ever gives.
          *
@@ -3057,6 +3340,39 @@ export interface components {
         ServingErrorsResponse: {
             /** Errors */
             errors: components["schemas"]["ServingErrorBody"][];
+        };
+        /**
+         * SessionRecommendationRequestBody
+         * @description `POST /v1/recommendations/session` — XR-F-09, the anonymous path.
+         *
+         *     A separate body rather than the same one with a comment, because
+         *     `session_id` is *required* here. A shared body would make "session
+         *     recommendations" a route that accepts a customer id, which is the one thing
+         *     the endpoint exists not to need.
+         */
+        SessionRecommendationRequestBody: {
+            /**
+             * Allow Fallback
+             * @default true
+             */
+            allow_fallback: boolean;
+            /** Context */
+            context?: {
+                [key: string]: string;
+            };
+            /** Exclude Product Ids */
+            exclude_product_ids?: string[];
+            /** Recent Events */
+            recent_events?: components["schemas"]["RecentEventBody"][];
+            /** Request Id */
+            request_id: string;
+            /** Session Id */
+            session_id: string;
+            /**
+             * Top N
+             * @default 10
+             */
+            top_n: number;
         };
         /**
          * SessionResponse
@@ -3729,6 +4045,10 @@ export interface components {
         UserStatus: "invited" | "locked" | "disabled" | "active";
         /** ValidationError */
         ValidationError: {
+            /** Context */
+            ctx?: Record<string, never>;
+            /** Input */
+            input?: unknown;
             /** Location */
             loc: (string | number)[];
             /** Message */
@@ -4421,6 +4741,105 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SubmissionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    report_clicks_v1_feedback_clicks_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeedbackRequestBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    report_conversions_v1_feedback_conversions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeedbackRequestBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    report_impressions_v1_feedback_impressions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImpressionsRequestBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackResponse"];
                 };
             };
             /** @description Validation Error */
@@ -5545,6 +5964,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SubmissionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recommend_v1_recommendations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecommendationRequestBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recommend_session_v1_recommendations_session_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionRecommendationRequestBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendationResponse"];
                 };
             };
             /** @description Validation Error */

@@ -369,7 +369,7 @@
           "keep_session": {
             "anyOf": [
               {
-                "maxLength": 512,
+                "maxLength": 4096,
                 "type": "string"
               },
               {
@@ -1320,6 +1320,106 @@
         "title": "FailureSummaryBody",
         "type": "object"
       },
+      "FeedbackItemBody": {
+        "additionalProperties": false,
+        "description": "One click or conversion. `value` is meaningful on conversions only and\nis ignored on clicks rather than refused \u2014 a caller sending an order total\non a click has sent something harmless, not something invalid.",
+        "properties": {
+          "event_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Event Id",
+            "type": "string"
+          },
+          "external_product_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "External Product Id",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "event_id",
+          "external_product_id"
+        ],
+        "title": "FeedbackItemBody",
+        "type": "object"
+      },
+      "FeedbackRequestBody": {
+        "additionalProperties": false,
+        "description": "`POST /v1/feedback/clicks` and `\u2026/conversions`.",
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/FeedbackItemBody"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Events",
+            "type": "array"
+          },
+          "request_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "events"
+        ],
+        "title": "FeedbackRequestBody",
+        "type": "object"
+      },
+      "FeedbackResponse": {
+        "description": "`duplicate_confirmed` counted, not hidden.\n\nA retried batch is the normal consequence of a timeout on the caller's side.\nReporting duplicates separately is what lets a client tell \"you accepted my\ntwenty again\" from \"you counted my twenty twice\".",
+        "properties": {
+          "accepted": {
+            "title": "Accepted",
+            "type": "integer"
+          },
+          "duplicates": {
+            "title": "Duplicates",
+            "type": "integer"
+          },
+          "received": {
+            "title": "Received",
+            "type": "integer"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "unknown_products": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unknown Products",
+            "type": "array"
+          }
+        },
+        "required": [
+          "request_id",
+          "received",
+          "accepted",
+          "duplicates",
+          "unknown_products"
+        ],
+        "title": "FeedbackResponse",
+        "type": "object"
+      },
       "GrantOverrideRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1387,6 +1487,64 @@
           "version"
         ],
         "title": "HealthResponse",
+        "type": "object"
+      },
+      "ImpressionBody": {
+        "additionalProperties": false,
+        "description": "One shown item. `position` is the rank the caller actually rendered,\nwhich need not be the rank returned \u2014 a page can drop an item.",
+        "properties": {
+          "event_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Event Id",
+            "type": "string"
+          },
+          "external_product_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "External Product Id",
+            "type": "string"
+          },
+          "position": {
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Position",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "event_id",
+          "external_product_id",
+          "position"
+        ],
+        "title": "ImpressionBody",
+        "type": "object"
+      },
+      "ImpressionsRequestBody": {
+        "additionalProperties": false,
+        "description": "`POST /v1/feedback/impressions` \u2014 the `/integration` page's shape.",
+        "properties": {
+          "impressions": {
+            "items": {
+              "$ref": "#/components/schemas/ImpressionBody"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Impressions",
+            "type": "array"
+          },
+          "request_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "impressions"
+        ],
+        "title": "ImpressionsRequestBody",
         "type": "object"
       },
       "InvitationResponse": {
@@ -1606,6 +1764,25 @@
           "measurement_freshness_seconds"
         ],
         "title": "MetricsSummaryResponse",
+        "type": "object"
+      },
+      "ModelVersionBody": {
+        "properties": {
+          "version_id": {
+            "format": "uuid",
+            "title": "Version Id",
+            "type": "string"
+          },
+          "version_number": {
+            "title": "Version Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version_id",
+          "version_number"
+        ],
+        "title": "ModelVersionBody",
         "type": "object"
       },
       "ModelVersionListItem": {
@@ -2937,6 +3114,205 @@
         "title": "ReadinessResponse",
         "type": "object"
       },
+      "RecentEventBody": {
+        "additionalProperties": false,
+        "description": "One thing the customer just did, applied without retraining.\n\n`occurred_at` is optional because a caller streaming a live session has the\norder and not always the clock. Ordering is by position in the list, which\nis what the caller controls and what the funnel reads.",
+        "properties": {
+          "event_type": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Type"
+          },
+          "external_product_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "External Product Id",
+            "type": "string"
+          },
+          "occurred_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred At"
+          }
+        },
+        "required": [
+          "external_product_id"
+        ],
+        "title": "RecentEventBody",
+        "type": "object"
+      },
+      "RecommendationRequestBody": {
+        "additionalProperties": false,
+        "description": "`POST /v1/recommendations`.\n\nOne of `customer_id` or `session_id` is required, and the check is in the\ndomain rather than in a validator here: the same rule governs\n`/recommendations/session`, and a `model_validator` on each body would be\ntwo statements of one requirement.",
+        "properties": {
+          "allow_fallback": {
+            "default": true,
+            "title": "Allow Fallback",
+            "type": "boolean"
+          },
+          "context": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Context",
+            "type": "object"
+          },
+          "customer_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Id"
+          },
+          "exclude_product_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200,
+            "title": "Exclude Product Ids",
+            "type": "array"
+          },
+          "recent_events": {
+            "items": {
+              "$ref": "#/components/schemas/RecentEventBody"
+            },
+            "maxItems": 50,
+            "title": "Recent Events",
+            "type": "array"
+          },
+          "request_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Request Id",
+            "type": "string"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "top_n": {
+            "default": 10,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Top N",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "request_id"
+        ],
+        "title": "RecommendationRequestBody",
+        "type": "object"
+      },
+      "RecommendationResponse": {
+        "description": "The `200`. ER-F-05's two fields are `model_version` and `strategy`.",
+        "properties": {
+          "fallback_applied": {
+            "title": "Fallback Applied",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RecommendedItemBody"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelVersionBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ordering_policy_version": {
+            "title": "Ordering Policy Version",
+            "type": "integer"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "strategy": {
+            "title": "Strategy",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "model_version",
+          "strategy",
+          "fallback_applied",
+          "items",
+          "ordering_policy_version",
+          "latency_ms"
+        ],
+        "title": "RecommendationResponse",
+        "type": "object"
+      },
+      "RecommendedItemBody": {
+        "description": "One item, its rank, its score and where it came from.\n\n`candidate_source` is on every item rather than on the response, because a\nsingle response mixes lanes: the graph supplied eight and the category lane\nfilled the last two, and a tenant tuning their surface needs to see which.",
+        "properties": {
+          "candidate_source": {
+            "title": "Candidate Source",
+            "type": "string"
+          },
+          "external_product_id": {
+            "title": "External Product Id",
+            "type": "string"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "external_product_id",
+          "rank",
+          "score",
+          "candidate_source"
+        ],
+        "title": "RecommendedItemBody",
+        "type": "object"
+      },
       "RecoveryRequestedResponse": {
         "description": "The one answer step 1 ever gives.\n\nThere is no field here that varies with whether the account exists. That is\nthe whole schema: a boolean `sent`, or an `expires_at` that were only\npresent on success, would be the disclosure the route is built to avoid\n(dc.html L1035).",
         "properties": {
@@ -3311,6 +3687,65 @@
           "errors"
         ],
         "title": "ServingErrorsResponse",
+        "type": "object"
+      },
+      "SessionRecommendationRequestBody": {
+        "additionalProperties": false,
+        "description": "`POST /v1/recommendations/session` \u2014 XR-F-09, the anonymous path.\n\nA separate body rather than the same one with a comment, because\n`session_id` is *required* here. A shared body would make \"session\nrecommendations\" a route that accepts a customer id, which is the one thing\nthe endpoint exists not to need.",
+        "properties": {
+          "allow_fallback": {
+            "default": true,
+            "title": "Allow Fallback",
+            "type": "boolean"
+          },
+          "context": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Context",
+            "type": "object"
+          },
+          "exclude_product_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200,
+            "title": "Exclude Product Ids",
+            "type": "array"
+          },
+          "recent_events": {
+            "items": {
+              "$ref": "#/components/schemas/RecentEventBody"
+            },
+            "maxItems": 50,
+            "title": "Recent Events",
+            "type": "array"
+          },
+          "request_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Request Id",
+            "type": "string"
+          },
+          "session_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Session Id",
+            "type": "string"
+          },
+          "top_n": {
+            "default": 10,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Top N",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "request_id",
+          "session_id"
+        ],
+        "title": "SessionRecommendationRequestBody",
         "type": "object"
       },
       "SessionResponse": {
@@ -4880,6 +5315,13 @@
       },
       "ValidationError": {
         "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
           "loc": {
             "items": {
               "anyOf": [
@@ -5119,8 +5561,8 @@
     }
   },
   "info": {
-    "description": "Multi-tenant recommendation platform. Tenant scope is resolved from the verified credential and never from a path, query or body parameter.",
-    "title": "GraphRec",
+    "description": "The control plane and the data plane, published together because they are one integration. Operations are marked with the server that answers them; there are two, on two hosts.",
+    "title": "GraphRec API",
     "version": "0.1.0"
   },
   "openapi": "3.1.0",
@@ -5150,6 +5592,18 @@
             "description": "Successful Response"
           }
         },
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Public keys for token verification",
         "tags": [
           "discovery"
@@ -5172,6 +5626,18 @@
             "description": "Successful Response"
           }
         },
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Healthz",
         "tags": [
           "health"
@@ -5180,7 +5646,7 @@
     },
     "/readyz": {
       "get": {
-        "description": "Readiness. Each dependency is probed and reported independently.\n\nPostgreSQL is probed for real from Phase 2. Redis and object storage have no\nclient yet and are reported `unavailable` rather than `pass` \u2014 claiming a\ncheck passed when it was never run is the failure mode this endpoint exists\nto prevent, and it is why `unavailable` is a distinct value from `fail`.\n\nThe consequence, which is intended: this endpoint answers 503 until every\ndependency is genuinely probed. A process that has not proven it can serve\nshould not be sent traffic.",
+        "description": "Readiness. Each dependency is probed and reported independently.\n\nAll three are probed for real. The rule the module docstring states is the\none that matters here: a check that was not run is reported `unavailable`,\nnever `pass`, because a probe that lies about having run is worse than no\nprobe at all \u2014 it is the one that gets traffic routed to a process that\ncannot serve it.\n\n`unavailable` and `fail` are kept apart because they mean different things\nto whoever reads this. `fail` is a dependency without which this process\ncannot do its job. `unavailable` is one it can degrade around, and Redis is\nthe only such dependency: metering falls back to an in-memory counter.\nNeither is `pass`, so neither gets traffic \u2014 but an operator reading the\nbody can tell a cache outage from a database outage without leaving the\npage.\n\nThe three probes run concurrently. Serially they would take up to three\ntimeouts to answer, and a readiness endpoint that takes six seconds to say\n\"not ready\" has already been given up on by the thing that asked.",
         "operationId": "readyz_readyz_get",
         "responses": {
           "200": {
@@ -5194,6 +5660,18 @@
             "description": "Successful Response"
           }
         },
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Readyz",
         "tags": [
           "health"
@@ -5249,6 +5727,18 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "List credentials",
         "tags": [
           "credentials"
@@ -5294,6 +5784,18 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Create a credential",
         "tags": [
           "credentials"
@@ -5334,6 +5836,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "Revoke a credential",
@@ -5380,6 +5894,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "Describe a credential",
@@ -5439,6 +5965,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "Rotate a credential",
@@ -5536,6 +6074,18 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "A tenant's own history",
         "tags": [
           "audit"
@@ -5578,6 +6128,18 @@
             "description": "Validation Error"
           }
         },
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Request a recovery proof",
         "tags": [
           "auth"
@@ -5620,6 +6182,18 @@
             "description": "Validation Error"
           }
         },
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Consume a recovery proof and set new authentication material",
         "tags": [
           "auth"
@@ -5661,6 +6235,18 @@
             "description": "Validation Error"
           }
         },
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Exchange a refresh token",
         "tags": [
           "auth"
@@ -5703,6 +6289,18 @@
             "description": "Validation Error"
           }
         },
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Sign in to a tenant",
         "tags": [
           "auth"
@@ -5738,6 +6336,18 @@
             "description": "Validation Error"
           }
         },
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Revoke a refresh token",
         "tags": [
           "auth"
@@ -5787,6 +6397,18 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "The frozen window a run trained on",
         "tags": [
           "training"
@@ -5812,6 +6434,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "Deployment state, active version and the board's measurements",
@@ -5865,6 +6499,18 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Capacity bounds and the recent changes to what serves",
         "tags": [
           "serving"
@@ -5890,6 +6536,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "Desired versus ready, and every replica behind those two numbers",
@@ -5939,6 +6597,18 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Submit one interaction event",
         "tags": [
           "ingestion"
@@ -5984,6 +6654,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "Submit a bounded event batch",
@@ -6034,9 +6716,209 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "A batch, by the identifier it was submitted under",
         "tags": [
           "ingestion"
+        ]
+      }
+    },
+    "/v1/feedback/clicks": {
+      "post": {
+        "operationId": "report_clicks_v1_feedback_clicks_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N3 \u2014 recommendations and feedback. The tenant is the hostname.",
+            "url": "https://{tenant}.{api_domain}",
+            "variables": {
+              "api_domain": {
+                "default": "serve.graphrec.example",
+                "description": "GRAPHREC_API_DOMAIN."
+              },
+              "tenant": {
+                "default": "your-tenant",
+                "description": "Your tenant's subdomain. N3 routes on it."
+              }
+            }
+          }
+        ],
+        "summary": "Report clicked items",
+        "tags": [
+          "data-plane"
+        ]
+      }
+    },
+    "/v1/feedback/conversions": {
+      "post": {
+        "description": "`value` is recorded here and ignored on clicks \u2014 a conversion has an\namount and a click does not.",
+        "operationId": "report_conversions_v1_feedback_conversions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N3 \u2014 recommendations and feedback. The tenant is the hostname.",
+            "url": "https://{tenant}.{api_domain}",
+            "variables": {
+              "api_domain": {
+                "default": "serve.graphrec.example",
+                "description": "GRAPHREC_API_DOMAIN."
+              },
+              "tenant": {
+                "default": "your-tenant",
+                "description": "Your tenant's subdomain. N3 routes on it."
+              }
+            }
+          }
+        ],
+        "summary": "Report conversions",
+        "tags": [
+          "data-plane"
+        ]
+      }
+    },
+    "/v1/feedback/impressions": {
+      "post": {
+        "description": "A repeat is a success (`duplicate_confirmed`), not a conflict.\n\nASM-05: nothing recorded here influences a model or activates anything. The\nmodule that writes it imports nothing that could.",
+        "operationId": "report_impressions_v1_feedback_impressions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImpressionsRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N3 \u2014 recommendations and feedback. The tenant is the hostname.",
+            "url": "https://{tenant}.{api_domain}",
+            "variables": {
+              "api_domain": {
+                "default": "serve.graphrec.example",
+                "description": "GRAPHREC_API_DOMAIN."
+              },
+              "tenant": {
+                "default": "your-tenant",
+                "description": "Your tenant's subdomain. N3 routes on it."
+              }
+            }
+          }
+        ],
+        "summary": "Report the items that were shown",
+        "tags": [
+          "data-plane"
         ]
       }
     },
@@ -6076,6 +6958,18 @@
             "description": "Validation Error"
           }
         },
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Activate an invited account",
         "tags": [
           "auth"
@@ -6100,6 +6994,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "The signed-in user",
@@ -6145,6 +7051,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "Edit one's own display name",
@@ -6194,6 +7112,18 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Change one's own authentication material",
         "tags": [
           "auth"
@@ -6219,6 +7149,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "Availability, latency and fallback rate over the last 24 hours",
@@ -6288,6 +7230,18 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "A tenant's model versions",
         "tags": [
           "registry"
@@ -6313,6 +7267,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "The five stat cards above the model list",
@@ -6362,6 +7328,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "One version, against the baseline and the active version",
@@ -6423,6 +7401,18 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Ask for a version to serve",
         "tags": [
           "serving"
@@ -6480,6 +7470,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "Archive a version, keeping its record",
@@ -6541,6 +7543,18 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Ask for the retained previous version back",
         "tags": [
           "serving"
@@ -6566,6 +7580,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "The \u00a73.5 checklist",
@@ -6679,6 +7705,18 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Every tenant's history",
         "tags": [
           "platform"
@@ -6720,6 +7758,18 @@
             "description": "Validation Error"
           }
         },
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Operator sign-in",
         "tags": [
           "platform-auth"
@@ -6832,6 +7882,18 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Terminal failures, redacted",
         "tags": [
           "platform"
@@ -6859,6 +7921,18 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "The signed-in operator",
         "tags": [
           "platform-auth"
@@ -6883,6 +7957,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "The price list",
@@ -6927,6 +8013,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "Create a plan",
@@ -6975,6 +8073,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "One plan",
@@ -7034,6 +8144,18 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Edit a plan's limits",
         "tags": [
           "platform"
@@ -7081,6 +8203,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "Close a plan to new assignments",
@@ -7131,6 +8265,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "Installation health",
@@ -7227,6 +8373,18 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "The estate",
         "tags": [
           "platform"
@@ -7274,6 +8432,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "One tenant, in three separately-permitted sections",
@@ -7335,6 +8505,18 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Grant an exception above the plan's limit",
         "tags": [
           "platform"
@@ -7381,6 +8563,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "One tenant's aggregate usage",
@@ -7441,6 +8635,18 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Put a tenant on a plan",
         "tags": [
           "platform"
@@ -7498,6 +8704,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "Move a tenant between lifecycle states",
@@ -7612,6 +8830,18 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Cross-tenant usage",
         "tags": [
           "platform"
@@ -7724,6 +8954,18 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "The tenant's catalogue",
         "tags": [
           "catalog"
@@ -7767,6 +9009,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "Add a product",
@@ -7814,6 +9068,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "One product",
@@ -7872,6 +9138,18 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Update a product",
         "tags": [
           "catalog"
@@ -7926,6 +9204,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "Create or replace",
@@ -7986,6 +9276,18 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Disable a product",
         "tags": [
           "catalog"
@@ -8033,9 +9335,147 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Synchronize a bounded product collection",
         "tags": [
           "ingestion"
+        ]
+      }
+    },
+    "/v1/recommendations": {
+      "post": {
+        "description": "ER-F-05: `model_version` and `strategy` in every response, always.\n\nA `400` when neither `customer_id` nor `session_id` is present: a request\nidentifying nobody is not a cold-start request, it is a request whose\nfeedback can never be attributed to anything.",
+        "operationId": "recommend_v1_recommendations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecommendationRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecommendationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N3 \u2014 recommendations and feedback. The tenant is the hostname.",
+            "url": "https://{tenant}.{api_domain}",
+            "variables": {
+              "api_domain": {
+                "default": "serve.graphrec.example",
+                "description": "GRAPHREC_API_DOMAIN."
+              },
+              "tenant": {
+                "default": "your-tenant",
+                "description": "Your tenant's subdomain. N3 routes on it."
+              }
+            }
+          }
+        ],
+        "summary": "Recommend items for a customer or a session",
+        "tags": [
+          "data-plane"
+        ]
+      }
+    },
+    "/v1/recommendations/session": {
+      "post": {
+        "description": "XR-F-09. The same funnel with no customer to look up.\n\n`strategy` comes back as `session` when the caller supplied recent events\nand `cold_start` when they did not \u2014 the two are different answers to\ndifferent situations and the tenant needs to tell them apart.",
+        "operationId": "recommend_session_v1_recommendations_session_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionRecommendationRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecommendationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N3 \u2014 recommendations and feedback. The tenant is the hostname.",
+            "url": "https://{tenant}.{api_domain}",
+            "variables": {
+              "api_domain": {
+                "default": "serve.graphrec.example",
+                "description": "GRAPHREC_API_DOMAIN."
+              },
+              "tenant": {
+                "default": "your-tenant",
+                "description": "Your tenant's subdomain. N3 routes on it."
+              }
+            }
+          }
+        ],
+        "summary": "Recommend items for an anonymous session",
+        "tags": [
+          "data-plane"
         ]
       }
     },
@@ -8055,6 +9495,18 @@
             "description": "Successful Response"
           }
         },
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "The scope catalogue",
         "tags": [
           "credentials"
@@ -8106,6 +9558,18 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Recent serving errors, classes only",
         "tags": [
           "serving"
@@ -8155,6 +9619,18 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "One submission, either kind",
         "tags": [
           "ingestion"
@@ -8179,6 +9655,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "Plan and entitlements",
@@ -8206,6 +9694,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "The caller's own tenant",
@@ -8249,6 +9749,18 @@
             "description": "Validation Error"
           }
         },
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Register a tenant and its first administrator",
         "tags": [
           "auth"
@@ -8316,6 +9828,18 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "A tenant's training runs",
         "tags": [
           "training"
@@ -8359,6 +9883,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "Request a training run",
@@ -8412,6 +9948,18 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "The four admission checks, before anything is requested",
         "tags": [
           "training"
@@ -8458,6 +10006,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "One run, with its stage rail",
@@ -8507,6 +10067,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "The per-epoch training curve",
@@ -8568,6 +10140,18 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Ask a run to stop, with a reason",
         "tags": [
           "training"
@@ -8592,6 +10176,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "Measured usage against limits",
@@ -8644,6 +10240,18 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Usage by recent period",
         "tags": [
           "metering"
@@ -8669,6 +10277,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "Users in the caller's tenant",
@@ -8714,6 +10334,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "Invite a user to the caller's tenant",
@@ -8763,6 +10395,18 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
           }
         ],
         "summary": "One user in the tenant",
@@ -8824,6 +10468,18 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Change a role",
         "tags": [
           "users"
@@ -8882,6 +10538,18 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Change a status",
         "tags": [
           "users"
@@ -8931,11 +10599,49 @@
             "HTTPBearer": []
           }
         ],
+        "servers": [
+          {
+            "description": "N1 \u2014 control plane, catalogue and ingestion.",
+            "url": "https://{console_domain}",
+            "variables": {
+              "console_domain": {
+                "default": "api.graphrec.example",
+                "description": "GRAPHREC_CONSOLE_DOMAIN."
+              }
+            }
+          }
+        ],
         "summary": "Issue a fresh invitation to a user who has not accepted",
         "tags": [
           "users"
         ]
       }
     }
-  }
+  },
+  "servers": [
+    {
+      "description": "N1 \u2014 control plane, catalogue and ingestion.",
+      "url": "https://{console_domain}",
+      "variables": {
+        "console_domain": {
+          "default": "api.graphrec.example",
+          "description": "GRAPHREC_CONSOLE_DOMAIN."
+        }
+      }
+    },
+    {
+      "description": "N3 \u2014 recommendations and feedback. The tenant is the hostname.",
+      "url": "https://{tenant}.{api_domain}",
+      "variables": {
+        "api_domain": {
+          "default": "serve.graphrec.example",
+          "description": "GRAPHREC_API_DOMAIN."
+        },
+        "tenant": {
+          "default": "your-tenant",
+          "description": "Your tenant's subdomain. N3 routes on it."
+        }
+      }
+    }
+  ]
 }

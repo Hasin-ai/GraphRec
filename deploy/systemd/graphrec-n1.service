@@ -1,0 +1,50 @@
+# N1 — Control. BACKEND_PLAN §22.2: "Docker Compose per node, each wrapped in a
+# systemd unit for boot ordering and restart."
+#
+# Install:
+#   sudo cp deploy/systemd/graphrec-n1.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now graphrec-n1
+
+[Unit]
+Description=GraphRec N1 (control plane)
+Documentation=file:///opt/graphrec/deploy/README.md
+# Both, and not just docker.service: `docker.socket` is what starts on demand,
+# and a unit ordered only after the service can run before the socket is ready
+# on a cold boot.
+After=docker.service docker.socket network-online.target wg-quick@wg0.service
+Requires=docker.service
+# WireGuard is a `Wants`, not a `Requires`. N1 is the only node that is useful
+# on its own — it serves the console and the control API from local Postgres —
+# and refusing to start it because the tunnel to N2 is down would turn a
+# training outage into a total one.
+Wants=network-online.target wg-quick@wg0.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/graphrec/deploy/n1
+EnvironmentFile=/opt/graphrec/deploy/n1.env
+
+# `up` blocks until the healthchecks pass, which is what makes the ordering
+# below mean anything: `graphrec-n1.service` reaching `active` is the signal
+# the deploy workflow waits on before it touches N3.
+ExecStart=/usr/bin/docker compose up --detach --wait --wait-timeout 300
+ExecStop=/usr/bin/docker compose down
+
+# A reload is a re-`up`, not a restart: Compose recreates only the containers
+# whose configuration changed, so `systemctl reload` after an image bump
+# replaces the application and leaves Postgres alone.
+ExecReload=/usr/bin/docker compose up --detach --wait --wait-timeout 300
+
+# Pulling images and running migrations on a cold start takes longer than
+# systemd's default 90 s, and a timeout here leaves a half-started project that
+# the next `systemctl start` will not fix.
+TimeoutStartSec=600
+TimeoutStopSec=300
+
+Restart=on-failure
+RestartSec=30s
+
+[Install]
+WantedBy=multi-user.target

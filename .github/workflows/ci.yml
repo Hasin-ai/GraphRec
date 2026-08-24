@@ -1,6 +1,6 @@
 # The merge gate.
 #
-# Four jobs that are not negotiable, and are named so a red run says which
+# Six jobs that are not negotiable, and are named so a red run says which
 # promise broke:
 #
 #   * `parity` — the generated enums and the error catalogue still match the
@@ -11,6 +11,11 @@
 #   * `isolation` — the runtime role cannot escape its tenant.
 #   * `authz` — the five authorization gates fire in order, and the tenant and
 #     platform realms cannot be crossed.
+#   * `observability` — the alert rules, dashboards, Caddyfiles, firewall
+#     rulesets and Compose files parse, and each still refers to something that
+#     exists. None of this is reachable from a test run, because nothing in the
+#     suite starts Prometheus or Caddy.
+#   * `security` — dependencies, static analysis, image and history.
 #
 # The last two are required checks from Phase 2 onward, and are separate jobs
 # rather than part of `test` so that a red run says which promise broke.
@@ -46,6 +51,13 @@ jobs:
         run: ruff format --check .
       - name: mypy
         run: mypy graphrec apps
+      - name: Shell scripts
+        # The ops scripts are the code that runs during an incident and the only
+        # code with no test around it. ShellCheck is what stands in for one:
+        # an unquoted `$BACKUP_DIR` is a restore into the wrong database.
+        run: |
+          docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:stable \
+            scripts/ops/*.sh
       - name: Module boundaries
         # Contracts in pyproject.toml. The one that matters: the five apps are
         # independent of each other and share only `graphrec`. Without this,
@@ -236,6 +248,140 @@ jobs:
         # actually breaks: `CREATE ROLE` has no `IF NOT EXISTS`.
         run: alembic upgrade head
 
+  observability:
+    name: Alerts, dashboards and runbooks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install -e ".[dev]"
+
+      # The three configuration files that are never exercised by a test run,
+      # because nothing in the test suite starts Prometheus. A rule with a typo
+      # in its expression is a valid YAML document and an alert that never
+      # fires, and the first time anyone finds out is the incident it was
+      # written for.
+      - name: promtool
+        run: |
+          docker run --rm -v "$PWD/deploy/observability:/cfg:ro" \
+            --entrypoint promtool prom/prometheus:v2.54.1 \
+            check config /cfg/prometheus.yml
+          docker run --rm -v "$PWD/deploy/observability:/cfg:ro" \
+            --entrypoint promtool prom/prometheus:v2.54.1 \
+            check rules /cfg/alerts.yml
+      - name: amtool
+        run: |
+          docker run --rm -v "$PWD/deploy/observability:/cfg:ro" \
+            --entrypoint amtool prom/alertmanager:v0.27.0 \
+            check-config /cfg/alertmanager.yml
+      - name: Caddyfiles
+        run: |
+          for node in n1 n3; do
+            docker run --rm -v "$PWD/deploy/$node:/etc/caddy:ro" caddy:2-alpine \
+              caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+          done
+      - name: nftables rulesets
+        run: |
+          for node in n1 n2 n3; do
+            docker run --rm --cap-add NET_ADMIN --cap-add NET_RAW \
+              -v "$PWD/deploy/firewall:/rules:ro" alpine:3.20 \
+              sh -c "apk add --quiet nftables && nft -c -f /rules/$node.nft"
+          done
+      - name: Compose files
+        run: |
+          export WG_N1=10.10.0.1 WG_N2=10.10.0.2 WG_N3=10.10.0.3
+          export GRAPHREC_IMAGE_TAG=ci GRAPHREC_CONSOLE_DOMAIN=console.invalid
+          export GRAPHREC_API_DOMAIN=api.invalid GRAPHREC_ACME_EMAIL=ci@invalid
+          for node in n1 n2 n3; do
+            docker compose -f "deploy/$node/docker-compose.yml" config >/dev/null
+          done
+
+      # And the half that *is* a test suite: that every alert has a runbook
+      # section, every dashboard panel queries a metric this code publishes, and
+      # every API call written down in a runbook exists in the OpenAPI document.
+      - name: Contracts between the alerts, the dashboards and the runbooks
+        run: pytest tests/observability tests/deploy -q
+
+  security:
+    name: Security scan
+    runs-on: ubuntu-latest
+    # Not `continue-on-error`. A scan whose result is advisory is a scan nobody
+    # reads. Where a finding is accepted it is accepted explicitly, in
+    # `.trivyignore` or a pip-audit `--ignore-vuln`, with a reason — which is a
+    # record of a decision rather than a permanently amber check.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Python dependencies
+        # `[dev]` as well as the runtime set. A vulnerable test runner is not a
+        # vulnerability in the product and it is still a vulnerability on the
+        # machine that runs CI with repository credentials in its environment.
+        #
+        # `--skip-editable`, not `--strict`: the repository installs itself as
+        # an editable `graphrec`, which is not on PyPI and cannot be audited.
+        # `--strict` fails on that every time, which is a check that is red for
+        # a reason unrelated to security.
+        run: |
+          pip install pip-audit
+          pip install -e ".[dev]"
+          pip-audit --skip-editable --desc
+      - name: Node dependencies
+        # `--omit=dev` on purpose: a development-only advisory in a build tool
+        # is worth knowing about and is not a vulnerability in the shipped
+        # bundle, and conflating the two is how the whole check gets muted.
+        run: npm audit --audit-level=high --omit=dev
+        working-directory: frontend
+
+      - name: Static analysis
+        # `bandit` on the application code only. The `-ll` floor is medium
+        # severity and above: the low band is dominated by `assert` in tests and
+        # `subprocess` in the serving driver, both of which are deliberate and
+        # both of which would train people to pass `--exit-zero`.
+        #
+        # `-ii` as well as `-ll`: medium confidence and above. The low band here
+        # is fifteen `B608` hits on `sa.text(f"...")`, every one of which
+        # interpolates a module-level constant and binds every value. Raising
+        # the confidence floor rather than adding fifteen `# nosec` comments,
+        # because fifteen suppressions is how the sixteenth gets added without
+        # anyone reading it. The one genuine finding — binding the metrics
+        # listener to all interfaces — is annotated at the line instead.
+        run: |
+          pip install bandit
+          bandit -r graphrec apps -ll -ii
+
+      - name: Image and filesystem
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          # Secrets *and* misconfiguration. The second one is why this scans the
+          # repository rather than only the built image: the Compose files, the
+          # systemd units and the Dockerfile are as capable of being the
+          # vulnerability as any dependency is.
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Secrets that were once committed
+        # History, not the working tree. A key removed in a later commit is
+        # still a published key, and `trivy fs` above only sees the checkout.
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   frontend:
     name: Console
     runs-on: ubuntu-latest
@@ -251,9 +397,22 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
         working-directory: frontend
-      - run: npm run lint
+      - name: ESLint
+        run: npm run lint
         working-directory: frontend
-      - run: npx tsc --noEmit
+      - name: Types
+        run: npx tsc --noEmit
+        working-directory: frontend
+      - name: Tests
+        # Added in Phase 16. The console had 116 tests and CI ran none of them:
+        # `lint`, `tsc` and `build` all pass on a component that renders the
+        # wrong thing.
+        run: npm run test
+        working-directory: frontend
+      - name: The generated client matches the published document
+        # `--check` regenerates from `openapi.json` and diffs. This is the other
+        # half of `parity`: the prototype pins the copy, this pins the wire.
+        run: npm run gen:client:check
         working-directory: frontend
       - run: npm run build
         working-directory: frontend

@@ -1,0 +1,76 @@
+# Where alerts go, and — more usefully — where they do not.
+#
+# `deploy/n1/docker-compose.yml` mounts this file. Until now it did not exist,
+# which on a Docker host does not fail: the daemon creates a *directory* at the
+# mount point and Alertmanager exits complaining that its config is a directory.
+# A missing alert route is invisible; a missing config file is invisible twice.
+#
+# ## The grouping, which is the only interesting decision here
+#
+# `group_by: [alertname, tenant_id]`. The estate is multi-tenant and the two
+# alerts that matter most — `TenantHasNoReadyReplica` and `FallbackRateHigh` —
+# fire per tenant. Grouping on `alertname` alone would collapse "one tenant is
+# down" and "every tenant is down" into the same notification, which is the
+# distinction the person woken up needs first. Grouping on nothing would page
+# once per tenant during a platform-wide outage.
+#
+# ## Inhibition
+#
+# `TargetDown` on the control API suppresses everything that is computed from
+# that target's series. A scrape that stopped makes `rate()` go to zero, and a
+# fallback rate of zero looks like health. One cause, one page.
+#
+# ## No receiver is configured, and that is deliberate
+#
+# CON-05 makes this demonstration readiness rather than an on-call rota. The
+# `null` receiver means alerts still evaluate, still group, still show in
+# Prometheus's and Alertmanager's own UIs, and still carry their runbook link.
+# Wiring Slack or PagerDuty is three lines under `receivers:` and one line under
+# `route:`, and both are marked below. What is *not* left to the operator is the
+# routing tree — that is the part that is wrong in the incident if it was
+# invented in the incident.
+
+global:
+  resolve_timeout: 5m
+
+route:
+  group_by: [alertname, tenant_id]
+  # First notification waits 30s so that a burst of per-tenant alerts from one
+  # cause arrives as one notification rather than as forty.
+  group_wait: 30s
+  group_interval: 5m
+  # A firing alert re-notifies every four hours. Long enough not to be noise,
+  # short enough that an alert nobody acknowledged does not go quiet overnight.
+  repeat_interval: 4h
+  # Quoted. Bare `null` is YAML's null value, and Alertmanager rejects a root
+  # route with no receiver — which is how this file failed the first time it was
+  # checked. The receiver is *named* "null"; it is not absent.
+  receiver: "null"
+
+  routes:
+    # Critical is separated so that a real receiver can be attached to this
+    # branch alone. `continue: false` — a critical alert should page once.
+    - matchers: [severity = "critical"]
+      receiver: "null"
+      group_wait: 10s
+      repeat_interval: 1h
+
+inhibit_rules:
+  # A target that is not being scraped produces no series, and rules over a
+  # missing series evaluate to something. Suppress the derived alerts for that
+  # node rather than paging for both the cause and its shadow.
+  - source_matchers: [alertname = "TargetDown"]
+    target_matchers: [severity = "warning"]
+    equal: [node]
+
+  # A tenant with no ready replica is also a tenant serving from the fallback
+  # lane. The first is the cause; the second is how it looks from outside.
+  - source_matchers: [alertname = "TenantHasNoReadyReplica"]
+    target_matchers: [alertname = "FallbackRateHigh"]
+    equal: [tenant_id]
+
+receivers:
+  # Attach a real receiver here. Alertmanager requires a receiver named by the
+  # route, and a `null` receiver is the honest way to say "evaluated, grouped,
+  # visible, not delivered" rather than pretending a webhook exists.
+  - name: "null"

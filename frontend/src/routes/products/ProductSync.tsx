@@ -46,7 +46,9 @@ export function ProductSyncRoute() {
   );
   const form = useSubmit<Submission>(
     (body: S['BulkUpsertProductsRequest']) => mutation.mutateAsync(body),
-    (submission) => navigate(`/submissions/${submission.submission_id}`),
+    // `void`: the success callback is typed `(x) => void` and `navigate`
+    // returns a promise. Nothing here awaits the transition.
+    (submission) => void navigate(`/submissions/${submission.submission_id}`),
   );
 
   return (

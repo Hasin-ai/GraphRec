@@ -2,7 +2,6 @@ import { Outlet, useNavigate, useRouteLoaderData } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button, Sidebar } from '../ui';
 import { TENANT_ROLE_LABELS } from '../lib/enums';
-import type { TenantRole } from '../lib/enums';
 import type { TenantContext } from '../guards';
 import { signOut } from '../api/hooks/auth';
 import { tenantNav } from './nav';
@@ -34,15 +33,15 @@ export function TenantLayout() {
     // sign-in on this machine render the previous one's rows before its own
     // queries resolve.
     queryClient.clear();
-    navigate('/login', { replace: true });
+    void navigate('/login', { replace: true });
   }
 
   return (
     <div className="shell">
       <Sidebar
         scopeLabel={`Tenant · ${tenant.tenant_code}`}
-        groups={tenantNav(me.role as TenantRole)}
-        foot={<span className="muted">{TENANT_ROLE_LABELS[me.role as TenantRole]}</span>}
+        groups={tenantNav(me.role)}
+        foot={<span className="muted">{TENANT_ROLE_LABELS[me.role]}</span>}
       />
       <div className="shell__main">
         <a className="skip-link" href="#main">

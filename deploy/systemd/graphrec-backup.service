@@ -1,0 +1,38 @@
+# Nightly backup. Runs on N1, which is where PostgreSQL is.
+#
+# `Type=oneshot` and a timer rather than a cron entry, so that a failure is
+# visible in `systemctl --failed` and in the journal alongside everything else,
+# instead of in an email nobody receives.
+
+[Unit]
+Description=GraphRec backup
+Documentation=file:///opt/graphrec/docs/RUNBOOKS.md
+After=graphrec-n1.service
+Requires=graphrec-n1.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/graphrec
+# Carries GRAPHREC_OWNER_DATABASE_URL, GRAPHREC_SUPERUSER_DATABASE_URL,
+# BACKUP_DIR and the MinIO alias. The superuser URL is here and nowhere else:
+# it is the credential that can read past row-level security, it belongs to this
+# job, and no service environment contains it.
+EnvironmentFile=/opt/graphrec/deploy/backup.env
+ExecStart=/opt/graphrec/scripts/ops/backup.sh
+
+# A dump of a database this size is minutes, not hours. A backup still running
+# after two is one that is stuck on a network mount, and leaving it running
+# means tomorrow's overlaps with it.
+TimeoutStartSec=7200
+
+# Root, because the destination is usually a root-owned mount and because
+# `require_rls_bypass` needs the admin credential either way. Nothing else in
+# this deployment runs as root.
+User=root
+
+# Best-effort niceness: the backup must not be the reason a request is slow.
+Nice=10
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=multi-user.target

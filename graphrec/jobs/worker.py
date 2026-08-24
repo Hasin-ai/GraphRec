@@ -24,6 +24,7 @@ import asyncio
 import contextlib
 import os
 import socket
+import time
 import uuid
 from typing import TYPE_CHECKING
 
@@ -37,6 +38,7 @@ from graphrec.jobs.failures import JobCancelled, classify
 from graphrec.jobs.handlers import JobContext
 from graphrec.jobs.queue import JobLeaseLost, JobQueue
 from graphrec.jobs.states import JobType, QueueStatus
+from graphrec.observability.metrics import JOB_DURATION, JOBS_FINISHED
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -74,6 +76,16 @@ def worker_identity(prefix: str) -> str:
     process finish a job its predecessor had already lost.
     """
     return f"{prefix}@{socket.gethostname()}/{os.getpid()}/{uuid.uuid4().hex[:8]}"
+
+
+def _job_type_label(job_type: JobType | None) -> str:
+    """The metric label for a job whose type may never have been read.
+
+    `unknown` rather than dropping the observation: a job that failed before its
+    row could be loaded is the most interesting failure in the queue, and a
+    counter that omits it reports a healthier system than the one running.
+    """
+    return job_type.value if job_type is not None else "unknown"
 
 
 class Worker:
@@ -205,21 +217,44 @@ class Worker:
         # what `JobContext.stage` writes progress and lease renewals through.
         # `SET LOCAL` dies with its transaction, so it is bound per use rather
         # than once here.
+        started = time.perf_counter()
+        outcome = "unknown"
+        job_type_label = "unknown"
         async with self.sessionmaker() as control:
             heartbeat = asyncio.create_task(self._heartbeat_loop(ticket))
             try:
-                await self._run_handler(ticket, control, log_context)
+                outcome, job_type_label = await self._run_handler(ticket, control, log_context)
             finally:
                 heartbeat.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await heartbeat
+                # Measured here rather than inside `_run_handler`, which has
+                # five exits. The duration is lease-to-terminal, which is what
+                # an operator watching a queue drain actually wants; it is not
+                # the handler's own runtime, and the difference is the outcome
+                # transaction, which is part of the job whether it is fast or
+                # not.
+                JOB_DURATION.labels(job_type=job_type_label).observe(time.perf_counter() - started)
+                JOBS_FINISHED.labels(job_type=job_type_label, outcome=outcome).inc()
 
     async def _run_handler(
         self,
         ticket: ClaimTicket,
         control: AsyncSession,
         log_context: dict[str, str],
-    ) -> None:
+    ) -> tuple[str, str]:
+        """Run the job. Returns `(outcome, job_type)` for the metrics above.
+
+        Returned rather than raised, because every one of these endings is a
+        normal one as far as the worker is concerned — the loop must go round
+        again after all five — and because the caller has no other way to learn
+        which of them happened.
+
+        `retrying` is a separate outcome from `failed` on purpose. §24 alerts on
+        a job failure *rate*, and a queue retrying a flaky upload twice before
+        succeeding has not failed; counting those together would make the alert
+        fire on a healthy backlog and train its readers to ignore it.
+        """
         # Remembered outside the transaction because the failure path needs it
         # and the transaction that could read it is, by then, aborted. `None`
         # means the job row was never loaded, which is itself a failure worth
@@ -252,6 +287,7 @@ class Worker:
                 await self.queue.succeed(work, job_id=ticket.job_id, progress=progress)
 
             logger.info("job_succeeded", extra=log_context)
+            return "succeeded", _job_type_label(job_type)
 
         except JobCancelled as exc:
             stage = exc.stage
@@ -262,11 +298,16 @@ class Worker:
                 ),
             )
             logger.info("job_cancelled", extra={**log_context, "stage": stage or ""})
+            return "cancelled", _job_type_label(job_type)
 
         except JobLeaseLost:
             # Someone else owns this job now. Writing an outcome would overwrite
             # theirs with the result of a run the queue has already abandoned.
+            # Not counted as an ending of this job: another worker owns it and
+            # will record its own. Counting it here would double every job the
+            # sweeper reassigns.
             logger.warning("job_lease_lost", extra=log_context)
+            return "lease_lost", _job_type_label(job_type)
 
         except Exception as exc:
             verdict = classify(exc)
@@ -278,12 +319,28 @@ class Worker:
                 "job_failed",
                 extra={**log_context, "code": verdict.code, "verdict": verdict.retryability.value},
             )
-            await self._record(
-                ticket,
-                lambda session: self._fail(
+            # The queue's own answer, not `verdict.should_retry`. A retryable
+            # failure on a job that has spent its attempt budget is terminal,
+            # and only `queue.fail` knows how many are left — labelling it
+            # `retrying` would hide the exhausted job from §24's failure-rate
+            # alert, which is the one job it most needs to see.
+            recorded: QueueStatus | None = None
+
+            async def record_failure(session: AsyncSession) -> QueueStatus:
+                nonlocal recorded
+                recorded = await self._fail(
                     session, ticket=ticket, verdict=verdict, job_type=job_type
-                ),
-            )
+                )
+                return recorded
+
+            await self._record(ticket, record_failure)
+            if recorded is None:
+                # `_record` discarded the transaction, so the sweeper will
+                # requeue this job and record its real ending later. Counting
+                # anything here would count the same job twice.
+                return "unrecorded", _job_type_label(job_type)
+            outcome = "failed" if recorded is QueueStatus.FAILED else "retrying"
+            return outcome, _job_type_label(job_type)
 
     async def _fail(
         self,

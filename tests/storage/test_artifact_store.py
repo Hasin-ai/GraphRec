@@ -130,3 +130,45 @@ def test_deleting_an_absent_object_is_not_an_error(store) -> None:
     condition would eventually be wrong.
     """
     store.delete("never/written.bin")
+
+
+def test_probe_answers_where_exists_cannot(store, tmp_path) -> None:
+    """The distinction `probe` exists to make.
+
+    `exists` reports a missing key and an unreachable store identically — that
+    is deliberate and documented, and it is exactly why a readiness check built
+    on it would have called a dead store healthy. `probe` asks the store about
+    itself instead.
+    """
+    assert store.exists("nothing/here") is False
+
+    with pytest.raises(StorageError):
+        store.probe()
+
+    (tmp_path / "artifacts").mkdir()
+    store.probe()
+
+
+def test_a_root_that_is_not_a_directory_is_refused(tmp_path) -> None:
+    """A file where the volume should be. Present is not the same as mounted."""
+    occupied = tmp_path / "artifacts"
+    occupied.write_bytes(b"not a directory")
+
+    with pytest.raises(StorageError, match="not a directory"):
+        LocalArtifactStore(occupied).probe()
+
+
+def test_a_read_only_root_is_refused(tmp_path) -> None:
+    """Readable is not enough: the next put will need to write.
+
+    A volume mounted read-only is the failure this catches, and it is invisible
+    to any probe that only stats the directory.
+    """
+    root = tmp_path / "artifacts"
+    root.mkdir()
+    root.chmod(0o500)
+    try:
+        with pytest.raises(StorageError, match="not writable"):
+            LocalArtifactStore(root).probe()
+    finally:
+        root.chmod(0o700)

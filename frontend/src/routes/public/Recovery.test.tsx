@@ -6,6 +6,7 @@ import { InviteAcceptRoute } from './InviteAccept';
 import { RegisterRoute } from './Register';
 import { renderRoutes } from '../../test/harness';
 import { resetSessionsForTest } from '../../api/session';
+import { requestBody } from '../../test/request';
 
 const ACCEPTED = {
   detail: 'If that identifier matches an account, recovery instructions have been sent.',
@@ -90,7 +91,7 @@ describe('/recover/confirm', () => {
     // ordering one of two implementations of the rule.
     await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
     const [, init] = vi.mocked(globalThis.fetch).mock.calls[0] as unknown as [string, RequestInit];
-    expect(JSON.parse(String(init.body))).toEqual({
+    expect(requestBody(init.body)).toEqual({
       token: 'rec_abc123',
       password: 'correct-horse-battery',
       password_confirmation: 'mistyped-horse-batter',

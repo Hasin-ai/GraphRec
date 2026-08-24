@@ -82,7 +82,7 @@ export function ProductForm({ existing, onSaved, onCancel }: ProductFormProps) {
           // through a JavaScript number to get there is how a price becomes
           // 19.989999999999998.
           price: price === '' ? null : String(price),
-          availability: availability as S['Availability'],
+          availability: availability,
           active,
         });
       }}

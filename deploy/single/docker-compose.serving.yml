@@ -66,17 +66,32 @@ services:
       GRAPHREC_DEPLOY_EPOCH: "${GRAPHREC_DEPLOY_EPOCH:-0}"
 
       ENVIRONMENT: ${ENVIRONMENT:-local}
-      POSTGRES_HOST: postgres
+      # Names on one host, addresses across three.
+      #
+      # These read as Compose service names because that is what they are in the
+      # single-node stack, where `postgres`, `redis` and `minio` sit on the
+      # network this file joins. On the §9.1 estate they do not: the database
+      # and cache are on N1 and these containers run on N3, so the reconciler
+      # sets each variable to a tunnel address and it arrives here through
+      # `_environment` (`graphrec/serving_driver/compose.py`), which merges the
+      # reconciler's own environment into every compose invocation.
+      #
+      # Defaults preserved rather than made required, because the single-node
+      # path is the one people run first and a `:?` here would break it.
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
       POSTGRES_APP_USER: graphrec_app
       POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:-graphrec_app_local_only}
-      REDIS_URL: redis://redis:6379/0
-      S3_ENDPOINT: http://minio:9000
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
       LOG_FORMAT: ${LOG_FORMAT:-json}
 
       # A replica that has bound its version does not need to re-read desired
       # state every ten seconds, but it does need to notice an epoch change on
       # the same version — see `apps/inference/main.py::_poll`.
       INFERENCE_POLL_SECONDS: ${INFERENCE_POLL_SECONDS:-10}
+      # The exposition listener. See the `ports` block below for why it is
+      # published, and `deploy/observability/prometheus.yml` for what finds it.
+      METRICS_PORT: "9464"
 
     env_file:
       - path: ../../.env
@@ -131,11 +146,26 @@ services:
 
     expose:
       - "8020"
+      - "9464"
 
-    # No `ports:`. Replicas are scaled, and a fixed host port would make the
-    # second one a bind conflict. Traffic reaches them through the shared
-    # network by service name, which is what a load balancer in front of this
-    # would resolve anyway.
+    ports:
+      # One published port, and no host port number. Recommendation traffic is
+      # deliberately absent from this list — it reaches 8020 through the shared
+      # network by service name, which is what the load balancer in front of
+      # this resolves anyway, and a fixed host port would make the second
+      # replica a bind conflict.
+      #
+      # 9464 is here because Prometheus runs on N1 and these containers run on
+      # N3, and a container address on N3's bridge network is not routable from
+      # N1. The empty middle field is the point: `addr::9464` asks Docker for an
+      # *ephemeral* host port, so scaling to four replicas produces four
+      # distinct host ports instead of four bind conflicts. Discovery reads the
+      # assignment back off the daemon rather than guessing it.
+      #
+      # The bind address defaults to loopback, so the single-node stack — where
+      # nothing scrapes across a network — publishes nothing reachable. On N3
+      # the reconciler sets it to the tunnel address.
+      - "${GRAPHREC_METRICS_BIND_ADDR:-127.0.0.1}::9464"
 
     # Drain rather than abort: an in-flight recommendation is 300 ms, and the
     # rest of the budget is the metering write behind it.

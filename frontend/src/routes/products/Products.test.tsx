@@ -13,6 +13,7 @@ import { ProductsRoute } from './Products';
 import { ProductDetailRoute } from './ProductDetail';
 import { ADMIN_ME, DEVELOPER_ME, renderGuarded, respondWith } from '../../test/tenant';
 import { resetSessionsForTest } from '../../api/session';
+import { requestUrl } from '../../test/request';
 
 const ELIGIBLE = {
   external_id: 'sku-1',
@@ -58,7 +59,7 @@ describe('/products', () => {
     renderGuarded('/products', <ProductsRoute />, ['tenant_developer']);
 
     expect(await screen.findByRole('heading', { name: /do not have access/i })).toBeVisible();
-    expect(vi.mocked(globalThis.fetch).mock.calls.map(([url]) => String(url))).toEqual([
+    expect(vi.mocked(globalThis.fetch).mock.calls.map(([url]) => requestUrl(url))).toEqual([
       '/v1/me',
     ]);
   });

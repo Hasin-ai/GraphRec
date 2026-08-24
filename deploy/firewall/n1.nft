@@ -1,0 +1,88 @@
+#!/usr/sbin/nft -f
+#
+# N1 — Control. Public: 443 (and 80, for the ACME challenge and the redirect).
+# Everything else on wg0.
+
+flush ruleset
+
+define wg_net = 10.10.0.0/24
+
+table inet filter {
+	chain input {
+		type filter hook input priority filter; policy drop;
+
+		# Established first, so the rest of this file is only ever about new
+		# connections. Without it every rule below needs a return path and the
+		# ruleset doubles in size.
+		ct state established,related accept
+		ct state invalid drop
+
+		iif lo accept
+
+		# WireGuard itself. This is the rule that must be right: get it wrong
+		# and the tunnel never comes up, and every other node loses the
+		# database. UDP, on the port `wg0.conf` listens on.
+		udp dport 51820 accept
+
+		# SSH, key-only (see sshd_config; this rule does not enforce that).
+		# Rate-limited rather than restricted to an address, because the person
+		# who needs it most is the one whose home address changed.
+		tcp dport 22 ct state new limit rate 10/minute accept
+
+		# The public surface. Two ports, and 80 exists only to redirect and to
+		# answer the ACME HTTP-01 challenge.
+		tcp dport { 80, 443 } accept
+
+		# Everything the estate talks to over the tunnel: Postgres, Redis,
+		# Prometheus, Grafana, Alertmanager, the exporters, the metrics
+		# listeners. Named individually rather than "accept all from wg_net"
+		# so that adding a service is a visible change to this file.
+		iifname "wg0" ip saddr $wg_net tcp dport {
+			5432,  # postgres
+			6379,  # redis
+			9090,  # prometheus
+			9093,  # alertmanager
+			3000,  # grafana
+			9100,  # node_exporter
+			9187,  # postgres_exporter
+			9121,  # redis_exporter
+			9464   # the application metrics listeners
+		} accept
+
+		# ICMP, because a network nobody can ping is a network nobody can
+		# diagnose. Rate-limited so it is not a bandwidth amplifier.
+		ip protocol icmp icmp type { echo-request, destination-unreachable, time-exceeded } limit rate 10/second accept
+		ip6 nexthdr ipv6-icmp accept
+
+		# Logged, then dropped by the policy. A prefix that names the chain,
+		# because `nft` logs from three chains into one journal.
+		limit rate 5/minute log prefix "nft-n1-input-drop " level info
+	}
+
+	# The chain that makes the rest of this file true on a Docker host.
+	#
+	# Docker's own rules live in `nat` and in `DOCKER-USER`, below this hook, so
+	# a published container port is reachable even when `input` would have
+	# dropped it. Filtering here is what stops a `ports:` entry that binds
+	# 0.0.0.0 from silently becoming a public service.
+	chain forward {
+		type filter hook forward priority filter; policy drop;
+
+		ct state established,related accept
+		ct state invalid drop
+
+		# Containers reaching out, and containers reaching each other.
+		iifname "docker0" accept
+		iifname "br-*" accept
+
+		# The tunnel to the containers, which is how Prometheus scrapes N2 and
+		# N3 and how the reconciler reaches N3's Docker proxy.
+		iifname "wg0" ip saddr $wg_net accept
+
+		limit rate 5/minute log prefix "nft-n1-forward-drop " level info
+	}
+
+	chain output {
+		type filter hook output priority filter; policy accept;
+	}
+}

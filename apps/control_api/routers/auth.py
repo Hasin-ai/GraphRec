@@ -18,6 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.control_api.deps import (
     CurrentTenant,
+    LoginRateLimit,
+    RegistrationRateLimit,
     TenantAudit,
     get_session,
     get_settings_dep,
@@ -89,6 +91,10 @@ def _client_address(request: Request) -> str | None:
     response_model=TenantResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Register a tenant and its first administrator",
+    # Keyed on the peer address, because there is no identity yet. The limit
+    # this one is really about is automated sign-up, which costs a tenant row
+    # and a `tenant_code` out of a namespace nobody can reclaim.
+    dependencies=[RegistrationRateLimit],
 )
 async def register_tenant(
     body: RegisterTenantRequest, session: Session, service: Service
@@ -122,7 +128,16 @@ async def register_tenant(
         )
 
 
-@router.post("/auth/sign-in", response_model=SessionResponse, summary="Sign in to a tenant")
+@router.post(
+    "/auth/sign-in",
+    response_model=SessionResponse,
+    summary="Sign in to a tenant",
+    # The password-guessing limit. Per-account lockout already exists
+    # (`failed_attempts`/`locked_until`); this is the other half, because
+    # lockout counts attempts against *one* account and a spray counts one
+    # attempt against thousands.
+    dependencies=[LoginRateLimit],
+)
 async def sign_in(
     body: SignInRequest, request: Request, session: Session, service: Service
 ) -> SessionResponse:
@@ -255,6 +270,7 @@ RECOVERY_REQUESTED = "If that identifier matches an account, recovery instructio
 
 @router.post(
     "/auth/recovery",
+    dependencies=[LoginRateLimit],
     response_model=RecoveryRequestedResponse,
     status_code=status.HTTP_202_ACCEPTED,
     summary="Request a recovery proof",

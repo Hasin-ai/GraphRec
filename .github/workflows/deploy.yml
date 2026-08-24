@@ -1,0 +1,192 @@
+# The ordered deploy.
+#
+# BACKEND_PLAN §9.1 puts the estate on three nodes, and the order they are
+# updated in is not a preference. It is the only order in which a half-finished
+# deploy leaves a working system:
+#
+#   1. **N1 first, migrations included.** The schema is the thing every other
+#      node depends on and the only thing that cannot be rolled back by
+#      changing an image tag. Doing it first means everything after it runs
+#      against the schema it expects. Doing it last means N3 and N2 spend the
+#      deploy talking to a database that does not have their columns.
+#
+#   2. **N3 second.** Serving is the tenant-visible surface, and it is the node
+#      whose failure is worth finding while N1 is known good and N2 has not
+#      moved. The blast radius of a bad inference image is one node with a
+#      rollback that is one tag.
+#
+#   3. **N2 last.** Training is the only thing that can be down without a
+#      user-visible failure beyond "training unavailable" (§9.4, C-5). It is
+#      the cheapest thing to have broken while you work out what went wrong.
+#
+# A smoke test runs between each step and the next one does not start unless it
+# passed. That is what makes the order worth anything: without it this is three
+# deploys in a fixed sequence rather than a deploy that stops.
+#
+# ## What this does not do
+#
+# It does not deploy on a push to `main`. The trigger is manual, with the image
+# tag as an input, because ADR 0028's Compose driver means a deploy restarts
+# every serving replica on N3 and that is not a thing to do because a README
+# changed. `workflow_dispatch` is the smallest honest trigger.
+#
+# It also does not roll back automatically. The rollback is a re-run of this
+# workflow with the previous SHA, which is a deliberate act by someone who has
+# looked at the failure — see `docs/RUNBOOKS.md#force-a-rollback`. An automatic
+# rollback on a failed smoke test would have undone the deploy before anyone saw
+# why it failed, and the second attempt would fail the same way.
+
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Commit SHA to deploy. Must already be in the registry."
+        required: true
+        type: string
+      skip_n2:
+        description: "Leave the training node on its current image."
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  # One deploy at a time, and a queued one is not cancelled. Cancelling a deploy
+  # mid-flight leaves the estate on two image tags with nothing recording which.
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  GRAPHREC_IMAGE_TAG: ${{ inputs.image_tag }}
+
+jobs:
+  build:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.image_tag }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          # Tagged by SHA and nothing else. No `latest`, because `latest` makes
+          # "what is running" a question you answer by asking the node.
+          tags: ghcr.io/graphrec/graphrec:${{ inputs.image_tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  n1:
+    name: "1. Control (migrations)"
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bring up N1
+        # `--wait` inside the unit, so `systemctl start` does not return until
+        # Compose reports the stack healthy. The `migrate` service is a
+        # one-shot that every other N1 service depends on with
+        # `service_completed_successfully`, which is what makes "migrations
+        # first" a property of the node rather than a step in this file that
+        # can be reordered.
+        run: |
+          ./.github/deploy.sh n1 "${GRAPHREC_IMAGE_TAG}"
+        env:
+          SSH_HOST: ${{ secrets.N1_HOST }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      - name: Smoke
+        run: ./.github/deploy.sh smoke n1
+        env:
+          SSH_HOST: ${{ secrets.N1_HOST }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SMOKE_CONSOLE_URL: ${{ vars.CONSOLE_URL }}
+
+  n3:
+    name: "2. Serving"
+    needs: n1
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bring up N3
+        run: ./.github/deploy.sh n3 "${GRAPHREC_IMAGE_TAG}"
+        env:
+          SSH_HOST: ${{ secrets.N3_HOST }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      - name: Roll the replicas
+        # N3's Compose file does not contain the inference containers — the
+        # reconciler owns those, one project per tenant. Bumping the image tag
+        # on the node is not enough; the reconciler has to be told the desired
+        # state changed, and it rolls each tenant load-before-swap so a bad
+        # image never retires a working version (ER-F-06).
+        run: ./.github/deploy.sh reconcile "${GRAPHREC_IMAGE_TAG}"
+        env:
+          SSH_HOST: ${{ secrets.N1_HOST }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      - name: Smoke
+        run: ./.github/deploy.sh smoke n3
+        env:
+          SSH_HOST: ${{ secrets.N3_HOST }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SMOKE_API_URL: ${{ vars.API_URL }}
+
+  n2:
+    name: "3. Training"
+    needs: n3
+    if: ${{ !inputs.skip_n2 }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bring up N2
+        # `stop_grace_period: 300s` on the training worker. A deploy here waits
+        # up to five minutes for a run in progress to checkpoint, and that is
+        # the reason N2 is last rather than an argument for moving it.
+        run: ./.github/deploy.sh n2 "${GRAPHREC_IMAGE_TAG}"
+        env:
+          SSH_HOST: ${{ secrets.N2_HOST }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      - name: Smoke
+        # Through N1's Prometheus, because N2 has no public port. See
+        # `scripts/ops/smoke.sh`.
+        run: ./.github/deploy.sh smoke n2
+        env:
+          SSH_HOST: ${{ secrets.N1_HOST }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SMOKE_PROMETHEUS_URL: http://10.10.0.1:9090
+
+  record:
+    name: Record what is running
+    needs: [n1, n3, n2]
+    if: ${{ always() && needs.n1.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summary
+        # Written to the run summary rather than to a file in the repository:
+        # the deployed tag is a fact about the estate, and a file claiming it is
+        # a second copy that goes stale the first time a deploy fails halfway.
+        run: |
+          {
+            echo "### Deployed \`${GRAPHREC_IMAGE_TAG}\`"
+            echo
+            echo "| Node | Result |"
+            echo "|------|--------|"
+            echo "| N1 control  | ${{ needs.n1.result }} |"
+            echo "| N3 serving  | ${{ needs.n3.result }} |"
+            echo "| N2 training | ${{ needs.n2.result }} |"
+            echo
+            echo "Rolling back is this workflow re-run with the previous SHA."
+            echo "See \`docs/RUNBOOKS.md#force-a-rollback\`."
+          } >> "$GITHUB_STEP_SUMMARY"

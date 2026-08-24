@@ -1,0 +1,61 @@
+#!/usr/sbin/nft -f
+#
+# N3 — Serving + storage. Public: 443 (and 80, for ACME and the redirect).
+#
+# The object store is the thing this file is guarding. It holds every tenant's
+# uploads, snapshots and model bundles, and it speaks HTTP on 9000 — which means
+# a single missing rule is not "a port is open", it is "every tenant's data is
+# on the internet behind a key that is also in the environment".
+
+flush ruleset
+
+define wg_net = 10.10.0.0/24
+
+table inet filter {
+	chain input {
+		type filter hook input priority filter; policy drop;
+
+		ct state established,related accept
+		ct state invalid drop
+
+		iif lo accept
+
+		udp dport 51820 accept
+		tcp dport 22 ct state new limit rate 10/minute accept
+
+		# Recommendations and feedback. The whole public surface of this node.
+		tcp dport { 80, 443 } accept
+
+		iifname "wg0" ip saddr $wg_net tcp dport {
+			9000,  # the object store, for N1 and N2
+			9001,  # its administrative console
+			2376,  # the Docker API proxy, for the reconciler on N1
+			9100,  # node_exporter
+			9464   # the inference replicas' metrics listeners
+		} accept
+
+		ip protocol icmp icmp type { echo-request, destination-unreachable, time-exceeded } limit rate 10/second accept
+		ip6 nexthdr ipv6-icmp accept
+
+		limit rate 5/minute log prefix "nft-n3-input-drop " level info
+	}
+
+	chain forward {
+		type filter hook forward priority filter; policy drop;
+
+		ct state established,related accept
+		ct state invalid drop
+
+		# The per-tenant serving projects live on the `graphrec` network, which
+		# Docker creates as a `br-*` bridge. Caddy reaches them across it.
+		iifname "docker0" accept
+		iifname "br-*" accept
+		iifname "wg0" ip saddr $wg_net accept
+
+		limit rate 5/minute log prefix "nft-n3-forward-drop " level info
+	}
+
+	chain output {
+		type filter hook output priority filter; policy accept;
+	}
+}

@@ -105,6 +105,18 @@ class ArtifactStore(Protocol):
 
     def exists(self, key: str) -> bool: ...
 
+    def probe(self) -> None:
+        """Raise `StorageError` unless the backing store can be reached.
+
+        A separate verb from `exists` because `exists` cannot answer this.
+        `exists` reports a missing key and an unreachable bucket identically,
+        by design — a caller asking whether it can read an object does not care
+        which — and a readiness probe built on it would report `pass` for a
+        store that is entirely down. So the question "is the store there" is
+        asked directly, of the store, which is the only thing that knows.
+        """
+        ...
+
     def delete(self, key: str) -> None:
         """Remove the object. Absent is not an error — delete is idempotent
         because the caller retrying a cleanup has not done anything wrong."""

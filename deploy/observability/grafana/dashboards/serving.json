@@ -1,0 +1,458 @@
+{
+  "uid": "graphrec-serving",
+  "title": "GraphRec / Serving",
+  "description": "The four numbers that decide whether recommendations are being served, and served well. Laid out in the order an operator reads them during an incident: is it up, is it fast, is it real, and who is affected. The latency panel carries a threshold line at 300 ms because that is the SRS budget and the alert boundary, and a graph without it invites arguing about whether a number is bad.",
+  "tags": [
+    "graphrec",
+    "serving"
+  ],
+  "editable": false,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timezone": "utc",
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Ready tenants",
+      "description": "`graphrec_inference_ready`, summed. Published by the inference process itself on every rebind, so a process that has died stops updating rather than reporting zero \u2014 which is why `TargetDown` exists alongside this.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "graphrec-prometheus"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "graphrec-prometheus"
+          },
+          "expr": "sum(graphrec_inference_ready)",
+          "legendFormat": "ready",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "graphrec-prometheus"
+          },
+          "expr": "count(graphrec_serving_replicas{state=\"desired\"} > 0)",
+          "legendFormat": "expected",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Request rate",
+      "description": "By route template, never by path. The label is the FastAPI route pattern, so a product identifier cannot become a metric series.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "graphrec-prometheus"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 9,
+        "x": 6,
+        "y": 0
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "graphrec-prometheus"
+          },
+          "expr": "sum by (route) (rate(graphrec_http_requests_total{app=\"inference\"}[5m]))",
+          "legendFormat": "{{route}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 6
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "In flight",
+      "description": "Flat at a ceiling means the process is saturated and the queue is in front of it rather than inside it \u2014 which the latency percentiles alone cannot tell you.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "graphrec-prometheus"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 9,
+        "x": 15,
+        "y": 0
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "graphrec-prometheus"
+          },
+          "expr": "graphrec_http_requests_in_flight{app=\"inference\"}",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 6
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Inference latency",
+      "description": "P50, P95 and P99 over five minutes. The histogram has a bucket boundary exactly at 0.3 s so the P95 reading is not decided by where a default bucket happens to fall.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "graphrec-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 6
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "graphrec-prometheus"
+          },
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(graphrec_http_request_duration_seconds_bucket{app=\"inference\"}[5m])))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "graphrec-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(graphrec_http_request_duration_seconds_bucket{app=\"inference\"}[5m])))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "graphrec-prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(graphrec_http_request_duration_seconds_bucket{app=\"inference\"}[5m])))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 6
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.3
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Fallback share",
+      "description": "`degraded=\"true\"` only. A cold user served popularity is the system working and is not counted here; this is the personalised path being attempted and not taken. Alert threshold 5%.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "graphrec-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 6
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "graphrec-prometheus"
+          },
+          "expr": "sum(rate(graphrec_recommendations_total{degraded=\"true\"}[15m])) / clamp_min(sum(rate(graphrec_recommendations_total[15m])), 0.001)",
+          "legendFormat": "degraded",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 6
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.05
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Strategy mix",
+      "description": "What is actually answering. A shift here without a fallback spike is a change in traffic, not a fault.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "graphrec-prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 14
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "graphrec-prometheus"
+          },
+          "expr": "sum by (strategy) (rate(graphrec_recommendations_total[5m]))",
+          "legendFormat": "{{strategy}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 6
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Replicas by tenant",
+      "description": "Desired against ready, per tenant. The pair that `TenantHasNoReadyReplica` joins on: ready below one *while* desired is above zero.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "graphrec-prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 14
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "graphrec-prometheus"
+          },
+          "expr": "graphrec_serving_replicas{state=\"desired\"}",
+          "legendFormat": "{{tenant_id}} desired",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "graphrec-prometheus"
+          },
+          "expr": "graphrec_serving_replicas{state=\"ready\"}",
+          "legendFormat": "{{tenant_id}} ready",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 6
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        }
+      }
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  }
+}

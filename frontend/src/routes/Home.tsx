@@ -5,7 +5,6 @@ import { tenantNav } from '../layouts/nav';
 import { onboardingQuery } from '../api/hooks/operations';
 import type { Onboarding } from '../api/hooks/operations';
 import { QueryState } from '../components/QueryState';
-import type { TenantRole } from '../lib/enums';
 
 /**
  * `/home` — the onboarding checklist, then the permitted-services launcher.
@@ -22,7 +21,7 @@ import type { TenantRole } from '../lib/enums';
  */
 export function HomeRoute() {
   const { me, tenant } = useTenantContext();
-  const role = me.role as TenantRole;
+  const role = me.role;
   const groups = tenantNav(role).filter((group) => group.label !== 'Workspace');
   const onboarding = useQuery(onboardingQuery);
 

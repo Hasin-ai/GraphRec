@@ -23,7 +23,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
-from apps.control_api.deps import RequireAdministrator, UsageCountersDep
+from apps.control_api.deps import (
+    RequireAdministrator,
+    SubscriptionRateLimit,
+    UsageCountersDep,
+    UsageRateLimit,
+)
 from apps.control_api.schemas import (
     EntitlementBody,
     SubscriptionResponse,
@@ -44,7 +49,15 @@ router = APIRouter(tags=["metering"])
 MAX_TREND_PERIODS = 3
 
 
-@router.get("/usage", response_model=UsageResponse, summary="Measured usage against limits")
+@router.get(
+    "/usage",
+    response_model=UsageResponse,
+    summary="Measured usage against limits",
+    # Keyed on the tenant. These reads recompute against the ledger on a cache
+    # miss, so a console left open on a refresh loop is a database load nobody
+    # asked for.
+    dependencies=[UsageRateLimit],
+)
 async def read_usage(
     principal: RequireAdministrator,
     counters: UsageCountersDep,
@@ -77,7 +90,12 @@ async def read_usage(
     )
 
 
-@router.get("/usage/trends", response_model=UsageTrendsResponse, summary="Usage by recent period")
+@router.get(
+    "/usage/trends",
+    response_model=UsageTrendsResponse,
+    summary="Usage by recent period",
+    dependencies=[UsageRateLimit],
+)
 async def read_usage_trends(
     principal: RequireAdministrator,
     counters: UsageCountersDep,
@@ -98,7 +116,12 @@ async def read_usage_trends(
     )
 
 
-@router.get("/subscription", response_model=SubscriptionResponse, summary="Plan and entitlements")
+@router.get(
+    "/subscription",
+    response_model=SubscriptionResponse,
+    summary="Plan and entitlements",
+    dependencies=[SubscriptionRateLimit],
+)
 async def read_subscription(principal: RequireAdministrator) -> SubscriptionResponse:
     plan = await metering.subscription(
         principal.session, tenant_id=principal.tenant_id, now=quotas.utcnow()

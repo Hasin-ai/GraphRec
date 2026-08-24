@@ -1,0 +1,16 @@
+[Unit]
+Description=GraphRec backup, nightly
+Documentation=file:///opt/graphrec/docs/RUNBOOKS.md
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+# Up to fifteen minutes of jitter. Not for load — this is one machine — but so
+# that the backup and the drill below never start in the same minute on the day
+# their schedules coincide.
+RandomizedDelaySec=900
+# A node that was off at 03:15 backs up when it comes back, rather than skipping
+# a day silently.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

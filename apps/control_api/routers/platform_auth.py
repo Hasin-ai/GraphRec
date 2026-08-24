@@ -15,7 +15,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from apps.control_api.deps import CurrentPlatform, get_token_service
+from apps.control_api.deps import (
+    CurrentPlatform,
+    LoginRateLimit,
+    get_token_service,
+)
 from apps.control_api.routers.auth import _client_address
 from apps.control_api.schemas import (
     PlatformMeResponse,
@@ -35,7 +39,15 @@ def _service(tokens: Annotated[TokenService, Depends(get_token_service)]) -> Ide
 Service = Annotated[IdentityService, Depends(_service)]
 
 
-@router.post("/auth/sign-in", response_model=SessionResponse, summary="Operator sign-in")
+@router.post(
+    "/auth/sign-in",
+    response_model=SessionResponse,
+    summary="Operator sign-in",
+    # The same class as the tenant realm's, deliberately sharing one bucket per
+    # address: an attacker spraying both realms from one host should exhaust one
+    # allowance, not two.
+    dependencies=[LoginRateLimit],
+)
 async def platform_sign_in(
     body: PlatformSignInRequest, request: Request, service: Service
 ) -> SessionResponse:

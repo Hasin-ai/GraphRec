@@ -45,7 +45,7 @@ export function SetPasswordCard({
   const [confirmation, setConfirmation] = useState('');
 
   const onSuccess = useCallback(() => {
-    navigate('/login', { replace: true, state: { notice: doneMessage } });
+    void navigate('/login', { replace: true, state: { notice: doneMessage } });
   }, [navigate, doneMessage]);
 
   const { pending, error, fieldErrors, submit } = useSubmit(action, onSuccess);

@@ -27,6 +27,7 @@ from graphrec.common.config import get_settings
 from graphrec.common.logging import configure_logging, get_logger
 from graphrec.db.engine import create_sessionmaker, create_worker_engine
 from graphrec.jobs.worker import Worker
+from graphrec.observability.exposition import start_metrics_server
 
 logger = get_logger(__name__)
 
@@ -34,6 +35,7 @@ logger = get_logger(__name__)
 async def run() -> None:
     settings = get_settings()
     configure_logging(settings.log_level, settings.log_format)
+    start_metrics_server(settings, app="training_worker")
 
     engine = create_worker_engine(settings)
     worker = Worker(

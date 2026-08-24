@@ -26,7 +26,6 @@ import {
 } from '../../ui';
 import type { Column } from '../../ui';
 import { SUBMISSION_KIND_LABELS } from '../../lib/enums';
-import type { SubmissionKind } from '../../lib/enums';
 import { formatDateTime, formatNumber, humanise } from '../../lib/format';
 
 /** The five stages the server reports, in the order it reports them. */
@@ -59,7 +58,7 @@ function SubmissionPanel({ submission }: { submission: Submission }) {
     <>
       <div className="page__head">
         <h1 className="page__title">
-          {SUBMISSION_KIND_LABELS[submission.kind as SubmissionKind] ?? humanise(submission.kind)}
+          {SUBMISSION_KIND_LABELS[submission.kind] ?? humanise(submission.kind)}
         </h1>
         <p className="page__lede">
           Reference <code>{submission.reference}</code>, submitted{' '}

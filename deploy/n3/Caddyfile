@@ -1,0 +1,118 @@
+# N3's public edge. Recommendations and feedback, on 443. Nothing else.
+#
+# The data plane. Requests here carry an HMAC API credential, not a session
+# cookie — which is why this file has no CSP, no CORS and no console: there is
+# no browser on this path, and a header written for one would be a header
+# nobody reads.
+{
+	email {$GRAPHREC_ACME_EMAIL}
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+# Wildcard, because the tenant is in the hostname — see the routing note below.
+# A wildcard certificate needs the DNS-01 challenge, which needs a Caddy build
+# with the provider module for whoever hosts the zone. That is the one piece of
+# this file which cannot be made provider-agnostic, and it is called out here
+# rather than discovered when the certificate fails to issue.
+*.{$GRAPHREC_API_DOMAIN}, {$GRAPHREC_API_DOMAIN} {
+	encode zstd gzip
+
+	# --- TLS ----------------------------------------------------------------
+	#
+	# The same 1.3 floor as N1, and the consequence is different here. This edge
+	# is called by a customer's *server*, not by a browser, so the clients are
+	# whatever HTTP library they happened to have — an old OpenSSL pinned by an
+	# old runtime fails the handshake with no status code to look up. That is
+	# the documented requirement (§24) and it is on the `/integration` page, but
+	# it is the sharpest edge in this file.
+	tls {
+		protocols tls1.3
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+
+	# --- routing to the right tenant's replicas -----------------------------
+	#
+	# Each tenant's replicas run as their own Compose project on the shared
+	# `graphrec` network: `graphrec-serve-<tenant hex>`, one service named
+	# `inference`, scaled. Docker's embedded DNS therefore resolves
+	# `graphrec-serve-<hex>-inference` to every ready replica of that tenant,
+	# which is exactly the upstream set this edge needs — and it is maintained
+	# by the reconciler starting and stopping containers rather than by anything
+	# rewriting this file.
+	#
+	# **The tenant comes from the hostname, not from the path and not from the
+	# credential.** Two reasons. The credential is an HMAC over the request and
+	# Caddy cannot resolve a tenant from it without doing the verification the
+	# application exists to do. And a tenant in the path would make one edge
+	# route serve every tenant, so a bug in that route is a cross-tenant bug —
+	# whereas a hostname that does not resolve simply fails to connect.
+	#
+	# `{labels.N}` counts from the right: for `abc.api.example.com`, label 3 is
+	# `abc`. The count depends on how many labels the base domain has, which is
+	# why it is derived below rather than hard-coded.
+	@recommendations path /v1/recommendations* /v1/feedback*
+	handle @recommendations {
+		reverse_proxy {
+			# Resolved per request against Docker's DNS rather than pinned to an
+			# address list: replicas are scaled up and down by the reconciler,
+			# and a cached address is a request routed to a container that has
+			# already stopped. The refresh interval is what makes a scale-down
+			# take effect in seconds rather than in Caddy's lifetime.
+			dynamic a {
+				name "graphrec-serve-{http.request.host.labels.3}-inference"
+				port 8020
+				refresh 5s
+			}
+
+			# No `header_up`: Caddy passes request headers through by default
+			# and sets the forwarded set itself.
+
+			# A recommendation has a 300 ms budget. Ten seconds is not that
+			# budget — it is the point past which the client has certainly given
+			# up and holding the connection helps nobody.
+			transport http {
+				read_timeout 10s
+				write_timeout 10s
+			}
+
+			# A replica that fails is taken out of rotation rather than retried
+			# into: `lb_try_duration` moves to the *next* upstream, which is the
+			# behaviour that matters during a rolling activation, when some
+			# replicas are serving the old version and some are still binding.
+			lb_policy least_conn
+			lb_try_duration 2s
+			fail_duration 10s
+		}
+	}
+
+	# Liveness for an external checker. Deliberately the edge's own answer and
+	# not a proxy to a replica: this says "N3 is reachable", which is a
+	# different question from "a given tenant is ready", and conflating them
+	# makes a single tenant's outage look like a node failure.
+	handle /healthz {
+		respond "ok" 200
+	}
+
+	# Everything else. The data plane serves two route families and a health
+	# check; a 404 here is more honest than a proxy to something that will
+	# 404 anyway, and it keeps the control API's surface off this hostname.
+	handle {
+		respond "not found" 404
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}
+
+:80 {
+	redir https://{$GRAPHREC_API_DOMAIN}{uri} permanent
+}

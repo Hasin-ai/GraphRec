@@ -73,6 +73,12 @@ from graphrec.http import (
     install_error_handlers,
 )
 from graphrec.ml.index import build_candidate_index
+from graphrec.observability.exposition import start_metrics_server
+from graphrec.observability.metrics import (
+    INFERENCE_READY,
+    RECOMMENDATIONS,
+)
+from graphrec.observability.middleware import MetricsMiddleware
 from graphrec.serving.states import FeedbackType, ServingErrorClass
 from graphrec.storage.factory import create_artifact_store
 
@@ -89,6 +95,11 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 API_PREFIX = "/v1"
+
+#: The `app` label. Every inference replica reports the same one — the
+#: tenant is a label on the gauges that need it, not a separate app, or the
+#: dashboard would grow a panel per tenant.
+APP_NAME = "inference"
 
 router = APIRouter(prefix=API_PREFIX, tags=["data-plane"])
 operational = APIRouter(tags=["health"])
@@ -112,6 +123,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """
     settings: Settings = app.state.settings
     configure_logging(level=settings.log_level, fmt=settings.log_format)
+    start_metrics_server(settings, app=APP_NAME, version=app.version)
     logger.info(
         "inference_starting",
         extra={
@@ -174,6 +186,14 @@ async def _rebind(app: FastAPI) -> None:
         raise
     except Exception:  # the poller outlives its failures
         logger.warning("binder_refresh_failed", exc_info=True)
+    finally:
+        # Set here rather than in `/readyz`, so the gauge is the process's own
+        # belief about itself and not a side effect of being asked. §24 alerts
+        # on `ready < 1` for an active tenant, and a replica too wedged to
+        # answer a probe is exactly the one that must not stop publishing a 0.
+        INFERENCE_READY.labels(tenant_id=str(app.state.tenant_id)).set(
+            1 if binder.is_ready() else 0
+        )
 
 
 @asynccontextmanager
@@ -225,6 +245,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         bulk_limit=settings.max_bulk_body_bytes,
     )
     app.add_middleware(RequestContextMiddleware)
+    app.add_middleware(MetricsMiddleware, app_name=APP_NAME)
     install_error_handlers(app)
 
     # The tenant role, never the platform one. This process has no legitimate
@@ -319,12 +340,31 @@ def _service(request: Request) -> RecommendationService:
     during an activation those differ for as long as it takes the new bundle to
     load, and answering from the row rather than from memory would mean serving
     fallback through the whole of a successful deployment.
+
+    **Both arguments are gated on `is_ready()`, and the gate is the point.**
+    `app.state.candidate_index` is a strategy object that exists from start-up
+    and is empty until a bundle is loaded into it, so handing it over
+    unconditionally tells `RecommendationService` a model is available when none
+    is. With `pinned_version_id` also `None`, `_active_version` then falls back
+    to whichever row says `active` — and the response claims
+    `strategy: personalized` against a version this process never read, with
+    every item drawn from the popularity lane.
+
+    That is not merely a wrong field. It is the reason the phase-16 drill in
+    `tests/serving/test_drills.py` exists: `fallback_applied` stays `false`
+    through a model-store outage, so `recommendation_requests.fallback` is
+    written `false`, the tenant's own fallback rate reads 0%, and
+    `FallbackRateHigh` cannot fire during exactly the outage it was written for.
+    `allow_fallback: false` is ignored for the same reason — the caller who said
+    they would rather have a `503` is served a popularity list labelled
+    personalized.
     """
     binder: BundleBinder = request.app.state.binder
     binding = binder.binding
+    resident = binder.is_ready()
     return RecommendationService(
-        index=request.app.state.candidate_index,
-        pinned_version_id=binding.model_version_id if binding is not None else None,
+        index=request.app.state.candidate_index if resident else None,
+        pinned_version_id=binding.model_version_id if resident and binding else None,
     )
 
 
@@ -449,6 +489,14 @@ def _recent(events: Sequence[RecentEventBody]) -> tuple[RecentEvent, ...]:
 
 
 def _rendered(answer: Recommendation) -> RecommendationResponse:
+    # Every recommendation response is built here, which is why the counter
+    # lives here: §24's "fallback > 5%" is a ratio over *served* responses, and
+    # a counter incremented at any of the three call sites above would miss one
+    # of them the next time a fourth is added.
+    RECOMMENDATIONS.labels(
+        strategy=answer.strategy.value,
+        degraded=str(answer.fallback_applied).lower(),
+    ).inc()
     return RecommendationResponse(
         request_id=answer.external_request_id,
         model_version=(

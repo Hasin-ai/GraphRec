@@ -91,6 +91,60 @@ async def _probe_postgres(request: Request) -> DependencyCheck:
     return DependencyCheck(name="postgres", status=CheckStatus.PASS)
 
 
+async def _probe_redis(request: Request) -> DependencyCheck:
+    """`PING` on the same client the metering counters use.
+
+    Redis being down is not the same class of failure as PostgreSQL being down,
+    and the report says so. Counters degrade rather than refuse
+    (`ResilientUsageCounters`), so a process with no cache can still serve
+    every read and every write that does not meter — it is `unavailable`, not
+    `fail`, and the overall verdict below keeps it out of `pass` without
+    calling it broken.
+    """
+    try:
+        async with asyncio.timeout(PROBE_TIMEOUT_SECONDS):
+            await request.app.state.redis.ping()
+    except TimeoutError:
+        return DependencyCheck(
+            name="redis",
+            status=CheckStatus.UNAVAILABLE,
+            detail=f"did not answer within {PROBE_TIMEOUT_SECONDS:g}s",
+        )
+    except Exception:
+        logger.exception("readiness_probe_failed", extra={"dependency": "redis"})
+        return DependencyCheck(name="redis", status=CheckStatus.UNAVAILABLE, detail="unreachable")
+    return DependencyCheck(name="redis", status=CheckStatus.PASS)
+
+
+async def _probe_object_storage(request: Request) -> DependencyCheck:
+    """`ArtifactStore.probe` — a `HEAD` on the bucket, or a writable root.
+
+    Run on a thread because the store is synchronous by design (see
+    `graphrec.storage.store`): every other caller is a worker with nothing else
+    to do, and this endpoint is the one place that does. Without the thread a
+    slow endpoint would block the event loop, which is precisely the failure a
+    readiness probe is supposed to report rather than cause.
+
+    A `fail`, not an `unavailable`: unlike the cache, there is no degraded mode
+    here. A control API that cannot reach object storage cannot serve an
+    artifact download or accept an upload, and traffic sent to it will fail.
+    """
+    store = request.app.state.artifact_store
+    try:
+        async with asyncio.timeout(PROBE_TIMEOUT_SECONDS):
+            await asyncio.to_thread(store.probe)
+    except TimeoutError:
+        return DependencyCheck(
+            name="object_storage",
+            status=CheckStatus.FAIL,
+            detail=f"did not answer within {PROBE_TIMEOUT_SECONDS:g}s",
+        )
+    except Exception:
+        logger.exception("readiness_probe_failed", extra={"dependency": "object_storage"})
+        return DependencyCheck(name="object_storage", status=CheckStatus.FAIL, detail="unreachable")
+    return DependencyCheck(name="object_storage", status=CheckStatus.PASS)
+
+
 @router.get("/readyz", response_model=ReadinessResponse)
 async def readyz(
     request: Request,
@@ -99,28 +153,31 @@ async def readyz(
 ) -> ReadinessResponse:
     """Readiness. Each dependency is probed and reported independently.
 
-    PostgreSQL is probed for real from Phase 2. Redis and object storage have no
-    client yet and are reported `unavailable` rather than `pass` — claiming a
-    check passed when it was never run is the failure mode this endpoint exists
-    to prevent, and it is why `unavailable` is a distinct value from `fail`.
+    All three are probed for real. The rule the module docstring states is the
+    one that matters here: a check that was not run is reported `unavailable`,
+    never `pass`, because a probe that lies about having run is worse than no
+    probe at all — it is the one that gets traffic routed to a process that
+    cannot serve it.
 
-    The consequence, which is intended: this endpoint answers 503 until every
-    dependency is genuinely probed. A process that has not proven it can serve
-    should not be sent traffic.
+    `unavailable` and `fail` are kept apart because they mean different things
+    to whoever reads this. `fail` is a dependency without which this process
+    cannot do its job. `unavailable` is one it can degrade around, and Redis is
+    the only such dependency: metering falls back to an in-memory counter.
+    Neither is `pass`, so neither gets traffic — but an operator reading the
+    body can tell a cache outage from a database outage without leaving the
+    page.
+
+    The three probes run concurrently. Serially they would take up to three
+    timeouts to answer, and a readiness endpoint that takes six seconds to say
+    "not ready" has already been given up on by the thing that asked.
     """
-    checks = [
-        await _probe_postgres(request),
-        DependencyCheck(
-            name="redis",
-            status=CheckStatus.UNAVAILABLE,
-            detail="not probed until the client lands in Phase 5",
-        ),
-        DependencyCheck(
-            name="object_storage",
-            status=CheckStatus.UNAVAILABLE,
-            detail="not probed until the storage client lands in Phase 8",
-        ),
-    ]
+    checks = list(
+        await asyncio.gather(
+            _probe_postgres(request),
+            _probe_redis(request),
+            _probe_object_storage(request),
+        )
+    )
 
     if any(check.status is CheckStatus.FAIL for check in checks):
         overall = CheckStatus.FAIL

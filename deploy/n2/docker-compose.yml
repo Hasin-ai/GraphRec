@@ -1,0 +1,109 @@
+# N2 — Training. BACKEND_PLAN §9.1.
+#
+# The training worker, the GPU, and an exporter. **No state, no public port.**
+#
+# This is the node the design allows to disappear. §9.4 and SYSTEM_DESIGN C-5:
+# N2 down means training only — leases expire, jobs requeue, and work resumes
+# from the last epoch checkpoint. Everything a customer touches is unaffected.
+#
+# It is deployed last for that reason. If a release breaks something, this is
+# the cheapest node to have broken while you find out.
+
+name: graphrec-n2
+
+services:
+  training_worker:
+    image: ghcr.io/graphrec/graphrec:${GRAPHREC_IMAGE_TAG:?set GRAPHREC_IMAGE_TAG to a commit SHA}
+    restart: unless-stopped
+
+    # Not replicated, and not for want of capacity. ASM-03 wants training
+    # serialised platform-wide; the schema enforces one non-terminal job *per
+    # tenant* and nothing enforces the global rule, so today "run one of these"
+    # is the mechanism. Raising this number without first implementing a
+    # platform-wide gate would violate the assumption the capacity model is
+    # built on. See docs/PHASE_9_REPORT.md §3.
+
+    environment:
+      ENVIRONMENT: production
+      GRAPHREC_SECRETS_DIR: /run/secrets
+      POSTGRES_HOST: ${WG_N1:?set WG_N1 to N1's WireGuard address}
+      POSTGRES_DB: graphrec
+      REDIS_URL: redis://${WG_N1}:6379/0
+      S3_ENDPOINT: http://${WG_N3:?set WG_N3 to N3's WireGuard address}:9000
+      LOG_FORMAT: json
+      METRICS_PORT: "9464"
+      # Checkpoints, on local disk. They are written every epoch and read only
+      # by the job that wrote them, so they do not go to the object store — a
+      # four-hour run would spend a meaningful fraction of itself uploading
+      # state that is discarded on success.
+      TRAINING_CHECKPOINT_ROOT: /var/lib/graphrec/checkpoints
+
+    secrets:
+      - postgres_app_password
+      - s3_access_key
+      - s3_secret_key
+
+    volumes:
+      - checkpoints:/var/lib/graphrec/checkpoints
+
+    # Bound to the WireGuard interface so Prometheus on N1 can scrape it. Not
+    # `0.0.0.0`: this node has no business listening on its public interface at
+    # all, and the exporter is the one service that would otherwise be tempting
+    # to leave open.
+    ports:
+      - "${WG_N2:?set WG_N2 to this node's WireGuard address}:9464:9464"
+
+    command: ["python", "-m", "apps.training_worker.main"]
+
+    # Cancellation is cooperative and checkpointing is per-epoch, so a training
+    # worker asked to stop finishes the epoch it is in. Five minutes is an
+    # epoch's worth of grace; past that the lease expires and the job resumes
+    # from its last checkpoint on another attempt, which is correct but wastes
+    # the epoch.
+    stop_grace_period: 300s
+
+    # The GPU. Commented rather than deleted because it is the one line that
+    # differs between a GPU node and a CPU one, and a deployment that silently
+    # trained on CPU would look identical except for taking twenty times as
+    # long. Uncomment on a node with the NVIDIA container toolkit installed.
+    #
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  node_exporter:
+    image: prom/node-exporter:v1.8.2
+    restart: unless-stopped
+    pid: host
+    command:
+      - --path.rootfs=/host
+      - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+)($$|/)
+    volumes:
+      - /:/host:ro,rslave
+    ports:
+      - "${WG_N2}:9100:9100"
+    logging: *logging
+
+secrets:
+  postgres_app_password:
+    file: /opt/graphrec/secrets/postgres_app_password
+  s3_access_key:
+    file: /opt/graphrec/secrets/s3_access_key
+  s3_secret_key:
+    file: /opt/graphrec/secrets/s3_secret_key
+
+volumes:
+  # Checkpoints are the disk that fills up on this node. They are deleted on
+  # success by the training pipeline; a node with old checkpoints on it has jobs
+  # that failed and were never cleaned up, which is worth knowing.
+  checkpoints:

@@ -1,0 +1,19 @@
+# Dashboards come from the repository, and are not editable in the UI.
+#
+# `allowUiUpdates: false` is deliberate. A dashboard edited live is a change
+# nobody reviewed, which disappears the next time the container is recreated —
+# and the person who made it will not find out until the incident they made it
+# for happens again.
+apiVersion: 1
+
+providers:
+  - name: graphrec
+    orgId: 1
+    folder: GraphRec
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

@@ -1,0 +1,338 @@
+# N1 — Control. BACKEND_PLAN §9.1.
+#
+# Caddy, control-api, job-worker ×2, deployment-reconciler, PostgreSQL, Redis,
+# Prometheus, Grafana. Sized by RAM for Postgres and CPU for the API.
+#
+# **One public port: 443, published by Caddy.** Every other service binds either
+# the loopback address or the WireGuard address in `WG_ADDR`, so a firewall
+# mistake cannot expose Postgres — there is no listener on the public interface
+# to reach. `tests/deploy/test_topology.py` asserts this.
+#
+# Start through systemd (`graphrec-n1.service`), not by hand: the unit sets the
+# working directory, the environment file and the restart policy, and a
+# hand-started project is one systemd will not restart on boot.
+
+name: graphrec-n1
+
+x-common: &common
+  image: ghcr.io/graphrec/graphrec:${GRAPHREC_IMAGE_TAG:?set GRAPHREC_IMAGE_TAG to a commit SHA}
+  restart: unless-stopped
+  environment: &common-env
+    ENVIRONMENT: production
+    GRAPHREC_SECRETS_DIR: /run/secrets
+    POSTGRES_HOST: postgres
+    POSTGRES_DB: graphrec
+    REDIS_URL: redis://redis:6379/0
+    S3_ENDPOINT: http://${WG_N3:?set WG_N3 to N3's WireGuard address}:9000
+    LOG_FORMAT: json
+    METRICS_PORT: "9464"
+  logging: &logging
+    driver: json-file
+    options:
+      max-size: "20m"
+      max-file: "5"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: graphrec
+      POSTGRES_USER: graphrec_owner
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_owner_password
+    secrets:
+      - postgres_owner_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # WireGuard only. N2 and N3 connect over `wg0`; nothing reaches this from
+    # the public interface because nothing is listening on it.
+    ports:
+      - "${WG_N1:?set WG_N1 to this node's WireGuard address}:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U graphrec_owner -d graphrec"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    # Postgres holds the only authoritative state on this node. A SIGKILL means
+    # WAL replay on restart, which is safe and slow; the grace period is here so
+    # a routine deploy does not choose the slow path every time.
+    stop_grace_period: 60s
+    logging: *logging
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Persistence off, deliberately: nothing authoritative lives in Redis. Rate
+    # limits, locks, session context and the jti denylist are all
+    # reconstructible, and an AOF here would imply a durability guarantee the
+    # design does not make (§9.4: "No data loss by design").
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "${WG_N1}:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    logging: *logging
+
+  migrate:
+    <<: *common
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *common-env
+      GRAPHREC_OWNER_DATABASE_URL: postgresql+psycopg://graphrec_owner@postgres:5432/graphrec
+    secrets:
+      - postgres_owner_password
+      - postgres_app_password
+      - postgres_platform_password
+    command: ["alembic", "upgrade", "head"]
+
+  control_api:
+    <<: *common
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    secrets:
+      - postgres_app_password
+      - postgres_platform_password
+      - api_key_hmac_pepper
+      - audit_hash_secret
+      - s3_access_key
+      - s3_secret_key
+    volumes:
+      # The signing key, read-only. Mounted rather than baked: a key in an image
+      # layer is a published key, and every token issued under it is forgeable.
+      - /opt/graphrec/secrets/jwt:/app/secrets:ro
+    expose:
+      - "8010"
+      - "9464"
+    command:
+      ["uvicorn", "apps.control_api.main:app", "--host", "0.0.0.0", "--port", "8010"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8010/healthz', timeout=3).status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    # Long enough to finish an in-flight request and its metering write.
+    stop_grace_period: 30s
+
+  job_worker:
+    <<: *common
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    # ×2 per §9.1. Scaled rather than duplicated, because the queue claim is a
+    # row-level lock with a lease and two identical workers cannot take the same
+    # job — the concurrency is safe by construction, not by configuration.
+    deploy:
+      replicas: 2
+    secrets:
+      - postgres_app_password
+      - api_key_hmac_pepper
+      - audit_hash_secret
+      - s3_access_key
+      - s3_secret_key
+    environment:
+      <<: *common-env
+      WORKER_CONCURRENCY: "2"
+    command: ["python", "-m", "apps.job_worker.main"]
+    # A worker holds leases. SIGTERM stops it claiming and drains what it has,
+    # and the grace period must outlast a job mid-stage — otherwise the kill
+    # leaves a `running` row for the sweeper and every deploy manufactures
+    # retries. Longer than job_lease_seconds (120).
+    stop_grace_period: 150s
+
+  reconciler:
+    <<: *common
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    # Deliberately not scaled. It elects a leader by advisory lock so a second
+    # copy is harmless, but it is also the sole publisher of the estate-wide
+    # gauges, and two would not double-count so much as flap between two views.
+    secrets:
+      - postgres_app_password
+      - postgres_platform_password
+      - s3_access_key
+      - s3_secret_key
+    environment:
+      <<: *common-env
+      # Reconciling happens on N3, over the Docker API on the WireGuard address.
+      # N3 exposes the socket through a TLS-terminated proxy; the reconciler has
+      # no shell there and no path to anything but the serving project.
+      DOCKER_HOST: tcp://${WG_N3}:2376
+      # What the serving template inherits.
+      #
+      # `_environment` in `graphrec/serving_driver/compose.py` merges this
+      # process's environment into every `docker compose` invocation, so these
+      # four are how a replica started on N3 learns that its database, cache and
+      # object store are on other nodes. Left unset they fall back to the
+      # single-node service names, and a replica on N3 would spend its life
+      # failing to resolve `postgres`.
+      POSTGRES_HOST: ${WG_N1}
+      REDIS_URL: redis://${WG_N1}:6379/0
+      S3_ENDPOINT: http://${WG_N3}:9000
+      # Where the replicas publish their exposition port, so Prometheus on N1
+      # can reach them. See `deploy/observability/prometheus.yml`.
+      GRAPHREC_METRICS_BIND_ADDR: ${WG_N3}
+    command: ["python", "-m", "apps.reconciler.main"]
+    stop_grace_period: 60s
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      control_api:
+        condition: service_healthy
+    # The one public listener on this node. 80 is here only so ACME's HTTP-01
+    # challenge and the redirect to HTTPS work; it serves nothing else.
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+      - /opt/graphrec/console:/srv/console:ro
+    environment:
+      GRAPHREC_CONSOLE_DOMAIN: ${GRAPHREC_CONSOLE_DOMAIN:?set the public hostname for N1}
+      GRAPHREC_ACME_EMAIL: ${GRAPHREC_ACME_EMAIL:?set an address for certificate expiry notices}
+    logging: *logging
+
+  # --- observability -------------------------------------------------------
+  #
+  # On N1 per §9.1. All three bind WireGuard or loopback: Grafana is reached
+  # through the SSH tunnel or the VPN, never from the internet. A Grafana on a
+  # public port is a database browser with a login form.
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    restart: unless-stopped
+    ports:
+      - "${WG_N1}:9090:9090"
+    volumes:
+      - ../observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../observability/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      # Long enough to see last month's incident in context; short enough that
+      # the volume is not the reason disk fills up.
+      - --storage.tsdb.retention.time=90d
+      - --web.enable-lifecycle
+    logging: *logging
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    restart: unless-stopped
+    ports:
+      - "${WG_N1}:9093:9093"
+    volumes:
+      - ../observability/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    logging: *logging
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    restart: unless-stopped
+    ports:
+      - "${WG_N1}:3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
+      # No anonymous access and no sign-up. This instance renders every tenant's
+      # traffic on one screen; it is an operator tool, not a customer one.
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    secrets:
+      - grafana_admin_password
+    volumes:
+      - ../observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    logging: *logging
+
+  node_exporter:
+    image: prom/node-exporter:v1.8.2
+    restart: unless-stopped
+    # `DiskFillingUp` reads this. Without the host mount it would report the
+    # container's filesystem, which is never the one that fills up.
+    pid: host
+    command:
+      - --path.rootfs=/host
+      - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+)($$|/)
+    volumes:
+      - /:/host:ro,rslave
+    ports:
+      - "${WG_N1}:9100:9100"
+    logging: *logging
+
+  postgres_exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.16.0
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # The owner, read-only in practice: this exporter runs no query against a
+      # tenant table, only against `pg_stat_*`. It is on the owner rather than a
+      # dedicated role because a monitoring role would need `pg_monitor`, which
+      # is a grant nothing else on this platform has and one more thing to
+      # restore correctly.
+      DATA_SOURCE_URI: postgres:5432/graphrec?sslmode=disable
+      DATA_SOURCE_USER: graphrec_owner
+      DATA_SOURCE_PASS_FILE: /run/secrets/postgres_owner_password
+    secrets:
+      - postgres_owner_password
+    ports:
+      - "${WG_N1}:9187:9187"
+    logging: *logging
+
+  redis_exporter:
+    image: oliver006/redis_exporter:v1.66.0
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    ports:
+      - "${WG_N1}:9121:9121"
+    logging: *logging
+
+secrets:
+  postgres_owner_password:
+    file: /opt/graphrec/secrets/postgres_owner_password
+  postgres_app_password:
+    file: /opt/graphrec/secrets/postgres_app_password
+  postgres_platform_password:
+    file: /opt/graphrec/secrets/postgres_platform_password
+  api_key_hmac_pepper:
+    file: /opt/graphrec/secrets/api_key_hmac_pepper
+  audit_hash_secret:
+    file: /opt/graphrec/secrets/audit_hash_secret
+  s3_access_key:
+    file: /opt/graphrec/secrets/s3_access_key
+  s3_secret_key:
+    file: /opt/graphrec/secrets/s3_secret_key
+  grafana_admin_password:
+    file: /opt/graphrec/secrets/grafana_admin_password
+
+volumes:
+  postgres_data:
+  prometheus_data:
+  alertmanager_data:
+  grafana_data:
+  caddy_data:
+  caddy_config:

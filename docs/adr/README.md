@@ -140,6 +140,37 @@ why `routeTable` is exported separately from `createRouter`. **ADR 0039**
 settles that the accessibility pass is three checks rather than one axe run,
 because axe cannot see focus behaviour and cannot see colour in jsdom.
 
+**Phase 16 reached ten**, which is what a phase that touches the whole estate
+costs. Three are about how the platform is observed and operated: **ADR 0040**
+(metrics on their own port, bound to the tunnel, so the exposition is not a
+route on 443 that somebody must remember to guard — `graphrec_serving_replicas`
+is labelled by `tenant_id`), **ADR 0041** (the reconciler is the sole publisher
+of estate-wide gauges, because a gauge is a per-process value and four processes
+publishing the queue depth is four series that disagree), and **ADR 0044** (the
+WireGuard addresses are literals in one written convention, because Prometheus
+does not interpolate environment variables and a half-parameterised address is
+worse than either extreme).
+
+Two are about the deploy: **ADR 0045** (ordered N1 → N3 → N2 with a smoke test
+between, resting on migrations being one release backward-compatible — an
+assumption nothing checks) and **ADR 0046** (the roll bumps an epoch rather than
+restarting containers, because the inference fleet is owned by the reconciler
+and a `restart` would skip ER-F-06's load-before-swap).
+
+Two are about secrets and data at rest: **ADR 0042** (a backup needs a role that
+bypasses RLS and refuses rather than working around `FORCE` — the alternative is
+a dump with no rows in it, discovered at restore time) and **ADR 0043** (a
+mounted secret outranks a `.env`, reversing pydantic-settings' default, because
+a `.env` on a production node is nearly always residue).
+
+Three are about the contract with the outside: **ADR 0047** (the published
+OpenAPI is the merge of both planes, since the control document alone did not
+contain `POST /v1/recommendations`), **ADR 0048** (the rate limiter fails open
+and counts that it did, because failing closed on a Redis restart locks everyone
+out of `/login` including whoever would fix it), and **ADR 0049** (every
+operational document is held by a test that fails when it stops being true, in
+both directions, with a floor test under every parser).
+
 Every listed gate D1–D12 is now closed. What remains open is §10.7's
 design-system question and the numbered list below.
 

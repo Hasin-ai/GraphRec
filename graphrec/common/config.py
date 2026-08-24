@@ -12,13 +12,14 @@ from __future__ import annotations
 
 # Runtime import, not a type-checking one: pydantic resolves these
 # annotations at class-construction time to build the validators.
+import os
 import uuid  # noqa: TCH003
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 
 from pydantic import Field, PostgresDsn, RedisDsn, SecretStr, computed_field, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 
 class Environment(StrEnum):
@@ -49,13 +50,59 @@ class CandidateIndexKind(StrEnum):
     QDRANT = "qdrant"
 
 
+#: Where a deployment mounts its secrets, one file per setting.
+#:
+#: BACKEND_PLAN §22.2 specifies "root-owned `0400` files as Docker secrets;
+#: rotation is file replace + restart", and this is the half of that which lives
+#: in code. Compose mounts a secret at `/run/secrets/<name>`, so
+#: `/run/secrets/api_key_hmac_pepper` populates `api_key_hmac_pepper` with no
+#: mapping table to keep in step.
+#:
+#: The difference from an environment variable is not cosmetic. An environment
+#: variable is readable in `docker inspect`, in `/proc/<pid>/environ`, and in the
+#: crash report of any library that dumps the environment; a mounted file is
+#: readable by the uid that owns it. The pepper in particular is the value that
+#: makes every stored credential hash useless to an attacker who has the
+#: database, so it is the one that must not be in a process listing.
+#:
+#: Read from the environment rather than hard-coded because pydantic-settings
+#: warns when `secrets_dir` names a directory that does not exist, and on a
+#: laptop it does not exist. Unset means unused, which is the local default.
+SECRETS_DIR = os.environ.get("GRAPHREC_SECRETS_DIR") or None
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
         frozen=True,
+        secrets_dir=SECRETS_DIR,
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Precedence, highest first: init kwargs, environment, secret files, `.env`.
+
+        Only one pair is moved from the default order — secret files now beat
+        `.env` — and the reason is the failure it prevents. The default order
+        puts `.env` above the mount, so a node with a leftover `.env` from a
+        manual test silently overrides every secret the deployment mounted, and
+        the platform comes up on the values in that file with nothing in any log
+        to say so. A `.env` on a production node is nearly always residue; a
+        mount is always deliberate.
+
+        The environment stays on top so a test or a one-off override can still
+        win, and `frozen=True` means neither can change afterwards.
+        """
+        return (init_settings, env_settings, file_secret_settings, dotenv_settings)
 
     environment: Environment = Environment.LOCAL
 
@@ -257,6 +304,15 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_format: str = "json"
     prometheus_url: str = "http://localhost:9090"
+
+    # The exposition listener. Its own port, never the application's — see
+    # `graphrec.observability.exposition` and ADR 0040. Bound to all interfaces
+    # because the scraper is in another container; it is kept off the internet
+    # by the firewall and by Caddy having no route to it, not by the bind
+    # address, which inside a container would only hide it from Prometheus too.
+    metrics_enabled: bool = True
+    metrics_host: str = "0.0.0.0"  # nosec B104
+    metrics_port: int = 9464
 
     # ------------------------------------------------------------ email
     #

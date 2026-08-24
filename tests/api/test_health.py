@@ -11,12 +11,20 @@ def test_healthz_is_ok(client) -> None:
     assert response.json() == {"status": "ok", "version": "0.1.0"}
 
 
-def test_healthz_does_not_depend_on_anything(client) -> None:
+def test_healthz_does_not_depend_on_anything(client, monkeypatch) -> None:
     """Liveness must not fail because a dependency is slow.
 
-    Readiness reports Postgres as unprobed in Phase 1; liveness stays 200
-    regardless, or an orchestrator would kill a process that is working.
+    Asserted by breaking a dependency and checking liveness does not notice.
+    Before Phase 16 this test read `/readyz` returning 503 as its evidence,
+    which proved nothing about `/healthz` and stopped being true the moment the
+    probes started passing.
     """
+
+    class _Exploding:
+        def __call__(self):
+            raise OSError("the database is gone")
+
+    monkeypatch.setattr(client.app.state, "sessionmaker", _Exploding())
     assert client.get("/healthz").status_code == 200
     assert client.get("/readyz").status_code == 503
 
@@ -30,23 +38,118 @@ def test_readyz_reports_each_dependency_separately(client) -> None:
     }
 
 
-def test_readyz_reports_an_unprobed_check_as_unavailable_not_pass(client) -> None:
-    """UC-30's rule applied to ourselves: a gap is a gap, never a pass.
+def test_readyz_probes_every_dependency_for_real(client) -> None:
+    """No check may be `unavailable` merely because nobody wrote the probe.
 
-    `unavailable` and `fail` are distinct on purpose. A dependency with no client
-    yet has not failed — nothing was asked of it — and reporting it as `pass`
-    would be the lie this endpoint exists to prevent. Every one of them carries a
-    `detail` saying which phase brings the probe.
+    This is the test that Phase 16 existed to make pass. From Phase 2 until
+    Phase 16 the Redis and object-storage checks were hard-coded to
+    `unavailable` with a detail naming the phase that would fix them — both of
+    which had shipped — so `/readyz` answered 503 for the entire life of the
+    platform and no orchestrator would ever have routed to it.
+
+    A developer with the stack up gets three passes. One without gets `fail`
+    from Postgres or storage, which is honest. What must never appear again is
+    a `detail` promising a future phase.
     """
     body = client.get("/readyz").json()
-    unprobed = [c for c in body["checks"] if c["name"] in {"redis", "object_storage"}]
-    assert len(unprobed) == 2
-    for check in unprobed:
-        assert check["status"] == "unavailable"
-        assert check["detail"]
+    for check in body["checks"]:
+        assert "Phase" not in (check["detail"] or ""), check
+    assert body["status"] == "pass", body
+    assert client.get("/readyz").status_code == 200
 
-    # Overall is never `pass` while anything is unprobed, so /readyz stays 503.
-    assert body["status"] != "pass"
+
+def test_readyz_reports_an_unrun_check_as_unavailable_not_pass(client, monkeypatch) -> None:
+    """UC-30's rule applied to ourselves: a gap is a gap, never a pass.
+
+    Redis is the dependency this platform can degrade around — metering falls
+    back to an in-memory counter — so its outage is `unavailable`, and the
+    endpoint still refuses traffic without calling the process broken.
+    """
+
+    class _DeadCache:
+        async def ping(self):
+            raise OSError("connection refused at cache.internal:6379")
+
+    monkeypatch.setattr(client.app.state, "redis", _DeadCache())
+    response = client.get("/readyz")
+    body = response.json()
+    redis = next(c for c in body["checks"] if c["name"] == "redis")
+    assert redis["status"] == "unavailable"
+    assert redis["detail"] == "unreachable"
+    assert body["status"] == "unavailable"
+    assert response.status_code == 503
+    assert "cache.internal" not in response.text
+
+
+def test_an_unreachable_object_store_is_a_failure_not_a_degradation(client, monkeypatch) -> None:
+    """There is no degraded mode for storage, so it is `fail`.
+
+    And it is caught at all only because `ArtifactStore.probe` exists: `exists`
+    reports a missing key and an unreachable bucket identically, so a probe
+    built on it would have called a dead store `pass`.
+    """
+
+    class _DeadStore:
+        def probe(self):
+            raise OSError("could not reach bucket graphrec at minio.internal:9000")
+
+    monkeypatch.setattr(client.app.state, "artifact_store", _DeadStore())
+    response = client.get("/readyz")
+    body = response.json()
+    storage = next(c for c in body["checks"] if c["name"] == "object_storage")
+    assert storage["status"] == "fail"
+    assert storage["detail"] == "unreachable"
+    assert body["status"] == "fail"
+    assert response.status_code == 503
+    assert "minio.internal" not in response.text
+
+
+def test_a_hanging_dependency_is_reported_not_waited_on(client, monkeypatch) -> None:
+    """A probe that can hang teaches an orchestrator nothing.
+
+    The timeout is dropped to something a test can afford; what is under test is
+    that the endpoint answers at all, and names the dependency that did not.
+    """
+    import asyncio
+
+    import apps.control_api.routers.health as health
+
+    monkeypatch.setattr(health, "PROBE_TIMEOUT_SECONDS", 0.05)
+
+    class _Hanging:
+        async def ping(self):
+            await asyncio.sleep(30)
+
+    monkeypatch.setattr(client.app.state, "redis", _Hanging())
+    body = client.get("/readyz").json()
+    redis = next(c for c in body["checks"] if c["name"] == "redis")
+    assert redis["status"] == "unavailable"
+    assert "did not answer within" in redis["detail"]
+
+
+def test_the_probes_run_concurrently(client, monkeypatch) -> None:
+    """Three serial timeouts is six seconds to say "not ready".
+
+    Measured rather than asserted structurally: two dependencies are made to
+    take a tenth of a second each, and the whole request must take closer to one
+    tenth than to two.
+    """
+    import asyncio
+    import time
+
+    class _Slow:
+        async def ping(self):
+            await asyncio.sleep(0.2)
+
+    class _SlowStore:
+        def probe(self):
+            time.sleep(0.2)
+
+    monkeypatch.setattr(client.app.state, "redis", _Slow())
+    monkeypatch.setattr(client.app.state, "artifact_store", _SlowStore())
+    started = time.monotonic()
+    client.get("/readyz")
+    assert time.monotonic() - started < 0.35
 
 
 def test_readyz_actually_probes_postgres(client) -> None:

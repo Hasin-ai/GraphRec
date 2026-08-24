@@ -130,11 +130,11 @@ export const platformAuditQuery = (params: {
 // --------------------------------------------------------------- mutations
 
 export function changeTenantStatus(tenantId: string, body: S['ChangeTenantStatusRequest']) {
-  return platformApi.post<TenantRow>(`/v1/platform/tenants/${tenantId}:change-status`, body);
+  return platformApi.post<TenantRow>(`/v1/platform/tenants/${tenantId}:status`, body);
 }
 
 export function assignPlan(tenantId: string, body: S['AssignPlanRequest']) {
-  return platformApi.post<TenantRow>(`/v1/platform/tenants/${tenantId}/plan`, body);
+  return platformApi.post<TenantRow>(`/v1/platform/tenants/${tenantId}:assign-plan`, body);
 }
 
 export function grantOverride(tenantId: string, body: S['GrantOverrideRequest']) {
