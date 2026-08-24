@@ -19,10 +19,15 @@ import type { ReactElement } from 'react';
 export function renderRoutes(
   routes: RouteObject[],
   initialEntries: string[] = ['/'],
+  // The workflow tests pass the *same* client the loaders were built with, so
+  // that a page reads what its guard already fetched instead of asking twice.
+  client?: QueryClient,
 ): RenderResult & { router: ReturnType<typeof createMemoryRouter> } {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  const queryClient =
+    client ??
+    new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
   const router = createMemoryRouter(routes, { initialEntries });
   const result = render(
     <QueryClientProvider client={queryClient}>

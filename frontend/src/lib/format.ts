@@ -90,3 +90,46 @@ export function humanise(value: string | null | undefined): string {
   if (!value) return ABSENT;
   return value.replace(/_/g, ' ');
 }
+
+/**
+ * A decimal that arrived as a string, kept as one.
+ *
+ * `quantity` is `Decimal` on the wire and `string` in the generated types, and
+ * that is not an accident of serialisation — it is how the figure survives the
+ * trip. Passing it through `Number()` to get thousands separators is the same
+ * mistake as sending a price through a float: 1234567.89 is fine, and the one
+ * that is not fine will be somebody's monthly event count.
+ *
+ * So the grouping is done on the digits. `Intl` is used for the separator so a
+ * locale that groups differently still gets its own.
+ */
+export function formatQuantity(value: string | null | undefined): string {
+  if (value === null || value === undefined) return ABSENT;
+  const [whole = '', fraction] = value.split('.');
+  const sign = whole.startsWith('-') ? '-' : '';
+  const digits = sign ? whole.slice(1) : whole;
+  const separator = new Intl.NumberFormat().format(11111).replace(/1/g, '');
+  const grouped = digits.replace(/\B(?=(\d{3})+(?!\d))/g, separator || ',');
+  // A trailing `.00` on a count is noise; a trailing `.5` on storage is not.
+  const meaningful = fraction && /[1-9]/.test(fraction) ? `.${fraction.replace(/0+$/, '')}` : '';
+  return `${sign}${grouped}${meaningful}`;
+}
+
+/**
+ * Bytes, in the unit a person would say out loud.
+ *
+ * Binary steps with the decimal names, which is the convention the storage
+ * industry lost and everyone else kept: a reader comparing this against the
+ * figure their object store shows wants the two to agree, and object stores
+ * count in 1024s while printing "GB".
+ */
+export function formatBytes(value: number | null | undefined): string {
+  if (value === null || value === undefined) return ABSENT;
+  if (value === 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+  const step = Math.min(Math.floor(Math.log(Math.abs(value)) / Math.log(1024)), units.length - 1);
+  const scaled = value / 1024 ** step;
+  // One decimal below 10 so 1.5 GB does not round to 2 GB; none above, because
+  // the third significant figure of a quota is never what the reader came for.
+  return `${scaled < 10 && step > 0 ? scaled.toFixed(1) : Math.round(scaled)} ${units[step]}`;
+}

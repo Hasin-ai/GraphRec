@@ -21,6 +21,7 @@
  */
 
 import { createBrowserRouter } from 'react-router-dom';
+import type { RouteObject } from 'react-router-dom';
 import type { QueryClient } from '@tanstack/react-query';
 
 import { PublicLayout } from './layouts/PublicLayout';
@@ -28,6 +29,7 @@ import { StateGateLayout } from './layouts/StateGateLayout';
 import { TENANT_ROOT_ID, TenantLayout } from './layouts/TenantLayout';
 import { PLATFORM_ROOT_ID, PlatformLayout } from './layouts/PlatformLayout';
 
+import { LoadingAnnouncement } from './ui';
 import { RouteErrorBoundary } from './routes/errors/RouteErrorBoundary';
 import { FailurePage, ForbiddenPage, NotFoundPage } from './routes/errors/pages';
 
@@ -56,22 +58,50 @@ import { ModelsRoute } from './routes/models/Models';
 import { ModelDetailRoute } from './routes/models/ModelDetail';
 import { UsageRoute } from './routes/usage/Usage';
 import { ServiceStatusRoute } from './routes/status/ServiceStatus';
+import { AdminTenantsRoute } from './routes/admin/Tenants';
+import { AdminTenantDetailRoute } from './routes/admin/TenantDetail';
+import { AdminPlanDetailRoute, AdminPlansRoute } from './routes/admin/Plans';
+import { AdminUsageRoute } from './routes/admin/Usage';
+import { AdminStatusRoute } from './routes/admin/Status';
+import { AdminAuditRoute } from './routes/admin/Audit';
 import { adminIndexLoader } from './routes/AdminIndex';
 import { rootLoader } from './routes/root';
 
 import { platformGuard, requireRoleLoader, tenantGuard, tenantStatusGuard } from './guards';
+import type { PlatformPermission } from './lib/enums';
 
 export function createRouter(queryClient: QueryClient) {
+  return createBrowserRouter(routeTable(queryClient));
+}
+
+/**
+ * The table itself, separated from the router that hosts it.
+ *
+ * Two callers: `createRouter` above, and the workflow tests, which need the
+ * same routes under a memory router. Keeping one table is the point — a
+ * workflow test that walked a second, test-only route table would be testing
+ * a console that does not ship, and the guards are *on* the table.
+ */
+export function routeTable(queryClient: QueryClient): RouteObject[] {
   // The two role sets, named once. §4's table gives the Tenant Administrator
   // no catalogue access at all — that asymmetry is intentional and comes from
   // the use-case diagrams, so a developer route is not "administrator plus
   // developer" and must not be widened into one.
   const admin = requireRoleLoader(queryClient, ['tenant_administrator']);
   const developer = requireRoleLoader(queryClient, ['tenant_developer']);
-  return createBrowserRouter([
+  // Gate 1 + gate 3 for one platform route. Curried so each route below reads
+  // as the permission it needs rather than as a closure.
+  const operator =
+    (permission: PlatformPermission) =>
+    ({ request }: { request: Request }) =>
+      platformGuard(queryClient, request, permission);
+  return [
     {
       path: '/',
       loader: rootLoader,
+      // `/` decides where to send a visitor by looking at the session, so it
+      // has a loader and no element. Same reasoning as `/admin` below.
+      element: <LoadingAnnouncement what="the console" />,
     },
 
     // ------------------------------------------------------------ public
@@ -156,13 +186,44 @@ export function createRouter(queryClient: QueryClient) {
       loader: ({ request }) => platformGuard(queryClient, request),
       errorElement: <RouteErrorBoundary />,
       children: [
-        { path: '/admin', loader: adminIndexLoader(queryClient) },
-        // Phase 15 adds the eight /admin/* routes here.
+        {
+          path: '/admin',
+          loader: adminIndexLoader(queryClient),
+          // The loader always redirects or throws, so this never paints. It
+          // exists because a data route with no element renders a null
+          // `<Outlet />` if that ever stops being true, and a blank page is
+          // the one failure mode nobody reports.
+          element: <LoadingAnnouncement what="somewhere you can go" />,
+        },
+
+        // Each route names the one permission §8 grants it. The five are
+        // granted independently, so this is a per-route check and not a role.
+        { path: '/admin/tenants', loader: operator('platform'), element: <AdminTenantsRoute /> },
+        {
+          path: '/admin/tenants/:tenantId',
+          // Gated on `platform` alone, deliberately. The page composes three
+          // permissions and the other two are answered *inside* it: the plan
+          // and usage sections come back `granted: false` with the server's
+          // reason and render as withheld sections. Gating the whole route on
+          // all three would turn an operator who holds `platform` and not
+          // `plan_management` away from a tenant they are entitled to see.
+          loader: operator('platform'),
+          element: <AdminTenantDetailRoute />,
+        },
+        { path: '/admin/plans', loader: operator('plan_management'), element: <AdminPlansRoute /> },
+        {
+          path: '/admin/plans/:planId',
+          loader: operator('plan_management'),
+          element: <AdminPlanDetailRoute />,
+        },
+        { path: '/admin/usage', loader: operator('platform_scope'), element: <AdminUsageRoute /> },
+        { path: '/admin/status', loader: operator('monitoring'), element: <AdminStatusRoute /> },
+        { path: '/admin/audit', loader: operator('audit'), element: <AdminAuditRoute /> },
       ],
     },
 
     // A path that resolves to nothing is indistinguishable from one that
     // resolves to something foreign. That is the point (§13).
     { path: '*', element: <NotFoundPage /> },
-  ]);
+  ];
 }

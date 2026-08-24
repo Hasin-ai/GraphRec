@@ -19,6 +19,13 @@ import { formatDate, humanise } from '../../lib/format';
 
 const PAGE_SIZE = 25;
 
+/**
+ * `Pagination` counts from one, because its label says "Showing 1–25" and a
+ * reader does not have a page zero. The offset it turns into does count from
+ * zero, and the subtraction below is the only place the two meet.
+ */
+const FIRST_PAGE = 1;
+
 const AVAILABILITY_OPTIONS = [
   { value: 'in_stock', label: 'In stock' },
   { value: 'low_stock', label: 'Low stock' },
@@ -29,13 +36,13 @@ export function ProductsRoute() {
   const navigate = useNavigate();
   const [q, setQ] = useState('');
   const [availability, setAvailability] = useState('');
-  const [page, setPage] = useState(0);
+  const [page, setPage] = useState(FIRST_PAGE);
 
   const query = useProducts({
     q: q || undefined,
     availability: availability || undefined,
     limit: PAGE_SIZE,
-    offset: page * PAGE_SIZE,
+    offset: (page - FIRST_PAGE) * PAGE_SIZE,
   });
 
   const columns: readonly Column<Product>[] = [
@@ -96,7 +103,7 @@ export function ProductsRoute() {
             ? () => {
                 setQ('');
                 setAvailability('');
-                setPage(0);
+                setPage(FIRST_PAGE);
               }
             : undefined
         }
@@ -107,7 +114,7 @@ export function ProductsRoute() {
           placeholder="Title or ID"
           onChange={(event) => {
             setQ(event.target.value);
-            setPage(0);
+            setPage(FIRST_PAGE);
           }}
         />
         <Select
@@ -117,7 +124,7 @@ export function ProductsRoute() {
           options={AVAILABILITY_OPTIONS}
           onChange={(event) => {
             setAvailability(event.target.value);
-            setPage(0);
+            setPage(FIRST_PAGE);
           }}
         />
       </FilterBar>

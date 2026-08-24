@@ -123,6 +123,23 @@ requester is an anonymous stranger rather than an authenticated administrator)
 and **ADR 0033** (the access token lives in memory and only the refresh token is
 stored, in `sessionStorage`, never `localStorage`).
 
+**Phase 14 reached three.** **ADR 0034** records that the console stays on the
+Modernist tokens, provisionally and by instruction, since §10.7's question was
+not answered before the phase began; **ADR 0035** settles that gate 4 is thrown
+from render rather than banner-ed in place, so a foreign resource reaches the
+real `/404`; **ADR 0036** settles that an invitation is revoked and never
+deleted, because the runtime role holds no `DELETE` on that table and the grant
+is right.
+
+**Phase 15 reached three more.** **ADR 0037** settles that
+`/admin/tenants/:tenantId` is gated on `platform` alone, with its plan and usage
+sections withheld in place rather than refusing the whole route — ADR 0030's
+rule applied to the one page where three permissions meet. **ADR 0038** settles
+that the three per-role workflow tests walk the shipping route table, which is
+why `routeTable` is exported separately from `createRouter`. **ADR 0039**
+settles that the accessibility pass is three checks rather than one axe run,
+because axe cannot see focus behaviour and cannot see colour in jsdom.
+
 Every listed gate D1–D12 is now closed. What remains open is §10.7's
 design-system question and the numbered list below.
 

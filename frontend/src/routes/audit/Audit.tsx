@@ -19,6 +19,13 @@ import { formatDateTime, humanise } from '../../lib/format';
 
 const PAGE_SIZE = 25;
 
+/**
+ * `Pagination` counts from one, because its label says "Showing 1–25" and a
+ * reader does not have a page zero. The offset it turns into does count from
+ * zero, and the subtraction below is the only place the two meet.
+ */
+const FIRST_PAGE = 1;
+
 /** The eight actions the tenant realm records, from the generated enum. */
 const ACTION_OPTIONS = [
   'credential',
@@ -33,12 +40,12 @@ const ACTION_OPTIONS = [
 
 export function AuditRoute() {
   const [action, setAction] = useState('');
-  const [page, setPage] = useState(0);
+  const [page, setPage] = useState(FIRST_PAGE);
   const query = useQuery(
     auditQuery({
       action: action || undefined,
       limit: PAGE_SIZE,
-      offset: page * PAGE_SIZE,
+      offset: (page - FIRST_PAGE) * PAGE_SIZE,
     }),
   );
 
@@ -87,7 +94,7 @@ export function AuditRoute() {
           action
             ? () => {
                 setAction('');
-                setPage(0);
+                setPage(FIRST_PAGE);
               }
             : undefined
         }
@@ -99,7 +106,7 @@ export function AuditRoute() {
           options={ACTION_OPTIONS}
           onChange={(event) => {
             setAction(event.target.value);
-            setPage(0);
+            setPage(FIRST_PAGE);
           }}
         />
       </FilterBar>
