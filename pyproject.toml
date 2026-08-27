@@ -99,9 +99,16 @@ ignore = [
 # `graphrec` and `apps` are ours. Declaring them keeps the first-party block
 # separate from third-party, so a new import into the shared library is visible
 # in a diff rather than sorted into the middle of the framework imports.
-known-first-party = ["graphrec", "apps"]
+known-first-party = ["graphrec", "apps", "graphrec_sdk"]
 
 [tool.ruff.lint.per-file-ignores]
+# The README's Python is compiled from this file, so ruff must not rewrite it
+# into something a reader cannot paste. The SDK's floor is Python 3.10 while
+# this repository targets 3.12, and `UP` would turn `timezone.utc` into
+# `datetime.UTC` — correct here, an `ImportError` for a customer on 3.10. The
+# imports inside each region are what the block has to show, so `F401` cannot
+# prune the ones a nested annotation only appears to use.
+"tests/sdk/examples.py" = ["UP", "F401"]
 # Pydantic and FastAPI both resolve annotations at runtime — Pydantic to build a
 # model's validators, FastAPI to tell an async-generator dependency from a plain
 # coroutine. Names used in those annotations must be real imports; moving them
@@ -143,6 +150,12 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The SDK lives in its own distribution (`sdk/python/pyproject.toml`) but its
+# tests run here, inside the same gate as everything else. The alternative — a
+# second `pytest` invocation in CI — is a suite that is green until somebody
+# forgets to add the step, and `tests/sdk/` is where the contract tests that
+# read `graphrec/` and `deploy/` from the other side belong anyway.
+pythonpath = ["sdk/python/src"]
 asyncio_mode = "auto"
 markers = [
     "isolation: cross-tenant isolation suite — a required merge gate",

@@ -1,0 +1,29 @@
+{
+  // The CommonJS half of the dual build.
+  //
+  // `package.json` promises a `require` entry point, and a promise in an
+  // `exports` map that resolves to a missing file is a package that installs
+  // cleanly and throws ERR_MODULE_NOT_FOUND on the first `require`. Node 20 —
+  // the floor this SDK sets — cannot `require()` an ES module, so an ESM-only
+  // build would refuse every customer whose service is still CommonJS, which on
+  // a server is most of them.
+  //
+  // Emitted beside the ESM output rather than over it, with its own
+  // `package.json` marker written by the build script: this package is
+  // `"type": "module"`, so a `.js` file under `dist/cjs` needs a nearer
+  // `"type": "commonjs"` to be read as CommonJS at all.
+  "extends": "./tsconfig.build.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "Node10",
+    "verbatimModuleSyntax": false,
+    // Declarations twice, not once. Under `node16`/`nodenext` resolution a
+    // `.d.ts` inherits the module system of the nearest `package.json`, so a
+    // CommonJS consumer pointed at the ESM declarations is told its `import`
+    // will emit a `require` and errors. Two emits and the marker file make the
+    // types match the runtime on both sides.
+    "declaration": true,
+    "declarationMap": true,
+    "outDir": "dist/cjs"
+  }
+}

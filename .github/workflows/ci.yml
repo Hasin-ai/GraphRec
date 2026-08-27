@@ -50,7 +50,10 @@ jobs:
       - name: Ruff format
         run: ruff format --check .
       - name: mypy
-        run: mypy graphrec apps
+        # The SDK is a separate distribution but it is checked here, under the
+        # same `strict = true`: a typed client whose own types are unchecked
+        # publishes `.pyi` promises nothing verifies.
+        run: mypy graphrec apps sdk/python/src
       - name: Shell scripts
         # The ops scripts are the code that runs during an incident and the only
         # code with no test around it. ShellCheck is what stands in for one:
@@ -416,3 +419,43 @@ jobs:
         working-directory: frontend
       - run: npm run build
         working-directory: frontend
+
+  sdk:
+    name: Client SDKs
+    runs-on: ubuntu-latest
+    # The TypeScript SDK is a separate npm workspace with its own lockfile. The
+    # Python SDK has no job of its own: `tests/sdk/` runs inside `test`, because
+    # a second `pytest` invocation is a suite that stays green until somebody
+    # forgets to add the step.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: sdk/typescript/package-lock.json
+      - run: npm ci
+        working-directory: sdk/typescript
+      - name: ESLint
+        run: npm run lint
+        working-directory: sdk/typescript
+      - name: Types
+        run: npm run typecheck
+        working-directory: sdk/typescript
+      - name: Tests
+        # Includes the README test, which executes every documented example
+        # against a recording transport. A snippet that no longer compiles fails
+        # here rather than in somebody's first hour with the SDK.
+        run: npm run test
+        working-directory: sdk/typescript
+      - name: Build
+        # Emits ESM and CJS. Node 20 — the declared floor — cannot `require()`
+        # ESM, so a package that promises `require` and ships only ESM is broken
+        # for every CommonJS consumer and green in every other check.
+        run: npm run build
+        working-directory: sdk/typescript
+      - name: Both entry points load
+        run: |
+          node -e "import('./dist/index.js').then(m => console.log('esm', m.VERSION))"
+          node -e "console.log('cjs', require('./dist/cjs/index.js').VERSION)"
+        working-directory: sdk/typescript
