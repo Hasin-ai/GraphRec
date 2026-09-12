@@ -8,8 +8,11 @@ from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
 
 from apps.api.routes.tenants import registration_limiter
+from graphrec_core.auth.setup_tokens import setup_token_hash
 from graphrec_core.database.models import (
+    AccountSetupToken,
     AuditLog,
+    RegistrationRequest,
     TenantResourceQuota,
     TenantSubscription,
     TenantUser,
@@ -58,8 +61,12 @@ def test_valid_registration_creates_required_records_atomically(client: TestClie
         "status": "active",
         "created_at": result["created_at"],
         "administrator_email": body["admin_email"],
-        "next_step": "Use the separately defined account-setup flow; contract TBD",
+        "next_step": "Complete account setup with the one-time setup_token before it expires",
+        "setup_token": result["setup_token"],
+        "setup_token_expires_at": result["setup_token_expires_at"],
     }
+    assert isinstance(result["setup_token"], str) and len(result["setup_token"]) >= 40
+    assert result["setup_token_expires_at"] > result["created_at"]
     assert "password" not in response.text.lower()
     tenant_id = UUID(result["id"])
 
@@ -77,6 +84,17 @@ def test_valid_registration_creates_required_records_atomically(client: TestClie
         assert audit is not None
         assert audit.outcome == "succeeded"
         assert body["admin_email"] not in str(audit.redacted_details)
+        # Only the hash of the setup token is persisted, never the token itself.
+        setup_token = session.scalar(select(AccountSetupToken))
+        assert setup_token is not None
+        assert setup_token.user_id == user.id
+        assert setup_token.token_hash == setup_token_hash(result["setup_token"])
+        assert setup_token.used_at is None and setup_token.revoked_at is None
+        stored = session.scalar(
+            select(RegistrationRequest.response_body).where(RegistrationRequest.tenant_id == tenant_id)
+        )
+        assert stored is not None
+        assert result["setup_token"] not in str(stored)
 
 
 def test_same_idempotency_key_and_body_replays_without_duplicate_effect(client: TestClient) -> None:
@@ -86,13 +104,19 @@ def test_same_idempotency_key_and_body_replays_without_duplicate_effect(client: 
 
     assert first.status_code == 201
     assert replay.status_code == 200
-    assert replay.json() == first.json()
+    # A replay never re-discloses the one-time setup token.
+    assert replay.json() == {
+        **first.json(),
+        "setup_token": None,
+        "setup_token_expires_at": None,
+    }
     tenant_id = UUID(first.json()["id"])
     with SessionLocal() as session, session.begin():
         set_local_tenant(session, tenant_id)
         assert session.scalar(select(func.count()).select_from(TenantUser)) == 1
         assert session.scalar(select(func.count()).select_from(TenantSubscription)) == 1
         assert session.scalar(select(func.count()).select_from(AuditLog)) == 1
+        assert session.scalar(select(func.count()).select_from(AccountSetupToken)) == 1
 
 
 def test_idempotency_key_reuse_with_different_body_conflicts(client: TestClient) -> None:

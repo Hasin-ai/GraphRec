@@ -19,6 +19,12 @@ login_limiter = RegistrationRateLimiter(
     limit=settings.login_rate_limit,
     window_seconds=settings.login_rate_window_seconds,
 )
+# Setup tokens are unguessable, but the public endpoint still needs a per-source
+# ceiling so it cannot be used to probe tokens or burn password-hashing CPU.
+setup_limiter = RegistrationRateLimiter(
+    limit=settings.login_rate_limit,
+    window_seconds=settings.login_rate_window_seconds,
+)
 
 
 @router.post("/login", response_model=AuthTokenPair)
@@ -67,6 +73,21 @@ def setup_password(
     source = request.client.host if request.client else "unknown"
     correlation_id: UUID = request.state.correlation_id
     service = AuthenticationService(db, app_settings)
+
+    retry_after = setup_limiter.check(f"source:{source}")
+    if retry_after is not None:
+        service.record_setup_rate_limit_denial(
+            correlation_id=correlation_id,
+            source=source,
+            retry_after_seconds=retry_after,
+        )
+        raise ApiError(
+            429,
+            "rate_limit_exceeded",
+            "Account setup request limit exceeded",
+            retryable=True,
+            retry_after_seconds=retry_after,
+        )
 
     return service.setup_password(
         payload,

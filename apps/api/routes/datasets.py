@@ -8,12 +8,14 @@ from sqlalchemy.orm import Session
 from graphrec_core.auth.principal import AuthenticatedPrincipal, authenticated_principal
 from graphrec_core.database.session import get_db
 from graphrec_core.datasets.service import DatasetService
+from graphrec_core.errors import ApiError
 from graphrec_core.schemas.datasets import (
     DatasetSnapshotCreate,
     DatasetSnapshotListResponse,
     DatasetSnapshotResource,
     DatasetUploadResponse,
 )
+from graphrec_core.settings import get_settings
 
 router = APIRouter(tags=["datasets"])
 
@@ -24,7 +26,12 @@ async def upload_dataset_file(
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> DatasetUploadResponse:
-    content_bytes = await file.read()
+    principal.require_scope("catalog:write")
+    principal.require_scope("events:write")
+    limit = get_settings().max_upload_body_bytes
+    content_bytes = await file.read(limit + 1)
+    if len(content_bytes) > limit:
+        raise ApiError(413, "payload_too_large", "The uploaded file exceeds the configured limit")
     raw_content = content_bytes.decode("utf-8", errors="ignore")
     service = DatasetService(db)
     return service.upload_dataset_content(principal.tenant_id, raw_content)
@@ -36,6 +43,7 @@ def create_dataset_snapshot(
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> DatasetSnapshotResource:
+    principal.require_scope("training:write")
     service = DatasetService(db)
     return service.create_snapshot(principal.tenant_id, payload)
 
@@ -45,6 +53,7 @@ def list_dataset_snapshots(
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> DatasetSnapshotListResponse:
+    principal.require_scope("training:read")
     service = DatasetService(db)
     items = service.list_snapshots(principal.tenant_id)
     return DatasetSnapshotListResponse(items=items)
@@ -56,5 +65,6 @@ def get_dataset_snapshot(
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> DatasetSnapshotResource:
+    principal.require_scope("training:read")
     service = DatasetService(db)
     return service.get_snapshot(principal.tenant_id, snapshot_id)

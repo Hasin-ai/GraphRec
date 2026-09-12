@@ -23,6 +23,7 @@ def bulk_upsert_products(
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> ProductBulkUpsertResponse:
+    principal.require_scope("catalog:write")
     service = CatalogService(db)
     return service.bulk_upsert(principal.tenant_id, payload)
 
@@ -32,6 +33,7 @@ def list_products(
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> ProductListResponse:
+    principal.require_scope("catalog:read")
     service = CatalogService(db)
     items = service.list_products(principal.tenant_id)
     return ProductListResponse(items=items, total=len(items))
@@ -43,6 +45,7 @@ def get_product(
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> ProductResource:
+    principal.require_scope("catalog:read")
     service = CatalogService(db)
     return service.get_product(principal.tenant_id, external_id)
 
@@ -54,6 +57,7 @@ def put_product(
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> ProductResource:
+    principal.require_scope("catalog:write")
     service = CatalogService(db)
     return service.update_product(principal.tenant_id, external_id, payload)
 
@@ -65,6 +69,7 @@ def patch_product(
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> ProductResource:
+    principal.require_scope("catalog:write")
     service = CatalogService(db)
     return service.update_product(principal.tenant_id, external_id, payload)
 
@@ -75,5 +80,6 @@ def disable_product(
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> ProductResource:
+    principal.require_scope("catalog:write")
     service = CatalogService(db)
     return service.disable_product(principal.tenant_id, external_id)

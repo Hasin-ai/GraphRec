@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
@@ -13,7 +13,7 @@ class EventSubmit(BaseModel):
     user_id: str | None = None
     external_product_id: str | None = None
     context: dict[str, Any] = Field(default_factory=dict)
-    occurred_at: datetime = Field(default_factory=datetime.utcnow)
+    occurred_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class EventBatchSubmit(BaseModel):

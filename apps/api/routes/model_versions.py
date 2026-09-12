@@ -26,6 +26,7 @@ def register_model_version(
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> ModelVersionResource:
+    principal.require_scope("models:write")
     service = ModelRegistryService(db)
     return service.register_model_version(principal.tenant_id, payload)
 
@@ -35,6 +36,7 @@ def list_model_versions(
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> ModelVersionListResponse:
+    principal.require_scope("models:read")
     service = ModelRegistryService(db)
     items = service.list_model_versions(principal.tenant_id)
     return ModelVersionListResponse(items=items)
@@ -46,6 +48,7 @@ def get_model_version(
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> ModelVersionResource:
+    principal.require_scope("models:read")
     service = ModelRegistryService(db)
     return service.get_model_version(principal.tenant_id, version_id)
 
@@ -56,6 +59,7 @@ def activate_model_version(
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> ModelVersionResource:
+    principal.require_scope("models:deploy")
     service = ModelRegistryService(db)
     return service.activate_model_version(principal.tenant_id, version_id)
 
@@ -66,6 +70,7 @@ def rollback_model(
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> ModelVersionResource:
+    principal.require_scope("models:deploy")
     service = ModelRegistryService(db)
     return service.rollback_model(principal.tenant_id, model_id)
 
@@ -76,6 +81,7 @@ def archive_model_version(
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> ModelVersionResource:
+    principal.require_scope("models:write")
     service = ModelRegistryService(db)
     return service.archive_model_version(principal.tenant_id, version_id)
 
@@ -86,6 +92,7 @@ def create_training_job(
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> TrainingJobResource:
+    principal.require_scope("training:write")
     service = ModelRegistryService(db)
     return service.create_training_job(principal.tenant_id, payload)
 
@@ -95,6 +102,7 @@ def list_training_jobs(
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> TrainingJobListResponse:
+    principal.require_scope("training:read")
     service = ModelRegistryService(db)
     items = service.list_training_jobs(principal.tenant_id)
     return TrainingJobListResponse(items=items)

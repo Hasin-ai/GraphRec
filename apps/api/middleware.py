@@ -11,6 +11,8 @@ from graphrec_core.auth.audit import record_public_login_denial
 from graphrec_core.registration.audit import record_public_registration_denial
 from graphrec_core.settings import Settings
 
+MULTIPART_PATHS = frozenset({"/v1/datasets/upload"})
+
 
 class ContractMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, *, settings: Settings) -> None:  # type: ignore[no-untyped-def]
@@ -56,17 +58,9 @@ class ContractMiddleware(BaseHTTPMiddleware):
                 message="Accept must permit application/json",
             )
 
-        if request.method in {"POST", "PUT", "PATCH"}:
-            content_type = request.headers.get("Content-Type", "").lower()
-            if content_type != "application/json":
-                return error_response(
-                    correlation_id=correlation_id,
-                    status_code=400,
-                    code="malformed_request",
-                    message="Content-Type must be application/json",
-                )
-
+        is_upload = request.url.path in MULTIPART_PATHS
         content_length = request.headers.get("Content-Length")
+        size = 0
         if content_length:
             try:
                 size = int(content_length)
@@ -79,13 +73,41 @@ class ContractMiddleware(BaseHTTPMiddleware):
                     code="malformed_request",
                     message="Content-Length is invalid",
                 )
-            if size > self.settings.max_request_body_bytes:
+
+        if request.method in {"POST", "PUT", "PATCH"}:
+            content_type = request.headers.get("Content-Type", "").lower()
+            # Action endpoints such as ``:activate`` or ``:disable`` carry no body, and
+            # the console sends them without a Content-Type; only real bodies must be JSON.
+            has_body = size > 0 or "transfer-encoding" in request.headers
+            if is_upload:
+                if not content_type.startswith("multipart/form-data"):
+                    return error_response(
+                        correlation_id=correlation_id,
+                        status_code=400,
+                        code="malformed_request",
+                        message="Content-Type must be multipart/form-data",
+                    )
+            elif has_body and content_type != "application/json":
                 return error_response(
                     correlation_id=correlation_id,
-                    status_code=413,
-                    code="payload_too_large",
-                    message="The request body exceeds the configured limit",
+                    status_code=400,
+                    code="malformed_request",
+                    message="Content-Type must be application/json",
                 )
+
+        # Dataset files legitimately exceed the 16 KiB JSON limit.
+        limit = (
+            self.settings.max_upload_body_bytes
+            if is_upload
+            else self.settings.max_request_body_bytes
+        )
+        if size > limit:
+            return error_response(
+                correlation_id=correlation_id,
+                status_code=413,
+                code="payload_too_large",
+                message="The request body exceeds the configured limit",
+            )
         return None
 
     @staticmethod

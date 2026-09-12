@@ -26,6 +26,7 @@ def get_deployment_status(
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> DeploymentStatus:
+    principal.require_scope("deployments:read")
     now = datetime.now(timezone.utc)
 
     active_model = db.execute(
@@ -51,6 +52,7 @@ def get_replica_status(
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> ReplicaStatusResponse:
+    principal.require_scope("deployments:read")
     now = datetime.now(timezone.utc)
 
     active_model = db.execute(
@@ -82,6 +84,7 @@ def get_autoscaling_status(
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> AutoscalingStatus:
+    principal.require_scope("deployments:read")
     now = datetime.now(timezone.utc)
     return AutoscalingStatus(
         min_replicas=1,
@@ -108,6 +111,7 @@ def get_metrics_summary(
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> MetricsSummary:
+    principal.require_scope("metrics:read")
     now = datetime.now(timezone.utc)
 
     active_model = db.execute(

@@ -12,23 +12,38 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from graphrec_core.auth.audit import protected_auth_hash
-from graphrec_core.auth.passwords import verify_password
-from graphrec_core.database.models import AuditLog, RefreshSession, SecurityEvent, TenantUser
+from graphrec_core.auth.passwords import hash_password, verify_password
+from graphrec_core.auth.setup_tokens import revoke_open_setup_tokens, setup_token_hash
+from graphrec_core.database.models import (
+    AccountSetupToken,
+    AuditLog,
+    RefreshSession,
+    SecurityEvent,
+    TenantUser,
+)
 from graphrec_core.database.tenancy import set_local_tenant
 from graphrec_core.errors import ApiError
-from graphrec_core.schemas.auth import AuthTokenPair, LoginRequest
+from graphrec_core.schemas.auth import AuthTokenPair, LoginRequest, SetupPasswordRequest
 from graphrec_core.settings import Settings
 
+# Bearer-token scopes per console role. Domain routes enforce these with
+# ``AuthenticatedPrincipal.require_scope``; sign in again after changing them,
+# because access tokens carry the scopes granted at login.
 ROLE_SCOPES: dict[str, list[str]] = {
     "tenant_administrator": [
         "keys:write",
         "billing:read",
         "usage:read",
+        "catalog:read",
+        "catalog:write",
+        "events:read",
+        "events:write",
         "training:read",
         "training:write",
         "models:read",
         "models:write",
         "models:deploy",
+        "recommendations:read",
         "deployments:read",
         "metrics:read",
     ],
@@ -38,8 +53,25 @@ ROLE_SCOPES: dict[str, list[str]] = {
         "catalog:write",
         "events:read",
         "events:write",
+        # Lets the data-upload page confirm the snapshot its import produced.
+        "training:read",
     ],
 }
+
+
+@dataclass(frozen=True)
+class SetupTokenRecord:
+    token_id: UUID
+    tenant_id: UUID
+    user_id: UUID
+    normalized_email: str
+    user_status: str
+    user_role: str
+    has_credential: bool
+    tenant_status: str
+    expires_at: datetime
+    used_at: datetime | None
+    revoked_at: datetime | None
 
 
 @dataclass(frozen=True)
@@ -125,57 +157,200 @@ class AuthenticationService:
         correlation_id: UUID,
         source: str,
     ) -> AuthTokenPair:
+        """Activate an invited account with a one-time setup token.
+
+        Every rejection returns the same 401 so callers cannot learn whether a
+        token exists, expired, was used, or belongs to another address.
+        """
+
         try:
-            identities = self._resolve_identities(payload.email)
-            if not identities:
-                raise ApiError(404, "resource_not_found", "No user found with the specified email.")
+            record = self._resolve_setup_token(setup_token_hash(payload.setup_token))
+            now = datetime.now(timezone.utc)
+            reason = self._setup_denial_reason(record, payload, now)
+            if record is None or reason is not None:
+                self._record_setup_failure(
+                    correlation_id=correlation_id,
+                    source=source,
+                    reason=reason or "unknown_token",
+                    tenant_id=record.tenant_id if record is not None else None,
+                )
+                self.session.commit()
+                raise self._setup_failed()
 
-            identity = identities[0]
-            # Update password and activate user
-            from graphrec_core.auth.passwords import hash_password
-            new_digest = hash_password(payload.password)
-
-            set_local_tenant(self.session, identity.tenant_id)
-            self.session.execute(
-                update(TenantUser)
+            # Hash before taking row locks; the guarded updates below make the
+            # token single-use even when two requests race.
+            credential_digest = hash_password(payload.password)
+            set_local_tenant(self.session, record.tenant_id)
+            consumed = self.session.execute(
+                update(AccountSetupToken)
                 .where(
-                    TenantUser.tenant_id == identity.tenant_id,
-                    TenantUser.id == identity.user_id,
+                    AccountSetupToken.tenant_id == record.tenant_id,
+                    AccountSetupToken.id == record.token_id,
+                    AccountSetupToken.used_at.is_(None),
+                    AccountSetupToken.revoked_at.is_(None),
+                    AccountSetupToken.expires_at > now,
                 )
-                .values(
-                    credential_digest=new_digest,
-                    status="active",
+                .values(used_at=now)
+            ).rowcount
+            activated = 0
+            if consumed == 1:
+                activated = self.session.execute(
+                    update(TenantUser)
+                    .where(
+                        TenantUser.tenant_id == record.tenant_id,
+                        TenantUser.id == record.user_id,
+                        TenantUser.status == "invited",
+                        TenantUser.credential_digest.is_(None),
+                    )
+                    .values(credential_digest=credential_digest, status="active")
+                ).rowcount
+            if consumed != 1 or activated != 1:
+                self.session.rollback()
+                self._record_setup_failure(
+                    correlation_id=correlation_id,
+                    source=source,
+                    reason="concurrent_use",
+                    tenant_id=record.tenant_id,
                 )
-            )
+                self.session.commit()
+                raise self._setup_failed()
 
-            # Re-fetch identity and issue session
-            updated_identity = LoginIdentity(
-                user_id=identity.user_id,
-                tenant_id=identity.tenant_id,
-                normalized_email=identity.normalized_email,
-                credential_digest=new_digest,
-                user_status="active",
-                tenant_status=identity.tenant_status,
-                user_role=identity.user_role,
+            revoke_open_setup_tokens(
+                self.session, tenant_id=record.tenant_id, user_id=record.user_id, now=now
             )
+            self.session.add(
+                AuditLog(
+                    id=uuid4(),
+                    tenant_id=record.tenant_id,
+                    actor_type="tenant_user",
+                    actor_reference=record.user_id,
+                    action_type="account_setup",
+                    resource_type="tenant_user",
+                    resource_reference=record.user_id,
+                    outcome="succeeded",
+                    correlation_reference=correlation_id,
+                    redacted_details={"role": record.user_role},
+                    occurred_at=now,
+                )
+            )
+            identity = LoginIdentity(
+                user_id=record.user_id,
+                tenant_id=record.tenant_id,
+                normalized_email=record.normalized_email,
+                credential_digest=credential_digest,
+                user_status="active",
+                tenant_status=record.tenant_status,
+                user_role=record.user_role,
+            )
+            # Commits the token consumption, activation, audit and new session together.
             return self._issue_session(
-                updated_identity,
+                identity,
                 correlation_id=correlation_id,
                 source=source,
-                email=payload.email,
+                email=record.normalized_email,
             )
         except ApiError:
             raise
-        except Exception as exc:
+        except SQLAlchemyError as exc:
             self.session.rollback()
-            print("EXCEPT IN setup_password:", type(exc), exc)
             raise ApiError(
                 503,
                 "service_unavailable",
-                f"Password setup is temporarily unavailable: {exc}",
+                "Account setup is temporarily unavailable",
                 retryable=True,
                 retry_after_seconds=5,
             ) from exc
+
+    def record_setup_rate_limit_denial(
+        self,
+        *,
+        correlation_id: UUID,
+        source: str,
+        retry_after_seconds: int,
+    ) -> None:
+        try:
+            self._record_setup_failure(
+                correlation_id=correlation_id,
+                source=source,
+                reason="rate_limited",
+                extra={"retry_after_seconds": retry_after_seconds},
+            )
+            self.session.commit()
+        except SQLAlchemyError:
+            self.session.rollback()
+
+    def _resolve_setup_token(self, token_hash: str) -> SetupTokenRecord | None:
+        row = (
+            self.session.execute(
+                text(
+                    """
+                    SELECT token_id, tenant_id, user_id, normalized_email, user_status,
+                           user_role, has_credential, tenant_status, expires_at,
+                           used_at, revoked_at
+                    FROM resolve_account_setup_token(:token_hash)
+                    """
+                ),
+                {"token_hash": token_hash},
+            )
+            .mappings()
+            .first()
+        )
+        return SetupTokenRecord(**dict(row)) if row is not None else None
+
+    @staticmethod
+    def _setup_denial_reason(
+        record: SetupTokenRecord | None, payload: SetupPasswordRequest, now: datetime
+    ) -> str | None:
+        if record is None:
+            return "unknown_token"
+        if record.revoked_at is not None:
+            return "revoked_token"
+        if record.used_at is not None:
+            return "used_token"
+        if record.expires_at <= now:
+            return "expired_token"
+        if payload.email is not None and payload.email != record.normalized_email:
+            return "email_mismatch"
+        if record.user_status != "invited" or record.has_credential:
+            return "account_not_invited"
+        if record.tenant_status != "active":
+            return "tenant_inactive"
+        if record.user_role not in ROLE_SCOPES:
+            return "role_not_allowed"
+        return None
+
+    def _record_setup_failure(
+        self,
+        *,
+        correlation_id: UUID,
+        source: str,
+        reason: str,
+        tenant_id: UUID | None = None,
+        extra: dict[str, object] | None = None,
+    ) -> None:
+        self.session.add(
+            SecurityEvent(
+                id=uuid4(),
+                tenant_id=tenant_id,
+                event_type="account_setup_denied",
+                severity="warning",
+                source_hash=protected_auth_hash(source),
+                sanitized_detail={
+                    "correlation_id": str(correlation_id),
+                    "reason": reason,
+                    **(extra or {}),
+                },
+                occurred_at=datetime.now(timezone.utc),
+            )
+        )
+
+    @staticmethod
+    def _setup_failed() -> ApiError:
+        return ApiError(
+            401,
+            "invalid_setup_token",
+            "The setup token is invalid, expired, or already used",
+        )
 
     def record_rate_limit_denial(
         self,

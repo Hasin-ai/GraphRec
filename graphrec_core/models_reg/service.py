@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 
 import numpy as np
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from graphrec_core.database.models import ModelVersion, Product, TrainingJob, UsageEvent
@@ -47,21 +48,13 @@ class ModelRegistryService:
                 f"Model version tag '{payload.version_tag}' already exists for this tenant.",
             )
 
-        # Default demonstration metrics if empty
-        metrics = payload.metrics or {
-            "recall_at_10": 0.82,
-            "ndcg_at_10": 0.74,
-            "catalog_coverage": 0.65,
-            "training_loss": 0.18,
-        }
-
         mv = ModelVersion(
             id=uuid4(),
             tenant_id=tenant_id,
             version_tag=payload.version_tag,
             model_type=payload.model_type,
             status="eligible",
-            metrics=metrics,
+            metrics=payload.metrics,
             artifact_uri=payload.artifact_uri
             or f"rustfs://graphrec-models/{tenant_id}/{payload.version_tag}.safetensors",
             created_at=now,
@@ -192,20 +185,19 @@ class ModelRegistryService:
         )
         self.db.add(job)
 
-        # Register corresponding model version
-        version_tag = f"v{now.strftime('%Y%m%d%H%M%S')}-{payload.model_type[:6]}"
+        # Register corresponding model version. The tag carries a slice of the
+        # version id so two requests in the same second cannot collide on the
+        # (tenant, version_tag) unique constraint.
+        version_id = uuid4()
+        version_tag = f"v{now.strftime('%Y%m%d%H%M%S')}-{version_id.hex[:6]}"
         mv = ModelVersion(
-            id=uuid4(),
+            id=version_id,
             tenant_id=tenant_id,
             version_tag=version_tag,
             model_type=payload.model_type,
             status="eligible",
-            metrics={
-                "recall_at_10": 0.85,
-                "ndcg_at_10": 0.78,
-                "catalog_coverage": 0.72,
-                "training_loss": 0.12,
-            },
+            # Real metrics come from the training worker; none exist for synthetic embeddings.
+            metrics={},
             artifact_uri=f"rustfs://graphrec-models/{tenant_id}/{version_tag}.safetensors",
             created_at=now,
         )
@@ -222,7 +214,15 @@ class ModelRegistryService:
             occurred_at=now,
         )
         self.db.add(usage)
-        self.db.flush()  # get mv.id before commit so indexer can use it
+        try:
+            self.db.flush()  # get mv.id before commit so indexer can use it
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise ApiError(
+                409,
+                "duplicate_resource",
+                "A model version with the same tag was registered concurrently; retry.",
+            ) from exc
 
         # ----------------------------------------------------------------
         # Index item embeddings into Qdrant

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from graphrec_core.settings import get_settings
 
@@ -29,15 +29,19 @@ class LoginRequest(BaseModel):
 
 
 class SetupPasswordRequest(BaseModel):
+    """Activate an invited account with its one-time setup token."""
+
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    email: EmailStr
+    setup_token: str = Field(min_length=16, max_length=256)
     password: str
+    # Optional confirmation; when supplied it must match the invited account.
+    email: EmailStr | None = None
 
     @field_validator("email")
     @classmethod
-    def normalize_email(cls, value: EmailStr) -> str:
-        return str(value).lower()
+    def normalize_email(cls, value: EmailStr | None) -> str | None:
+        return str(value).lower() if value is not None else None
 
     @field_validator("password")
     @classmethod

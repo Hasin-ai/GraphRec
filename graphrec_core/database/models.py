@@ -182,6 +182,34 @@ class RefreshSession(Base):
     rotated_from_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
 
 
+class AccountSetupToken(Base):
+    """Single-use credential for activating an invited tenant user (stored as a hash)."""
+
+    __tablename__ = "account_setup_tokens"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id", "user_id"],
+            ["tenant_users.tenant_id", "tenant_users.id"],
+            ondelete="CASCADE",
+            name="fk_account_setup_tokens_tenant_user",
+        ),
+        CheckConstraint("expires_at > created_at", name="ck_account_setup_tokens_expiry"),
+        UniqueConstraint("token_hash", name="uq_account_setup_tokens_hash"),
+        Index("ix_account_setup_tokens_tenant_user", "tenant_id", "user_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class UsageEvent(Base):
     __tablename__ = "usage_events"
     __table_args__ = (
@@ -336,6 +364,7 @@ class TrainingJob(Base):
     model_type: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="succeeded")
     configuration: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    dataset_snapshot_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     model_version_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     failure_reason: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

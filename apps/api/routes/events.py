@@ -20,6 +20,7 @@ def submit_event(
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
+    principal.require_scope("events:write")
     service = EventService(db)
     return service.submit_event(principal.tenant_id, payload)
 
@@ -30,6 +31,7 @@ def submit_event_batch(
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> EventBatchResponse:
+    principal.require_scope("events:write")
     service = EventService(db)
     return service.submit_batch(principal.tenant_id, payload)
 
@@ -39,6 +41,7 @@ def list_event_batches(
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> list[EventBatchResponse]:
+    principal.require_scope("events:read")
     service = EventService(db)
     return service.list_batches(principal.tenant_id)
 
@@ -49,5 +52,6 @@ def get_event_batch(
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> EventBatchResponse:
+    principal.require_scope("events:read")
     service = EventService(db)
     return service.get_batch(principal.tenant_id, batch_id)

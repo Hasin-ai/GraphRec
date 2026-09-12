@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -34,15 +34,30 @@ class Settings(BaseSettings):
     registration_rate_limit: int = Field(default=5, ge=1)
     registration_rate_window_seconds: int = Field(default=60, ge=1)
     max_request_body_bytes: int = Field(default=16_384, ge=1_024)
+    max_upload_body_bytes: int = Field(default=10_485_760, ge=1_024)
     max_tenant_name_length: int = Field(default=200, ge=1)
     max_idempotency_key_length: int = Field(default=255, ge=16)
     max_password_length: int = Field(default=1_024, ge=64)
+    account_setup_token_ttl_seconds: int = Field(default=86_400, ge=300, le=604_800)
+    # Shared secret for /v1/platform routes; unset disables platform administration.
+    platform_admin_token: str | None = None
 
     # Qdrant vector store
     qdrant_url: str = Field(default="http://localhost:6334")
     qdrant_collection_prefix: str = Field(default="graphrec")
     qdrant_embedding_dim: int = Field(default=128, ge=16, le=4096)
     qdrant_top_k: int = Field(default=100, ge=1, le=1000)
+
+    @field_validator("platform_admin_token", mode="before")
+    @classmethod
+    def _blank_token_disables_platform(cls, value: object) -> object:
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                return None
+            if len(value) < 32:
+                raise ValueError("PLATFORM_ADMIN_TOKEN must be at least 32 characters")
+        return value
 
 
 @lru_cache

@@ -23,6 +23,7 @@ from graphrec_core.database.models import (
     TenantSubscription,
     TenantUser,
 )
+from graphrec_core.auth.setup_tokens import issue_setup_token
 from graphrec_core.database.tenancy import set_local_tenant
 from graphrec_core.errors import ApiError
 from graphrec_core.schemas.registration import (
@@ -31,7 +32,7 @@ from graphrec_core.schemas.registration import (
 )
 from graphrec_core.settings import Settings
 
-NEXT_STEP = "Use the separately defined account-setup flow; contract TBD"
+NEXT_STEP = "Complete account setup with the one-time setup_token before it expires"
 
 
 @dataclass(frozen=True)
@@ -257,8 +258,27 @@ class RegistrationService:
                 ),
             ]
         )
+        # The invited administrator must exist before a setup token can reference it.
+        self.session.flush()
+        setup_token, setup_token_expires_at = issue_setup_token(
+            self.session,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            ttl_seconds=self.settings.account_setup_token_ttl_seconds,
+            now=now,
+        )
         self.session.commit()
-        return RegistrationResult(response=response, replayed=False)
+        # The replay body stored above never contains the token; only this first
+        # response does, and the database keeps nothing but its hash.
+        return RegistrationResult(
+            response=response.model_copy(
+                update={
+                    "setup_token": setup_token,
+                    "setup_token_expires_at": setup_token_expires_at,
+                }
+            ),
+            replayed=False,
+        )
 
     def _resolve_concurrent_result(
         self, *, key_hash: str, request_hash: str

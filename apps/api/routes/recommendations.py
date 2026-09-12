@@ -57,6 +57,7 @@ def get_recommendations(
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> RecommendationResponse:
+    principal.require_scope("recommendations:read")
     settings = get_settings()
     tenant_id = principal.tenant_id
 
@@ -75,7 +76,6 @@ def get_recommendations(
 
     if active_model:
         query_vec = _zero_query_vector(settings.qdrant_embedding_dim)
-        exclude = list(payload.exclude_product_ids) if hasattr(payload, "exclude_product_ids") and payload.exclude_product_ids else []
 
         try:
             candidate_ids = retrieve_candidates(
@@ -84,7 +84,7 @@ def get_recommendations(
                 version_id=active_model.id,
                 query_vector=query_vec,
                 top_k=settings.qdrant_top_k,
-                exclude_ids=exclude if exclude else None,
+                exclude_ids=payload.exclude_product_ids or None,
             )
             strategy = "personalized"
         except Exception as exc:  # noqa: BLE001
@@ -125,21 +125,17 @@ def get_recommendations(
         fallback_used = True
         fallback_tier = "tenant_popular"
         strategy = "popular_fallback"
-        products = (
-            db.execute(
-                select(Product)
-                .where(Product.tenant_id == tenant_id, Product.is_active == True)  # noqa: E712
-                .order_by(Product.created_at.desc())
-                .limit(payload.top_n)
-            )
-            .scalars()
-            .all()
+        fallback_query = (
+            select(Product.external_id)
+            .where(Product.tenant_id == tenant_id, Product.is_active == True)  # noqa: E712
+            .order_by(Product.created_at.desc())
+            .limit(payload.top_n)
         )
-        top_ids = [p.external_id for p in products]
-
-    if not top_ids:
-        top_ids = ["demo-item-1"]
-        fallback_used = True
+        if payload.exclude_product_ids:
+            fallback_query = fallback_query.where(
+                Product.external_id.not_in(payload.exclude_product_ids)
+            )
+        top_ids = list(db.execute(fallback_query).scalars())
 
     items = [
         RecommendationItem(external_product_id=eid, position=idx + 1)
@@ -162,6 +158,7 @@ def get_session_recommendations(
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> RecommendationResponse:
+    principal.require_scope("recommendations:read")
     return get_recommendations(payload, principal, db)
 
 
@@ -171,6 +168,7 @@ def submit_impression_feedback(
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> FeedbackResponse:
+    principal.require_scope("events:write")
     return FeedbackResponse(
         event_id=payload.event_id,
         feedback_type="impression",
@@ -186,6 +184,7 @@ def submit_click_feedback(
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> FeedbackResponse:
+    principal.require_scope("events:write")
     return FeedbackResponse(
         event_id=payload.event_id,
         feedback_type="click",
@@ -201,6 +200,7 @@ def submit_conversion_feedback(
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> FeedbackResponse:
+    principal.require_scope("events:write")
     return FeedbackResponse(
         event_id=payload.event_id,
         feedback_type="conversion",

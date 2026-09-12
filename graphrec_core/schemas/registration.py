@@ -37,3 +37,7 @@ class TenantRegistrationResponse(BaseModel):
     created_at: datetime
     administrator_email: EmailStr
     next_step: str
+    # One-time credential for POST /v1/auth/setup-password. Returned only in the
+    # original 201 response; idempotent replays never expose it again.
+    setup_token: str | None = None
+    setup_token_expires_at: datetime | None = None
