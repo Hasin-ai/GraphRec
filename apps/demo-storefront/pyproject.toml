@@ -1,0 +1,29 @@
+[project]
+name = "graphrec-demo-storefront"
+version = "0.1.0"
+description = "Facet - a small demonstration storefront for GraphRec (FastAPI + React)"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.116",
+  "uvicorn[standard]>=0.35",
+  "pydantic>=2.10",
+  "pydantic-settings>=2.10",
+  "graphrec-sdk",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.24", "httpx>=0.27"]
+
+[tool.uv.sources]
+graphrec-sdk = { path = "../../sdks/python", editable = true }
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["app", "app.routes", "fixtures"]

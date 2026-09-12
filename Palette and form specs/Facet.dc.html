@@ -1,0 +1,1126 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400;6..96,500;6..96,600&display=swap">
+<link rel="stylesheet" href="_ds/organic-af427fc7-162e-4c49-b94b-c82e6e5b7b1a/styles.css">
+<script src="_ds/organic-af427fc7-162e-4c49-b94b-c82e6e5b7b1a/_ds_bundle.js"></script>
+<style>
+:root{
+  --color-bg:#F6F2EA; --color-surface:#FFFCF7; --color-text:#1D2823;
+  --color-accent:#174A3A; --color-accent-2:#E58B72;
+  --color-divider:#D8D6CE;
+  --ink-2:#647069; --verified:#2E6B4F; --preview:#9A6A20; --error:#A43E35;
+  --font-heading:"Bodoni Moda", Georgia, serif;
+  --font-body:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --color-accent-100:#E8F0EB; --color-accent-200:#D2E2D8; --color-accent-300:#A9C6B5;
+  --color-accent-400:#6B9A83; --color-accent-500:#2E6B4F; --color-accent-600:#14523F;
+  --color-accent-700:#0F3E30; --color-accent-800:#0B2C22; --color-accent-900:#071C15;
+  --color-accent-2-100:#FDEDE8; --color-accent-2-200:#FADCD2; --color-accent-2-300:#F4C0AF;
+  --color-accent-2-400:#EDA189; --color-accent-2-500:#E58B72; --color-accent-2-600:#C96F57;
+  --color-accent-2-700:#A45540; --color-accent-2-800:#7A3D2D; --color-accent-2-900:#4E261B;
+  --color-neutral-100:#FBF8F2; --color-neutral-200:#F2EEE5; --color-neutral-300:#E4E0D6;
+  --color-neutral-400:#CFCCC2; --color-neutral-500:#A8A79E; --color-neutral-600:#82857D;
+  --color-neutral-700:#647069; --color-neutral-800:#41504A; --color-neutral-900:#1D2823;
+}
+body{margin:0;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body)}
+h1,h2,h3,h4,h5,h6{letter-spacing:-0.005em}
+.btn,.tag,.card-kicker,.seg-opt{font-family:var(--font-body)}
+.btn{font-weight:600}
+a{color:var(--color-accent);text-underline-offset:3px}
+a:hover{color:var(--color-accent-700)}
+@keyframes fct-shimmer{0%{background-position:-320px 0}100%{background-position:320px 0}}
+@keyframes fct-rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes fct-slide{from{transform:translateX(24px);opacity:0}to{transform:none;opacity:1}}
+.fct-skel{background:linear-gradient(90deg,var(--color-neutral-200) 0%,var(--color-neutral-100) 50%,var(--color-neutral-200) 100%);background-size:320px 100%;animation:fct-shimmer 1.2s linear infinite}
+.fct-rise{animation:fct-rise 200ms ease-out both}
+.fct-tile{position:relative;overflow:hidden;border-radius:var(--radius-lg);aspect-ratio:4/5}
+.fct-card:hover .fct-tile{transform:scale(1.015)}
+.fct-tile{transition:transform 180ms ease}
+.fct-card:hover .fct-name{color:var(--color-accent)}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms !important;transition-duration:.01ms !important}}
+</style>
+</helmet>
+
+<div style="min-height:100vh;background:var(--color-bg);padding-bottom:var(--space-8)">
+
+  <header class="nav" style="position:sticky;top:0;z-index:40;background:color-mix(in srgb, var(--color-bg) 92%, transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--color-divider);padding:var(--space-3) var(--space-6);gap:var(--space-6)">
+    <a href="#" onClick="{{ goCatalog }}" class="nav-brand" style="font-family:var(--font-heading);font-size:22px;letter-spacing:0.02em;text-decoration:none;color:var(--color-text);margin-right:0">FACET</a>
+    <nav style="display:flex;gap:var(--space-4);align-items:center;margin-right:auto">
+      <a href="#" onClick="{{ goCatalog }}" aria-current="{{ navShopCurrent }}" style="font-size:14px;color:inherit;text-decoration:none">Shop</a>
+      <a href="#" onClick="{{ goCompare }}" aria-current="{{ navCompareCurrent }}" style="font-size:14px;color:inherit;text-decoration:none">Compare</a>
+    </nav>
+
+    <div style="position:relative">
+      <button type="button" class="btn btn-secondary" onClick="{{ togglePersonaMenu }}" aria-haspopup="listbox" aria-expanded="{{ personaMenuOpen }}" style="gap:10px;padding:6px 14px 6px 6px">
+        <span aria-hidden="true" style="{{ personaAvatarStyle }}"></span>
+        <span style="display:flex;flex-direction:column;align-items:flex-start;line-height:1.15">
+          <span style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-2);font-weight:600">Demo shopper</span>
+          <span style="font-size:14px;font-weight:600">{{ personaName }}</span>
+        </span>
+        <span aria-hidden="true" style="font-size:10px;color:var(--ink-2)">▾</span>
+      </button>
+
+      <sc-if value="{{ personaMenuOpen }}" hint-placeholder-val="{{ false }}">
+        <ul role="listbox" aria-label="Demo shopper" class="elev-lg fct-rise" style="position:absolute;top:calc(100% + 8px);right:0;width:296px;list-style:none;margin:0;padding:var(--space-2);background:var(--color-surface);border:1px solid var(--color-divider);border-radius:var(--radius-lg);z-index:50;display:flex;flex-direction:column;gap:2px">
+          <li style="padding:var(--space-2) var(--space-3) var(--space-1);font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-2)">Switch persona · not a login</li>
+          <sc-for list="{{ personaOptions }}" as="p" hint-placeholder-count="4">
+            <li role="option" tabindex="0" aria-selected="{{ p.selected }}" onClick="{{ p.onPick }}" onKeyDown="{{ p.onKey }}" style="{{ p.rowStyle }}">
+              <span aria-hidden="true" style="{{ p.avatarStyle }}"></span>
+              <span style="display:flex;flex-direction:column;min-width:0">
+                <span style="font-size:14px;font-weight:600">{{ p.name }}</span>
+                <span style="font-size:12px;color:var(--ink-2)">{{ p.blurb }}</span>
+              </span>
+              <span aria-hidden="true" style="{{ p.checkStyle }}">✓</span>
+            </li>
+          </sc-for>
+          <li style="padding:var(--space-2) var(--space-3);font-size:11px;color:var(--ink-2);border-top:1px solid var(--color-divider);margin-top:var(--space-1)">Switching changes the demo cookie, the recommendation call and the local cart namespace.</li>
+        </ul>
+      </sc-if>
+    </div>
+
+    <button type="button" class="btn btn-secondary" onClick="{{ openDrawer }}" aria-label="{{ cartAria }}" style="gap:8px">
+      <span>Cart</span>
+      <span aria-hidden="true" style="{{ cartBadgeStyle }}">{{ cartCount }}</span>
+    </button>
+  </header>
+
+  <p aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap">{{ liveMessage }}</p>
+
+  <!-- ══ CATALOG ══ -->
+  <sc-if value="{{ isCatalog }}" hint-placeholder-val="{{ true }}">
+    <main style="max-width:1280px;margin:0 auto;padding:0 var(--space-6)">
+
+      <section style="display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,0.95fr);gap:var(--space-8);align-items:center;padding:var(--space-8) 0">
+        <div style="min-width:0">
+          <span class="tag tag-accent-2" style="margin-bottom:var(--space-3)">A GraphRec demonstration store</span>
+          <h1 style="font-size:clamp(38px,5vw,60px);line-height:1.04;margin:var(--space-3) 0 var(--space-3);max-width:11ch">Thoughtful everyday care.</h1>
+          <p style="font-size:17px;color:var(--ink-2);max-width:44ch;text-wrap:pretty">A small store powered by GraphRec. Every shelf below is a live Top-N request, and every ranking says where it came from.</p>
+          <div style="display:flex;gap:var(--space-2);margin-top:var(--space-4);flex-wrap:wrap">
+            <button type="button" class="btn btn-primary" onClick="{{ shopSkincare }}" style="padding:11px 22px">Shop skincare</button>
+            <button type="button" class="btn btn-secondary" onClick="{{ openRail }}" style="padding:11px 22px">How this demo works</button>
+          </div>
+        </div>
+        <div style="min-width:0;position:relative;aspect-ratio:5/4;border-radius:var(--radius-lg);overflow:hidden;background:linear-gradient(150deg,#E7EDE6 0%,#D8E2D6 46%,#EFE2D4 100%)">
+          <div aria-hidden="true" style="position:absolute;width:52%;aspect-ratio:1;border-radius:50%;background:color-mix(in srgb,#174A3A 12%,transparent);left:12%;top:16%"></div>
+          <div aria-hidden="true" style="position:absolute;width:34%;aspect-ratio:1;border-radius:50%;background:color-mix(in srgb,#E58B72 34%,transparent);right:14%;bottom:14%"></div>
+          <div aria-hidden="true" style="position:absolute;width:20%;aspect-ratio:1;border-radius:50%;background:color-mix(in srgb,#FFFCF7 70%,transparent);right:34%;top:22%"></div>
+        </div>
+      </section>
+
+      <!-- For you shelf -->
+      <section style="padding:var(--space-6) 0;border-top:1px solid var(--color-divider)">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-4);flex-wrap:wrap">
+          <h2 style="font-size:30px;margin:0">{{ shelfHeading }}</h2>
+          <button type="button" class="btn btn-ghost" onClick="{{ toggleWhy }}" style="font-size:13px">Why am I seeing this?</button>
+        </div>
+
+        <sc-if value="{{ recLoading }}" hint-placeholder-val="{{ false }}">
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:var(--space-4);margin-top:var(--space-4)">
+            <sc-for list="{{ skeletons }}" as="s" hint-placeholder-count="5">
+              <div>
+                <div class="fct-skel" style="aspect-ratio:4/5;border-radius:var(--radius-lg)"></div>
+                <div class="fct-skel" style="height:12px;width:70%;border-radius:999px;margin-top:12px"></div>
+                <div class="fct-skel" style="height:12px;width:38%;border-radius:999px;margin-top:8px"></div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ recEmpty }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top:var(--space-4);padding:var(--space-6);border:1px dashed var(--color-divider);border-radius:var(--radius-lg);background:var(--color-surface)">
+            <p style="margin:0 0 var(--space-2);font-size:15px">No recommendations came back for this shopper. The request succeeded with an empty result set.</p>
+            <button type="button" class="btn btn-secondary" onClick="{{ browseAll }}">Browse all products</button>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ recError }}" hint-placeholder-val="{{ false }}">
+          <div role="alert" style="margin-top:var(--space-4);padding:var(--space-6);border:1px solid var(--error);border-radius:var(--radius-lg);background:#FBF0EE">
+            <p style="margin:0 0 var(--space-1);font-size:15px;font-weight:600;color:var(--error)">Recommendation service unavailable</p>
+            <p style="margin:0 0 var(--space-3);font-size:14px;color:var(--ink-2)">The catalog is unaffected. Correlation ID <code style="font-family:ui-monospace,monospace;font-size:13px">{{ correlationId }}</code></p>
+            <div style="display:flex;gap:var(--space-2);flex-wrap:wrap">
+              <button type="button" class="btn btn-primary" onClick="{{ retryRecs }}">Retry</button>
+              <button type="button" class="btn btn-secondary" onClick="{{ browseAll }}">Browse all products</button>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ recOk }}" hint-placeholder-val="{{ true }}">
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:var(--space-4);margin-top:var(--space-4)">
+            <sc-for list="{{ recItems }}" as="p" hint-placeholder-count="5">
+              <article class="fct-card fct-rise" style="min-width:0;display:flex;flex-direction:column">
+                <a href="#" onClick="{{ p.onOpen }}" style="text-decoration:none;color:inherit;display:block">
+                  <div class="fct-tile" style="{{ p.tileStyle }}">
+                    <span aria-hidden="true" style="{{ p.blobStyle }}"></span>
+                    <span style="position:absolute;left:10px;top:10px;font-size:10px;font-weight:700;letter-spacing:0.08em;background:var(--color-surface);color:var(--ink-2);padding:3px 9px;border-radius:999px">{{ p.rankLabel }}</span>
+                  </div>
+                  <p style="margin:12px 0 0;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-2)">{{ p.category }}</p>
+                  <p class="fct-name" style="margin:4px 0 0;font-family:var(--font-heading);font-size:17px;line-height:1.2;transition:color 160ms ease">{{ p.name }}</p>
+                  <p style="margin:4px 0 0;font-size:14px;color:var(--ink-2)">{{ p.priceLabel }}</p>
+                </a>
+                <button type="button" class="btn btn-secondary" onClick="{{ p.onAdd }}" disabled="{{ p.soldOut }}" style="margin-top:10px;align-self:flex-start;padding:6px 14px;font-size:13px">{{ p.addLabel }}</button>
+              </article>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <p style="margin:var(--space-4) 0 0;font-size:12px;color:var(--ink-2);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span aria-hidden="true" style="{{ proofDotStyle }}"></span>
+          <span>{{ provenanceLine }}</span>
+        </p>
+
+        <sc-if value="{{ whyOpen }}" hint-placeholder-val="{{ false }}">
+          <dl class="fct-rise" style="margin:var(--space-3) 0 0;padding:var(--space-4);background:var(--color-surface);border:1px solid var(--color-divider);border-radius:var(--radius-lg);display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:var(--space-3) var(--space-6);font-size:13px">
+            <sc-for list="{{ whyRows }}" as="r" hint-placeholder-count="5">
+              <div style="min-width:0">
+                <dt style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-2)">{{ r.label }}</dt>
+                <dd style="margin:3px 0 0;font-family:ui-monospace,monospace;font-size:13px;overflow-wrap:anywhere">{{ r.value }}</dd>
+              </div>
+            </sc-for>
+          </dl>
+        </sc-if>
+      </section>
+
+      <!-- All products -->
+      <section style="padding:var(--space-6) 0 var(--space-8);border-top:1px solid var(--color-divider)">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:var(--space-4);flex-wrap:wrap">
+          <h2 style="font-size:30px;margin:0">All products</h2>
+          <div class="seg" role="group" aria-label="Filter by category">
+            <sc-for list="{{ categories }}" as="c" hint-placeholder-count="5">
+              <label class="seg-opt">
+                <input type="radio" name="fct-cat" checked="{{ c.checked }}" onChange="{{ c.onPick }}">
+                <span>{{ c.label }}</span>
+              </label>
+            </sc-for>
+          </div>
+        </div>
+
+        <sc-if value="{{ catalogLoading }}" hint-placeholder-val="{{ true }}">
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:var(--space-6) var(--space-4);margin-top:var(--space-6)">
+            <sc-for list="{{ gridSkeletons }}" as="s" hint-placeholder-count="8">
+              <div>
+                <div class="fct-skel" style="aspect-ratio:4/5;border-radius:var(--radius-lg)"></div>
+                <div class="fct-skel" style="height:12px;width:64%;border-radius:999px;margin-top:12px"></div>
+                <div class="fct-skel" style="height:12px;width:34%;border-radius:999px;margin-top:8px"></div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ catalogReady }}" hint-placeholder-val="{{ false }}">
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:var(--space-6) var(--space-4);margin-top:var(--space-6)">
+            <sc-for list="{{ gridItems }}" as="p" hint-placeholder-count="8">
+              <article class="fct-card" style="min-width:0;display:flex;flex-direction:column">
+                <a href="#" onClick="{{ p.onOpen }}" style="text-decoration:none;color:inherit;display:block">
+                  <div class="fct-tile" style="{{ p.tileStyle }}">
+                    <span aria-hidden="true" style="{{ p.blobStyle }}"></span>
+                    <span style="{{ p.soldOutBadgeStyle }}">Unavailable</span>
+                  </div>
+                  <p style="margin:12px 0 0;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-2)">{{ p.category }}</p>
+                  <p class="fct-name" style="margin:4px 0 0;font-family:var(--font-heading);font-size:18px;line-height:1.2;transition:color 160ms ease">{{ p.name }}</p>
+                  <p style="margin:5px 0 0;font-size:14px;color:var(--ink-2)">{{ p.metaLine }}</p>
+                </a>
+                <button type="button" class="btn btn-secondary" onClick="{{ p.onAdd }}" disabled="{{ p.soldOut }}" style="margin-top:12px;align-self:flex-start;padding:7px 16px;font-size:13px">{{ p.addLabel }}</button>
+              </article>
+            </sc-for>
+          </div>
+        </sc-if>
+      </section>
+    </main>
+  </sc-if>
+
+  <!-- ══ PRODUCT DETAIL ══ -->
+  <sc-if value="{{ isProduct }}" hint-placeholder-val="{{ false }}">
+    <main style="max-width:1280px;margin:0 auto;padding:var(--space-6) var(--space-6) 0">
+      <button type="button" class="btn btn-ghost" onClick="{{ goCatalog }}" style="margin-bottom:var(--space-4);font-size:13px">← All products</button>
+
+      <sc-if value="{{ productLoading }}" hint-placeholder-val="{{ false }}">
+        <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-8)">
+          <div class="fct-skel" style="aspect-ratio:4/5;border-radius:var(--radius-lg)"></div>
+          <div>
+            <div class="fct-skel" style="height:16px;width:30%;border-radius:999px"></div>
+            <div class="fct-skel" style="height:40px;width:80%;border-radius:999px;margin-top:16px"></div>
+            <div class="fct-skel" style="height:14px;width:100%;border-radius:999px;margin-top:24px"></div>
+            <div class="fct-skel" style="height:14px;width:92%;border-radius:999px;margin-top:10px"></div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ productReady }}" hint-placeholder-val="{{ true }}">
+        <section style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-8);align-items:start">
+          <div style="{{ detailTileStyle }}">
+            <span aria-hidden="true" style="{{ detailBlobStyle }}"></span>
+          </div>
+          <div style="min-width:0;padding-top:var(--space-2)">
+            <p style="margin:0;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-2)">{{ detail.category }}</p>
+            <h1 style="font-size:clamp(30px,3.4vw,44px);line-height:1.06;margin:var(--space-2) 0 var(--space-3)">{{ detail.name }}</h1>
+            <p style="margin:0 0 var(--space-4);font-size:22px;font-family:var(--font-heading)">{{ detail.priceLabel }}</p>
+            <p style="margin:0 0 var(--space-4);font-size:15px;color:var(--ink-2);max-width:46ch;text-wrap:pretty">{{ detail.description }}</p>
+
+            <p style="margin:0 0 var(--space-4);display:inline-flex;align-items:center;gap:8px;font-size:13px">
+              <span aria-hidden="true" style="{{ detailAvailDotStyle }}"></span>
+              <span style="{{ detailAvailTextStyle }}">{{ detail.availLabel }}</span>
+            </p>
+
+            <div style="display:flex;gap:var(--space-3);align-items:center;flex-wrap:wrap">
+              <div style="display:flex;align-items:center;gap:2px;border:1px solid var(--color-divider);border-radius:999px;padding:3px;background:var(--color-surface)">
+                <button type="button" class="btn btn-icon" onClick="{{ decQty }}" aria-label="Decrease quantity" style="width:34px;height:34px;font-size:17px">−</button>
+                <span aria-live="polite" style="min-width:30px;text-align:center;font-size:15px;font-weight:600">{{ qty }}</span>
+                <button type="button" class="btn btn-icon" onClick="{{ incQty }}" aria-label="Increase quantity" style="width:34px;height:34px;font-size:17px">+</button>
+              </div>
+              <button type="button" class="btn btn-primary" onClick="{{ addDetail }}" disabled="{{ detail.soldOut }}" style="padding:12px 26px;font-size:15px">{{ detail.addLabel }}</button>
+            </div>
+
+            <dl style="margin:var(--space-6) 0 0;padding-top:var(--space-4);border-top:1px solid var(--color-divider);display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:var(--space-3) var(--space-4);font-size:13px">
+              <sc-for list="{{ detailFacts }}" as="f" hint-placeholder-count="3">
+                <div>
+                  <dt style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-2)">{{ f.label }}</dt>
+                  <dd style="margin:3px 0 0">{{ f.value }}</dd>
+                </div>
+              </sc-for>
+            </dl>
+          </div>
+        </section>
+
+        <section style="margin-top:var(--space-8);padding:var(--space-6) 0 var(--space-8);border-top:1px solid var(--color-divider)">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-4);flex-wrap:wrap">
+            <h2 style="font-size:28px;margin:0">You may also like</h2>
+            <button type="button" class="btn btn-ghost" onClick="{{ toggleWhy }}" style="font-size:13px">Why am I seeing this?</button>
+          </div>
+
+          <sc-if value="{{ recLoading }}" hint-placeholder-val="{{ false }}">
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:var(--space-4);margin-top:var(--space-4)">
+              <sc-for list="{{ skeletons }}" as="s" hint-placeholder-count="5">
+                <div>
+                  <div class="fct-skel" style="aspect-ratio:4/5;border-radius:var(--radius-lg)"></div>
+                  <div class="fct-skel" style="height:12px;width:70%;border-radius:999px;margin-top:12px"></div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ recEmpty }}" hint-placeholder-val="{{ false }}">
+            <div style="margin-top:var(--space-4);padding:var(--space-6);border:1px dashed var(--color-divider);border-radius:var(--radius-lg);background:var(--color-surface)">
+              <p style="margin:0 0 var(--space-2);font-size:15px">Nothing related came back for this product.</p>
+              <button type="button" class="btn btn-secondary" onClick="{{ browseAll }}">Browse all products</button>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ recError }}" hint-placeholder-val="{{ false }}">
+            <div role="alert" style="margin-top:var(--space-4);padding:var(--space-6);border:1px solid var(--error);border-radius:var(--radius-lg);background:#FBF0EE">
+              <p style="margin:0 0 var(--space-1);font-size:15px;font-weight:600;color:var(--error)">Recommendation service unavailable</p>
+              <p style="margin:0 0 var(--space-3);font-size:14px;color:var(--ink-2)">Correlation ID <code style="font-family:ui-monospace,monospace">{{ correlationId }}</code></p>
+              <button type="button" class="btn btn-primary" onClick="{{ retryRecs }}">Retry</button>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ recOk }}" hint-placeholder-val="{{ true }}">
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:var(--space-4);margin-top:var(--space-4)">
+              <sc-for list="{{ recItems }}" as="p" hint-placeholder-count="5">
+                <article class="fct-card fct-rise" style="min-width:0">
+                  <a href="#" onClick="{{ p.onOpen }}" style="text-decoration:none;color:inherit;display:block">
+                    <div class="fct-tile" style="{{ p.tileStyle }}">
+                      <span aria-hidden="true" style="{{ p.blobStyle }}"></span>
+                    </div>
+                    <p style="margin:12px 0 0;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-2)">{{ p.category }}</p>
+                    <p class="fct-name" style="margin:4px 0 0;font-family:var(--font-heading);font-size:17px;line-height:1.2;transition:color 160ms ease">{{ p.name }}</p>
+                    <p style="margin:4px 0 0;font-size:14px;color:var(--ink-2)">{{ p.priceLabel }}</p>
+                  </a>
+                </article>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <p style="margin:var(--space-4) 0 0;font-size:12px;color:var(--ink-2);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span aria-hidden="true" style="{{ proofDotStyle }}"></span>
+            <span>{{ provenanceLine }}</span>
+          </p>
+
+          <sc-if value="{{ whyOpen }}" hint-placeholder-val="{{ false }}">
+            <dl class="fct-rise" style="margin:var(--space-3) 0 0;padding:var(--space-4);background:var(--color-surface);border:1px solid var(--color-divider);border-radius:var(--radius-lg);display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:var(--space-3) var(--space-6);font-size:13px">
+              <sc-for list="{{ whyRows }}" as="r" hint-placeholder-count="5">
+                <div style="min-width:0">
+                  <dt style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-2)">{{ r.label }}</dt>
+                  <dd style="margin:3px 0 0;font-family:ui-monospace,monospace;font-size:13px;overflow-wrap:anywhere">{{ r.value }}</dd>
+                </div>
+              </sc-for>
+            </dl>
+          </sc-if>
+        </section>
+      </sc-if>
+    </main>
+  </sc-if>
+
+  <!-- ══ COMPARE LAB ══ -->
+  <sc-if value="{{ isCompare }}" hint-placeholder-val="{{ false }}">
+    <main style="max-width:1280px;margin:0 auto;padding:var(--space-6) var(--space-6) var(--space-8)">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:var(--space-6);flex-wrap:wrap;padding-bottom:var(--space-4);border-bottom:1px solid var(--color-divider)">
+        <div style="min-width:0">
+          <p style="margin:0;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-2)">Demo controls · compare users</p>
+          <h1 style="font-size:clamp(30px,3.6vw,44px);margin:var(--space-2) 0 var(--space-2)">Same request, four shoppers.</h1>
+          <p style="margin:0;font-size:14px;color:var(--ink-2);max-width:62ch;text-wrap:pretty">{{ compareConditions }}</p>
+        </div>
+        <div style="display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap">
+          <span style="font-size:12px;color:var(--ink-2)">{{ compareRunLabel }}</span>
+          <button type="button" class="btn btn-primary" onClick="{{ rerunCompare }}" style="padding:10px 20px">Re-run Top-N</button>
+        </div>
+      </div>
+
+      <sc-if value="{{ compareDiffShown }}" hint-placeholder-val="{{ false }}">
+        <p class="fct-rise" style="{{ compareDiffStyle }}">{{ compareDiffLabel }}</p>
+      </sc-if>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(258px,1fr));gap:var(--space-4);margin-top:var(--space-6);align-items:start">
+        <sc-for list="{{ compareColumns }}" as="col" hint-placeholder-count="4">
+          <section class="card elev-sm" style="background:var(--color-surface);padding:var(--space-4);gap:var(--space-3);min-width:0">
+            <header style="display:flex;align-items:center;gap:10px">
+              <span aria-hidden="true" style="{{ col.avatarStyle }}"></span>
+              <span style="display:flex;flex-direction:column;min-width:0">
+                <span style="font-family:var(--font-heading);font-size:19px;line-height:1.15">{{ col.name }}</span>
+                <span style="font-size:12px;color:var(--ink-2)">{{ col.blurb }}</span>
+              </span>
+            </header>
+
+            <ol style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px">
+              <sc-for list="{{ col.items }}" as="it" hint-placeholder-count="5">
+                <li style="display:flex;align-items:center;gap:10px;padding:6px;border-radius:999px;background:var(--color-bg)">
+                  <span aria-hidden="true" style="{{ it.chipStyle }}"></span>
+                  <span style="display:flex;flex-direction:column;min-width:0;flex:1">
+                    <span style="font-size:13px;font-weight:600;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ it.name }}</span>
+                    <span style="font-size:11px;color:var(--ink-2)">{{ it.sub }}</span>
+                  </span>
+                  <span style="{{ it.deltaStyle }}">{{ it.delta }}</span>
+                </li>
+              </sc-for>
+            </ol>
+
+            <dl style="margin:0;padding-top:var(--space-3);border-top:1px solid var(--color-divider);display:flex;flex-direction:column;gap:7px;font-size:12px">
+              <sc-for list="{{ col.meta }}" as="m" hint-placeholder-count="3">
+                <div style="display:flex;justify-content:space-between;gap:var(--space-2)">
+                  <dt style="color:var(--ink-2)">{{ m.label }}</dt>
+                  <dd style="margin:0;font-family:ui-monospace,monospace;text-align:right;overflow-wrap:anywhere">{{ m.value }}</dd>
+                </div>
+              </sc-for>
+            </dl>
+
+            <p style="{{ col.pillStyle }}">
+              <span aria-hidden="true">{{ col.pillIcon }}</span>
+              <span>{{ col.pillLabel }}</span>
+            </p>
+          </section>
+        </sc-for>
+      </div>
+
+      <section style="margin-top:var(--space-8)">
+        <h2 style="font-size:26px;margin:0 0 var(--space-3)">Similarity summary</h2>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:var(--space-4);align-items:start">
+          <div class="card" style="background:var(--color-surface);padding:var(--space-4);gap:var(--space-3)">
+            <table class="table">
+              <thead>
+                <tr><th>Pair</th><th style="text-align:right">Overlap</th><th style="text-align:right">Jaccard</th></tr>
+              </thead>
+              <tbody>
+                <sc-for list="{{ pairRows }}" as="r" hint-placeholder-count="6">
+                  <tr>
+                    <td style="font-size:13px">{{ r.pair }}</td>
+                    <td style="text-align:right;font-family:ui-monospace,monospace;font-size:13px">{{ r.overlap }}</td>
+                    <td style="text-align:right;font-family:ui-monospace,monospace;font-size:13px">{{ r.jaccard }}</td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card" style="background:var(--color-surface);padding:var(--space-4);gap:var(--space-3)">
+            <dl style="margin:0;display:flex;flex-direction:column;gap:var(--space-3)">
+              <sc-for list="{{ summaryRows }}" as="s" hint-placeholder-count="4">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;gap:var(--space-3)">
+                  <dt style="font-size:13px;color:var(--ink-2)">{{ s.label }}</dt>
+                  <dd style="margin:0;font-size:14px;font-weight:600;text-align:right">{{ s.value }}</dd>
+                </div>
+              </sc-for>
+            </dl>
+            <div style="{{ gateStyle }}">
+              <p style="margin:0 0 4px;font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px"><span aria-hidden="true">{{ gateIcon }}</span><span>{{ gateTitle }}</span></p>
+              <p style="margin:0;font-size:13px;line-height:1.5">{{ gateBody }}</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </sc-if>
+
+  <!-- ══ ORDER CONFIRMATION ══ -->
+  <sc-if value="{{ isOrder }}" hint-placeholder-val="{{ false }}">
+    <main style="max-width:1280px;margin:0 auto;padding:var(--space-8) var(--space-6) 0">
+      <section style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,0.9fr);gap:var(--space-8);align-items:start">
+        <div style="min-width:0">
+          <span class="tag tag-accent-2">Simulated · no payment taken</span>
+          <h1 style="font-size:clamp(32px,4vw,50px);line-height:1.05;margin:var(--space-3) 0 var(--space-3)">Thank you, {{ personaName }}.</h1>
+          <p style="margin:0 0 var(--space-4);font-size:16px;color:var(--ink-2);max-width:46ch">Order <strong>{{ orderId }}</strong> was recorded against the demo session. Nothing was charged and no inventory moved.</p>
+          <div style="display:flex;gap:var(--space-2);flex-wrap:wrap">
+            <button type="button" class="btn btn-primary" onClick="{{ goCatalog }}" style="padding:11px 22px">Continue exploring</button>
+            <button type="button" class="btn btn-secondary" onClick="{{ goCompare }}" style="padding:11px 22px">Open compare lab</button>
+          </div>
+          <p style="margin:var(--space-6) 0 0;font-size:12px;color:var(--ink-2);font-family:ui-monospace,monospace">{{ receiptLine }}</p>
+        </div>
+
+        <div class="card elev-sm" style="background:var(--color-surface);padding:var(--space-6);gap:var(--space-3)">
+          <h2 style="font-size:20px;margin:0 0 var(--space-2)">Order summary</h2>
+          <sc-for list="{{ orderLines }}" as="l" hint-placeholder-count="2">
+            <div style="display:flex;justify-content:space-between;gap:var(--space-3);font-size:14px;padding-bottom:var(--space-2);border-bottom:1px solid var(--color-divider)">
+              <span style="min-width:0">{{ l.name }}<span style="color:var(--ink-2)"> {{ l.qtyLabel }}</span></span>
+              <span style="white-space:nowrap">{{ l.total }}</span>
+            </div>
+          </sc-for>
+          <div style="display:flex;justify-content:space-between;font-size:17px;font-family:var(--font-heading);padding-top:var(--space-2)">
+            <span>Total</span><span>{{ orderTotal }}</span>
+          </div>
+        </div>
+      </section>
+
+      <section style="margin-top:var(--space-8);padding:var(--space-6) 0 var(--space-8);border-top:1px solid var(--color-divider)">
+        <h2 style="font-size:28px;margin:0 0 var(--space-4)">Continue exploring</h2>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:var(--space-4)">
+          <sc-for list="{{ recItems }}" as="p" hint-placeholder-count="5">
+            <article class="fct-card" style="min-width:0">
+              <a href="#" onClick="{{ p.onOpen }}" style="text-decoration:none;color:inherit;display:block">
+                <div class="fct-tile" style="{{ p.tileStyle }}">
+                  <span aria-hidden="true" style="{{ p.blobStyle }}"></span>
+                </div>
+                <p style="margin:12px 0 0;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-2)">{{ p.category }}</p>
+                <p class="fct-name" style="margin:4px 0 0;font-family:var(--font-heading);font-size:17px;line-height:1.2;transition:color 160ms ease">{{ p.name }}</p>
+                <p style="margin:4px 0 0;font-size:14px;color:var(--ink-2)">{{ p.priceLabel }}</p>
+              </a>
+            </article>
+          </sc-for>
+        </div>
+        <p style="margin:var(--space-4) 0 0;font-size:12px;color:var(--ink-2);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span aria-hidden="true" style="{{ proofDotStyle }}"></span>
+          <span>{{ provenanceLine }}</span>
+        </p>
+      </section>
+    </main>
+  </sc-if>
+
+  <footer style="max-width:1280px;margin:0 auto;padding:var(--space-6);border-top:1px solid var(--color-divider);display:flex;justify-content:space-between;gap:var(--space-4);flex-wrap:wrap;font-size:12px;color:var(--ink-2)">
+    <span>Facet — a GraphRec demonstration store. Products, prices and orders are fictional.</span>
+    <span style="font-family:ui-monospace,monospace">{{ footerProvenance }}</span>
+  </footer>
+
+  <!-- ══ CART DRAWER ══ -->
+  <sc-if value="{{ drawerOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;z-index:60;display:flex;justify-content:flex-end">
+      <div onClick="{{ closeDrawer }}" style="position:absolute;inset:0;background:color-mix(in srgb,#1D2823 42%,transparent)"></div>
+      <aside role="dialog" aria-modal="true" aria-label="Cart" class="fct-rise" style="{{ drawerPanelStyle }}">
+        <header style="display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);padding:var(--space-4) var(--space-6);border-bottom:1px solid var(--color-divider)">
+          <span style="display:flex;flex-direction:column">
+            <span style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-2)">{{ cartNamespace }}</span>
+            <span style="font-family:var(--font-heading);font-size:24px">Your cart</span>
+          </span>
+          <button type="button" class="btn btn-icon btn-secondary" onClick="{{ closeDrawer }}" aria-label="Close cart">✕</button>
+        </header>
+
+        <div style="flex:1;overflow:auto;padding:var(--space-4) var(--space-6)">
+          <sc-if value="{{ cartEmpty }}" hint-placeholder-val="{{ true }}">
+            <div style="padding:var(--space-8) 0;text-align:left">
+              <div aria-hidden="true" style="width:72px;height:72px;border-radius:50%;background:var(--color-accent-100);margin-bottom:var(--space-4)"></div>
+              <p style="margin:0 0 var(--space-2);font-family:var(--font-heading);font-size:21px">Nothing here yet</p>
+              <p style="margin:0 0 var(--space-4);font-size:14px;color:var(--ink-2);max-width:34ch">This cart belongs to {{ personaName }} only. Switching personas swaps it out.</p>
+              <button type="button" class="btn btn-secondary" onClick="{{ browseAll }}">Browse products</button>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ cartHasItems }}" hint-placeholder-val="{{ false }}">
+            <ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--space-4)">
+              <sc-for list="{{ cartLines }}" as="l" hint-placeholder-count="2">
+                <li style="display:flex;gap:var(--space-3);align-items:flex-start">
+                  <span aria-hidden="true" style="{{ l.thumbStyle }}"></span>
+                  <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">
+                    <span style="font-family:var(--font-heading);font-size:16px;line-height:1.2">{{ l.name }}</span>
+                    <span style="font-size:13px;color:var(--ink-2)">{{ l.priceLabel }}</span>
+                    <span style="display:flex;align-items:center;gap:var(--space-3)">
+                      <span style="display:flex;align-items:center;gap:2px;border:1px solid var(--color-divider);border-radius:999px;padding:2px">
+                        <button type="button" class="btn btn-icon" onClick="{{ l.onDec }}" aria-label="{{ l.decAria }}" style="width:28px;height:28px">−</button>
+                        <span style="min-width:24px;text-align:center;font-size:14px;font-weight:600">{{ l.qty }}</span>
+                        <button type="button" class="btn btn-icon" onClick="{{ l.onInc }}" aria-label="{{ l.incAria }}" style="width:28px;height:28px">+</button>
+                      </span>
+                      <button type="button" class="btn btn-ghost" onClick="{{ l.onRemove }}" style="font-size:12px">Remove</button>
+                    </span>
+                  </span>
+                  <span style="font-size:14px;white-space:nowrap">{{ l.total }}</span>
+                </li>
+              </sc-for>
+            </ul>
+          </sc-if>
+        </div>
+
+        <footer style="padding:var(--space-4) var(--space-6) var(--space-6);border-top:1px solid var(--color-divider);background:var(--color-surface)">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:var(--space-3)">
+            <span style="font-size:14px;color:var(--ink-2)">Subtotal</span>
+            <span style="font-family:var(--font-heading);font-size:24px">{{ cartSubtotal }}</span>
+          </div>
+          <button type="button" class="btn btn-primary btn-block" onClick="{{ simulatePurchase }}" disabled="{{ cartEmpty }}" style="padding:13px;font-size:15px">Simulate purchase</button>
+          <p style="margin:var(--space-2) 0 0;font-size:11px;color:var(--ink-2);text-align:center">No payment is taken. A deterministic order event is queued.</p>
+        </footer>
+      </aside>
+    </div>
+  </sc-if>
+
+  <!-- ══ DEMO RAIL ══ -->
+  <sc-if value="{{ railClosed }}" hint-placeholder-val="{{ true }}">
+    <button type="button" class="btn elev-md" onClick="{{ openRail }}" aria-expanded="false" style="position:fixed;right:0;top:50%;transform:translateY(-50%);z-index:55;background:var(--color-accent);color:var(--color-bg);border-radius:var(--radius-md) 0 0 var(--radius-md);padding:16px 12px;writing-mode:vertical-rl;letter-spacing:0.14em;font-size:11px;text-transform:uppercase">Demo rail</button>
+  </sc-if>
+
+  <sc-if value="{{ railOpen }}" hint-placeholder-val="{{ false }}">
+    <aside aria-label="Demo controls" class="elev-lg" style="position:fixed;right:0;top:0;bottom:0;width:min(340px,92vw);z-index:56;background:var(--color-surface);border-left:1px solid var(--color-divider);display:flex;flex-direction:column;overflow:auto;animation:fct-slide 200ms ease-out both">
+      <header style="display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-3);padding:var(--space-4) var(--space-4) var(--space-3);border-bottom:1px solid var(--color-divider);position:sticky;top:0;background:var(--color-surface)">
+        <span style="display:flex;flex-direction:column">
+          <span style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-2)">Demo controls</span>
+          <span style="font-family:var(--font-heading);font-size:20px">Session &amp; provenance</span>
+        </span>
+        <button type="button" class="btn btn-icon btn-secondary" onClick="{{ closeRail }}" aria-label="Close demo controls">✕</button>
+      </header>
+
+      <section style="padding:var(--space-4)">
+        <h3 style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-2);font-family:var(--font-body);font-weight:700;margin:0 0 var(--space-2)">Session</h3>
+        <dl style="margin:0;display:flex;flex-direction:column;gap:8px;font-size:12px">
+          <sc-for list="{{ railSession }}" as="r" hint-placeholder-count="6">
+            <div style="display:flex;justify-content:space-between;gap:var(--space-2)">
+              <dt style="color:var(--ink-2);white-space:nowrap">{{ r.label }}</dt>
+              <dd style="margin:0;font-family:ui-monospace,monospace;text-align:right;overflow-wrap:anywhere">{{ r.value }}</dd>
+            </div>
+          </sc-for>
+        </dl>
+        <p style="margin:var(--space-3) 0 0;font-size:11px;color:var(--ink-2)">Seed and health are read-only in the browser; they are reported by the serving layer.</p>
+      </section>
+
+      <section style="padding:0 var(--space-4) var(--space-4)">
+        <h3 style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-2);font-family:var(--font-body);font-weight:700;margin:0 0 var(--space-2)">Proof status</h3>
+        <div class="seg" role="group" aria-label="Proof status" style="width:100%">
+          <sc-for list="{{ proofOptions }}" as="o" hint-placeholder-count="3">
+            <label class="seg-opt" style="flex:1;justify-content:center;font-size:12px">
+              <input type="radio" name="fct-proof" checked="{{ o.checked }}" onChange="{{ o.onPick }}">
+              <span>{{ o.label }}</span>
+            </label>
+          </sc-for>
+        </div>
+        <p style="margin:var(--space-2) 0 0;font-size:11px;color:var(--ink-2)">{{ proofExplainer }}</p>
+      </section>
+
+      <section style="padding:0 var(--space-4) var(--space-6)">
+        <h3 style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-2);font-family:var(--font-body);font-weight:700;margin:0 0 var(--space-2)">Force a state</h3>
+        <ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px">
+          <sc-for list="{{ railStates }}" as="s" hint-placeholder-count="10">
+            <li>
+              <button type="button" onClick="{{ s.onForce }}" aria-pressed="{{ s.active }}" style="{{ s.btnStyle }}">
+                <span style="display:flex;flex-direction:column;align-items:flex-start;min-width:0">
+                  <span style="font-size:13px;font-weight:600">{{ s.label }}</span>
+                  <span style="font-size:11px;color:var(--ink-2);text-align:left">{{ s.hint }}</span>
+                </span>
+                <span aria-hidden="true" style="{{ s.markStyle }}">{{ s.mark }}</span>
+              </button>
+            </li>
+          </sc-for>
+        </ul>
+        <button type="button" class="btn btn-secondary btn-block" onClick="{{ resetDemo }}" style="margin-top:var(--space-4)">Reset to a clean demo</button>
+      </section>
+    </aside>
+  </sc-if>
+
+  <!-- ══ TOAST ══ -->
+  <sc-if value="{{ toastShown }}" hint-placeholder-val="{{ false }}">
+    <div role="status" class="elev-lg fct-rise" style="{{ toastStyle }}">
+      <span aria-hidden="true" style="{{ toastDotStyle }}"></span>
+      <span style="flex:1;min-width:0;font-size:13px;line-height:1.4">{{ toastMessage }}</span>
+      <button type="button" class="btn btn-ghost" onClick="{{ toastAction }}" style="font-size:12px;white-space:nowrap">{{ toastActionLabel }}</button>
+    </div>
+  </sc-if>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;defaultProof&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;verified&quot;,&quot;preview&quot;,&quot;fallback&quot;],&quot;default&quot;:&quot;preview&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Demo state&quot;},&quot;railOpen&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Demo state&quot;},&quot;recCount&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:5,&quot;min&quot;:3,&quot;max&quot;:6,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Recommendations&quot;}}">
+class Component extends DCLogic {
+  catalog = [
+    { id: 'p01', name: 'Rosewater Toning Mist', cat: 'Skin', price: 24, pop: 0.82, size: '120 ml', desc: 'A fine-mist toner of steam-distilled rose and glycerin. Settles redness after cleansing and leaves skin damp enough for a serum to absorb.' },
+    { id: 'p02', name: 'Barrier Repair Cream', cat: 'Skin', price: 38, pop: 0.91, size: '50 ml', desc: 'Ceramides in a squalane base. Thick without being occlusive, formulated for skin that stings after actives.' },
+    { id: 'p03', name: 'Overnight Ceramide Mask', cat: 'Skin', price: 34, pop: 0.64, size: '60 ml', desc: 'A sleeping mask that seals moisture in place for eight hours. Fragrance-free and safe over retinoids.' },
+    { id: 'p04', name: 'Gentle Milk Cleanser', cat: 'Skin', price: 22, pop: 0.77, size: '150 ml', desc: 'A low-foam milk cleanser that removes sunscreen without stripping. Suitable for morning and evening use.' },
+    { id: 'p05', name: 'Niacinamide Serum 10%', cat: 'Skin', price: 29, pop: 0.88, size: '30 ml', desc: 'Ten percent niacinamide with zinc PCA for visible pores and uneven tone. Layer under moisturiser.' },
+    { id: 'p06', name: 'Curl Defining Cream', cat: 'Hair', price: 26, pop: 0.73, size: '200 ml', desc: 'A humidity-resistant cream for waves and coils. Defines clumps on damp hair without a cast.' },
+    { id: 'p07', name: 'Scalp Balance Tonic', cat: 'Hair', price: 31, pop: 0.61, size: '100 ml', desc: 'A lightweight tonic with salicylic acid and rosemary for flaking and build-up between washes.' },
+    { id: 'p08', name: 'Weightless Repair Oil', cat: 'Hair', price: 35, pop: 0.69, size: '50 ml', desc: 'Camellia and marula oils in a fast-absorbing blend. Two drops through mid-lengths, nothing left on the hands.' },
+    { id: 'p09', name: 'Slow Rinse Conditioner', cat: 'Hair', price: 24, pop: 0.7, size: '250 ml', desc: 'A slip-heavy conditioner made for detangling in the shower. Rinses clean, leaves no coating.' },
+    { id: 'p10', name: 'Sheer Tint SPF 30', cat: 'Makeup', price: 32, pop: 0.86, size: '40 ml', desc: 'A skin tint with mineral SPF 30 in twelve shades. Evens tone without covering texture.' },
+    { id: 'p11', name: 'Cream Blush in Ochre', cat: 'Makeup', price: 23, pop: 0.75, size: '6 g', desc: 'A warm ochre cream blush that melts into skin. Buildable from a wash to a flush with fingertips.' },
+    { id: 'p12', name: 'Lash Conditioning Mascara', cat: 'Makeup', price: 26, pop: 0.71, size: '9 ml', desc: 'Separates and conditions with peptides and castor oil. Washes off with warm water alone.' },
+    { id: 'p13', name: 'Satin Lip Balm', cat: 'Makeup', price: 18, pop: 0.8, size: '4 g', desc: 'A satin-finish balm in a twist tube. Comfortable enough to reapply without looking at a mirror.' },
+    { id: 'p14', name: 'Brow Setting Gel', cat: 'Makeup', price: 19, pop: 0.58, size: '8 ml', desc: 'A clear flexible gel that holds brows in place all day and brushes out at night.' },
+    { id: 'p15', name: 'Fig & Cedar Eau de Parfum', cat: 'Fragrance', price: 78, pop: 0.79, size: '50 ml', desc: 'Green fig over cedar and a dry musk. Warms through the afternoon rather than announcing itself.' },
+    { id: 'p16', name: 'Neroli Hand Wash', cat: 'Fragrance', price: 21, pop: 0.66, size: '300 ml', desc: 'A gentle surfactant wash scented with neroli and petitgrain. Made for a sink that guests will use.' },
+    { id: 'p17', name: 'Amber Solid Perfume', cat: 'Fragrance', price: 44, pop: 0.62, size: '15 g', desc: 'Amber and benzoin in a beeswax base, in a refillable tin. Apply at the wrists and collarbone.' },
+    { id: 'p18', name: 'Linen Room Mist', cat: 'Fragrance', price: 29, pop: 0.6, size: '200 ml', desc: 'A clean linen and white tea mist for bedding and towels. Alcohol-light so fabric dries fast.' },
+  ];
+
+  personas = [
+    { key: 'maya', name: 'Maya', blurb: 'Barrier-first skincare, fragrance-free', color: '#174A3A', affinity: { Skin: 1, Makeup: 0.45, Hair: 0.2, Fragrance: 0.05 } },
+    { key: 'noah', name: 'Noah', blurb: 'Curl care and scalp health', color: '#4B6C8F', affinity: { Hair: 1, Skin: 0.4, Fragrance: 0.25, Makeup: 0.1 } },
+    { key: 'lina', name: 'Lina', blurb: 'Fragrance-forward, buys gifts', color: '#E58B72', affinity: { Fragrance: 1, Makeup: 0.5, Skin: 0.3, Hair: 0.15 } },
+    { key: 'guest', name: 'New visitor', blurb: 'No history — popular catalog fallback', color: '#82857D', affinity: null },
+  ];
+
+  unavailableId = 'p03';
+  sharedExclusions = ['p13', 'p16'];
+
+  state = {
+    route: 'catalog', routeId: null,
+    persona: 'maya', category: 'All',
+    carts: { maya: [], noah: [], lina: [], guest: [] },
+    drawer: false, rail: false, personaMenu: false, why: false,
+    catalogLoading: true, productLoading: false,
+    recPhase: 'loading',
+    proof: 'preview',
+    seed: 4817, qty: 1,
+    orderId: null, orderSnapshot: null, orderTotalV: 0,
+    compareRun: 1, compareSeedBump: 0, compareDiff: null,
+    toast: null, live: '', forced: null,
+    reqId: 'req_8f21c6b0', corrId: 'cid_4a7e-2205',
+  };
+
+  componentDidMount() {
+    if (this.props.defaultProof) this.setState({ proof: this.props.defaultProof });
+    if (this.props.railOpen) this.setState({ rail: true });
+    this._t1 = setTimeout(() => this.setState({ catalogLoading: false }), 620);
+    this._t2 = setTimeout(() => this.setState({ recPhase: 'ok' }), 1080);
+  }
+  componentWillUnmount() { [this._t1, this._t2, this._t3, this._t4].forEach(clearTimeout); }
+
+  // ── helpers ────────────────────────────────────────────────────────────
+  h(str) { let x = 2166136261; for (let i = 0; i < str.length; i++) { x ^= str.charCodeAt(i); x = Math.imul(x, 16777619); } return (x >>> 0) / 4294967296; }
+  rid() { return 'req_' + Math.floor(this.h('r' + Date.now() + Math.random()) * 0xffffffff).toString(16).padStart(8, '0').slice(0, 8); }
+  persona(key) { return this.personas.find(p => p.key === (key || this.state.persona)); }
+  money(n) { return '$' + n.toFixed(2); }
+  recN() { return Math.max(3, Math.min(6, this.props.recCount || 5)); }
+  modelVersion() { return this.state.proof === 'verified' ? 'v2026.08.3-graphrec' : 'v2026.08.3-preview'; }
+  strategy() {
+    if (this.state.persona === 'guest' || this.state.proof === 'fallback') return 'popularity_topn';
+    return this.state.proof === 'verified' ? 'graphrec_user_embedding_topn' : 'graphrec_serving_preview_topn';
+  }
+  isFallback() { return this.state.persona === 'guest' || this.state.proof === 'fallback'; }
+
+  rank(personaKey, seed, exclude) {
+    const p = this.persona(personaKey);
+    const ex = new Set(exclude || []);
+    const fallback = personaKey === 'guest' || this.state.proof === 'fallback';
+    return this.catalog
+      .filter(it => !ex.has(it.id) && it.id !== this.unavailableId)
+      .map(it => {
+        const noise = this.h(personaKey + ':' + seed + ':' + it.id);
+        const score = fallback
+          ? it.pop * 0.9 + noise * 0.1
+          : (p.affinity ? p.affinity[it.cat] : 0.5) * 0.68 + it.pop * 0.12 + noise * 0.2;
+        return { ...it, score };
+      })
+      .sort((a, b) => b.score - a.score || (a.id < b.id ? -1 : 1))
+      .slice(0, this.recN());
+  }
+
+  tile(it, i) {
+    const ramp = {
+      Skin: ['#E9EFE7', '#C9D8CD'], Hair: ['#F2E8DD', '#DCC9B4'],
+      Makeup: ['#F7E7E2', '#E8C4B8'], Fragrance: ['#F5EEDE', '#E4D4AF'],
+    }[it.cat];
+    const ang = 120 + (this.h(it.id) * 80 | 0);
+    return `position:relative;overflow:hidden;border-radius:var(--radius-lg);aspect-ratio:4/5;background:linear-gradient(${ang}deg,${ramp[0]} 0%,${ramp[1]} 100%)`;
+  }
+  blob(it) {
+    const x = 12 + this.h(it.id + 'x') * 40, y = 16 + this.h(it.id + 'y') * 34, s = 40 + this.h(it.id + 's') * 24;
+    const tint = { Skin: '#174A3A', Hair: '#8C6239', Makeup: '#C0715F', Fragrance: '#9A6A20' }[it.cat];
+    return `position:absolute;left:${x.toFixed(1)}%;top:${y.toFixed(1)}%;width:${s.toFixed(1)}%;aspect-ratio:1;border-radius:50%;background:color-mix(in srgb,${tint} 16%,transparent)`;
+  }
+  swatch(it, size) {
+    const ramp = { Skin: '#C9D8CD', Hair: '#DCC9B4', Makeup: '#E8C4B8', Fragrance: '#E4D4AF' }[it.cat];
+    return `flex:none;width:${size}px;height:${size}px;border-radius:50%;background:${ramp}`;
+  }
+  decorate(list, opts) {
+    const o = opts || {};
+    return list.map((it, i) => ({
+      ...it,
+      priceLabel: this.money(it.price),
+      metaLine: it.id === this.unavailableId ? 'Currently unavailable' : this.money(it.price) + ' · ' + it.size,
+      soldOut: it.id === this.unavailableId,
+      addLabel: it.id === this.unavailableId ? 'Unavailable' : 'Add',
+      rankLabel: '#' + (i + 1),
+      tileStyle: this.tile(it, i),
+      blobStyle: this.blob(it),
+      soldOutBadgeStyle: it.id === this.unavailableId
+        ? 'position:absolute;left:10px;top:10px;font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;background:var(--color-surface);color:#A43E35;padding:4px 10px;border-radius:999px'
+        : 'display:none',
+      onOpen: (e) => { if (e) e.preventDefault(); this.openProduct(it.id, o.fromRec); },
+      onAdd: (e) => { if (e) e.preventDefault(); e && e.stopPropagation && e.stopPropagation(); this.addToCart(it.id, 1); },
+    }));
+  }
+
+  // ── actions ────────────────────────────────────────────────────────────
+  nav(route, id) {
+    this.setState({ route, routeId: id || null, personaMenu: false, why: false, qty: 1 });
+    if (typeof window !== 'undefined') window.scrollTo(0, 0);
+  }
+  openProduct(id, fromRec) {
+    if (fromRec) this.toast('Feedback sent for this recommendation.', 'note');
+    this.setState({ productLoading: true, recPhase: this.state.forced === 'recLoading' ? 'loading' : 'loading' });
+    this.nav('product', id);
+    clearTimeout(this._t3); clearTimeout(this._t4);
+    this._t3 = setTimeout(() => this.setState({ productLoading: false, live: 'Product loaded. View tracked.' }), 380);
+    this._t4 = setTimeout(() => this.setState({ recPhase: this.state.forced === 'recEmpty' ? 'empty' : this.state.forced === 'recError' ? 'error' : 'ok' }), 900);
+  }
+  setPersona(key) {
+    this.setState({
+      persona: key, personaMenu: false, recPhase: 'loading', why: false,
+      proof: key === 'guest' ? 'fallback' : (this.state.proof === 'fallback' ? 'preview' : this.state.proof),
+      reqId: this.rid(),
+      live: 'Switched to ' + this.persona(key).name + '. Recommendations reloading.',
+    });
+    clearTimeout(this._t2);
+    this._t2 = setTimeout(() => this.setState({ recPhase: 'ok' }), 760);
+  }
+  addToCart(id, n) {
+    const key = this.state.persona;
+    const lines = this.state.carts[key].slice();
+    const found = lines.find(l => l.id === id);
+    if (found) found.qty += n; else lines.push({ id, qty: n });
+    const item = this.catalog.find(p => p.id === id);
+    this.setState({ carts: { ...this.state.carts, [key]: lines }, live: item.name + ' added. Cart has ' + lines.reduce((s, l) => s + l.qty, 0) + ' items.' });
+    this.toast(item.name + ' added to ' + this.persona().name + "'s cart", 'ok');
+  }
+  setQty(id, n) {
+    const key = this.state.persona;
+    const lines = this.state.carts[key].map(l => l.id === id ? { ...l, qty: Math.max(0, l.qty + n) } : l).filter(l => l.qty > 0);
+    this.setState({ carts: { ...this.state.carts, [key]: lines } });
+  }
+  toast(message, kind) {
+    this.setState({ toast: { message, kind } });
+    clearTimeout(this._tt);
+    this._tt = setTimeout(() => this.setState({ toast: null }), 3600);
+  }
+  simulatePurchase() {
+    const lines = this.state.carts[this.state.persona];
+    if (!lines.length) return;
+    const snapshot = lines.map(l => ({ ...this.catalog.find(p => p.id === l.id), qty: l.qty }));
+    const total = snapshot.reduce((s, l) => s + l.price * l.qty, 0);
+    const oid = 'ORD-' + (1000 + Math.floor(this.h(Date.now() + this.state.persona) * 8999));
+    this.setState({
+      orderId: oid, orderSnapshot: snapshot, orderTotalV: total, drawer: false,
+      carts: { ...this.state.carts, [this.state.persona]: [] },
+      recPhase: 'loading', live: 'Purchase simulated. Order ' + oid + '.',
+    });
+    this.nav('order', oid);
+    clearTimeout(this._t2);
+    this._t2 = setTimeout(() => this.setState({ recPhase: 'ok' }), 700);
+  }
+  rerun() {
+    const prev = this.compareSets();
+    const bump = this.state.forced === 'compareDrift' ? this.state.compareSeedBump + 1 : this.state.compareSeedBump;
+    this.setState({ compareRun: this.state.compareRun + 1, compareSeedBump: bump }, () => {
+      const now = this.compareSets();
+      const identical = this.personas.every(p => prev[p.key].join() === now[p.key].join());
+      this.setState({ compareDiff: identical ? 'identical' : 'changed' });
+    });
+  }
+  compareSets() {
+    const seed = this.state.seed + this.state.compareSeedBump;
+    const out = {};
+    this.personas.forEach(p => { out[p.key] = this.rank(p.key, seed, this.sharedExclusions).map(i => i.id); });
+    return out;
+  }
+  force(key) {
+    const s = { forced: key, why: this.state.why };
+    if (key === 'catalogLoading') { s.catalogLoading = true; s.route = 'catalog'; clearTimeout(this._t1); this._t1 = setTimeout(() => this.setState({ catalogLoading: false }), 1600); }
+    if (key === 'recLoading') { s.recPhase = 'loading'; clearTimeout(this._t2); this._t2 = setTimeout(() => this.setState({ recPhase: 'ok', forced: null }), 2200); }
+    if (key === 'recEmpty') s.recPhase = 'empty';
+    if (key === 'recError') { s.recPhase = 'error'; s.corrId = 'cid_' + Math.floor(this.h('c' + Date.now()) * 0xffff).toString(16) + '-2205'; }
+    if (key === 'unavailable') { this.nav('product', this.unavailableId); s.route = 'product'; s.routeId = this.unavailableId; s.productLoading = false; }
+    if (key === 'emptyCart') { s.carts = { ...this.state.carts, [this.state.persona]: [] }; s.drawer = true; }
+    if (key === 'purchase') {
+      const key2 = this.state.persona;
+      if (!this.state.carts[key2].length) s.carts = { ...this.state.carts, [key2]: [{ id: 'p02', qty: 1 }, { id: 'p05', qty: 2 }] };
+      this.setState(s, () => this.simulatePurchase());
+      return;
+    }
+    if (key === 'fallback') { s.persona = 'guest'; s.proof = 'fallback'; s.recPhase = 'ok'; s.route = 'catalog'; }
+    if (key === 'preview') { s.proof = 'preview'; s.recPhase = 'ok'; if (this.state.persona === 'guest') s.persona = 'maya'; }
+    if (key === 'verified') { s.proof = 'verified'; s.recPhase = 'ok'; if (this.state.persona === 'guest') s.persona = 'maya'; }
+    if (key === 'telemetry') { this.toast('Could not record that view event. Browsing is unaffected.', 'warn'); s.forced = null; }
+    s.reqId = this.rid();
+    this.setState(s);
+  }
+  reset() {
+    clearTimeout(this._t1); clearTimeout(this._t2);
+    this.setState({
+      route: 'catalog', routeId: null, persona: 'maya', category: 'All',
+      carts: { maya: [], noah: [], lina: [], guest: [] }, drawer: false, why: false,
+      catalogLoading: true, productLoading: false, recPhase: 'loading',
+      proof: this.props.defaultProof || 'preview', qty: 1, forced: null, toast: null,
+      compareRun: 1, compareSeedBump: 0, compareDiff: null, reqId: this.rid(),
+    });
+    this._t1 = setTimeout(() => this.setState({ catalogLoading: false }), 600);
+    this._t2 = setTimeout(() => this.setState({ recPhase: 'ok' }), 1000);
+  }
+
+  // ── derived ────────────────────────────────────────────────────────────
+  provenance() {
+    const v = this.modelVersion();
+    if (this.state.persona === 'guest' || this.state.proof === 'fallback') return 'Popular catalog fallback · new visitor';
+    if (this.state.proof === 'verified') return 'Model-backed for ' + this.persona().name + ' · version ' + v;
+    return 'GraphRec serving preview · version ' + v;
+  }
+  proofColor() { return this.state.proof === 'verified' ? 'var(--verified)' : this.state.proof === 'fallback' ? 'var(--ink-2)' : 'var(--preview)'; }
+
+  renderVals() {
+    const st = this.state;
+    const p = this.persona();
+    const cart = st.carts[st.persona];
+    const cartCount = cart.reduce((s, l) => s + l.qty, 0);
+    const cartLineData = cart.map(l => ({ ...this.catalog.find(c => c.id === l.id), qty: l.qty }));
+    const subtotal = cartLineData.reduce((s, l) => s + l.price * l.qty, 0);
+    const inCart = cart.map(l => l.id);
+
+    const detailItem = st.route === 'product' ? this.catalog.find(c => c.id === st.routeId) : null;
+    const exclude = inCart.concat(detailItem ? [detailItem.id] : []);
+    const recs = this.rank(st.persona, st.seed, exclude);
+    const recItems = this.decorate(recs, { fromRec: true });
+
+    const gridSource = st.category === 'All' ? this.catalog : this.catalog.filter(c => c.cat === st.category);
+
+    const sets = this.compareSets();
+    const prevSets = sets;
+    const compareColumns = this.personas.map(per => {
+      const ranked = this.rank(per.key, st.seed + st.compareSeedBump, this.sharedExclusions);
+      const fb = per.key === 'guest' || st.proof === 'fallback';
+      return {
+        name: per.name, blurb: per.blurb,
+        avatarStyle: `flex:none;width:34px;height:34px;border-radius:50%;background:${per.color}`,
+        items: ranked.map((it, i) => ({
+          name: (i + 1) + '. ' + it.name,
+          sub: it.cat + ' · ' + this.money(it.price),
+          chipStyle: this.swatch(it, 26),
+          delta: it.score.toFixed(3),
+          deltaStyle: 'font-family:ui-monospace,monospace;font-size:11px;color:var(--ink-2);white-space:nowrap',
+        })),
+        meta: [
+          { label: 'strategy', value: fb ? 'popularity_topn' : (st.proof === 'verified' ? 'graphrec_user_embedding_topn' : 'graphrec_serving_preview_topn') },
+          { label: 'model', value: fb ? '—' : this.modelVersion() },
+          { label: 'excluded', value: String(this.sharedExclusions.length) },
+        ],
+        pillIcon: fb ? '◇' : st.proof === 'verified' ? '✓' : '!',
+        pillLabel: fb ? 'Catalog fallback' : st.proof === 'verified' ? 'Verified personalization' : 'Serving preview · unverified',
+        pillStyle: `margin:0;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;padding:8px 12px;border-radius:999px;background:${fb ? 'var(--color-neutral-200)' : st.proof === 'verified' ? '#E4F0E9' : '#F7ECD8'};color:${fb ? 'var(--color-neutral-800)' : st.proof === 'verified' ? 'var(--verified)' : 'var(--preview)'}`,
+      };
+    });
+
+    const pairs = [];
+    for (let i = 0; i < this.personas.length; i++) {
+      for (let j = i + 1; j < this.personas.length; j++) {
+        const a = new Set(sets[this.personas[i].key]), b = new Set(sets[this.personas[j].key]);
+        let inter = 0; a.forEach(v => { if (b.has(v)) inter++; });
+        const uni = new Set([...a, ...b]).size;
+        pairs.push({ pair: this.personas[i].name + ' ↔ ' + this.personas[j].name, overlap: inter + ' / ' + this.recN(), jaccard: (inter / uni).toFixed(2) });
+      }
+    }
+    const uniqueAll = new Set(Object.values(sets).flat()).size;
+    const distinct = new Set(Object.values(sets).map(v => v.join())).size;
+    const gateOk = st.proof === 'verified' && distinct >= 3;
+
+    const railStateDefs = [
+      ['catalogLoading', 'Catalog loading skeleton', 'Blocks the grid for 1.6s'],
+      ['recLoading', 'Recommendation loading', 'Shelf only — page stays usable'],
+      ['recEmpty', 'Empty recommendation result', '200 with zero items'],
+      ['recError', 'Recommendation API unavailable', 'Retry + correlation ID'],
+      ['unavailable', 'Product unavailable', 'Opens the disabled SKU'],
+      ['emptyCart', 'Empty cart', 'Clears and opens the drawer'],
+      ['purchase', 'Simulated purchase success', 'Seeds a cart and checks out'],
+      ['fallback', 'New visitor fallback', 'Switches to the guest persona'],
+      ['preview', 'Serving preview / unverified', 'Amber provenance, no gate pass'],
+      ['verified', 'Verified personalization', 'Green gate, per-user rankings'],
+      ['telemetry', 'Telemetry failure toast', 'Recoverable, non-blocking'],
+    ];
+
+    return {
+      // header / persona
+      personaName: p.name,
+      personaMenuOpen: st.personaMenu,
+      personaAvatarStyle: `flex:none;width:30px;height:30px;border-radius:50%;background:${p.color}`,
+      togglePersonaMenu: () => this.setState({ personaMenu: !st.personaMenu }),
+      personaOptions: this.personas.map(o => ({
+        name: o.name, blurb: o.blurb, selected: o.key === st.persona,
+        rowStyle: `display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:999px;cursor:pointer;background:${o.key === st.persona ? 'var(--color-accent-100)' : 'transparent'}`,
+        avatarStyle: `flex:none;width:30px;height:30px;border-radius:50%;background:${o.color}`,
+        checkStyle: `margin-left:auto;font-size:13px;color:var(--color-accent);opacity:${o.key === st.persona ? 1 : 0}`,
+        onPick: () => this.setPersona(o.key),
+        onKey: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.setPersona(o.key); } },
+      })),
+      navShopCurrent: st.route === 'catalog' ? 'page' : 'false',
+      navCompareCurrent: st.route === 'compare' ? 'page' : 'false',
+      cartCount: String(cartCount),
+      cartAria: 'Cart, ' + cartCount + ' items',
+      cartBadgeStyle: `min-width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;border-radius:999px;font-size:12px;font-weight:700;background:${cartCount ? 'var(--color-accent)' : 'var(--color-neutral-300)'};color:${cartCount ? 'var(--color-bg)' : 'var(--ink-2)'}`,
+      liveMessage: st.live,
+
+      // routes
+      isCatalog: st.route === 'catalog', isProduct: st.route === 'product',
+      isCompare: st.route === 'compare', isOrder: st.route === 'order',
+      goCatalog: (e) => { if (e) e.preventDefault(); this.nav('catalog'); },
+      goCompare: (e) => { if (e) e.preventDefault(); this.nav('compare'); },
+      shopSkincare: () => this.setState({ category: 'Skin' }),
+      browseAll: () => { this.setState({ category: 'All', drawer: false }); this.nav('catalog'); },
+
+      // catalog
+      catalogLoading: st.catalogLoading, catalogReady: !st.catalogLoading,
+      skeletons: [1, 2, 3, 4, 5], gridSkeletons: [1, 2, 3, 4, 5, 6, 7, 8],
+      gridItems: this.decorate(gridSource),
+      categories: ['All', 'Skin', 'Hair', 'Makeup', 'Fragrance'].map(c => ({
+        label: c, checked: st.category === c, onPick: () => this.setState({ category: c }),
+      })),
+
+      // shelf
+      shelfHeading: st.persona === 'guest' ? 'Popular right now' : 'For ' + p.name,
+      recItems,
+      recLoading: st.recPhase === 'loading', recOk: st.recPhase === 'ok',
+      recEmpty: st.recPhase === 'empty', recError: st.recPhase === 'error',
+      retryRecs: () => { this.setState({ recPhase: 'loading', forced: null, reqId: this.rid() }); clearTimeout(this._t2); this._t2 = setTimeout(() => this.setState({ recPhase: 'ok' }), 800); },
+      provenanceLine: this.provenance(),
+      proofDotStyle: `flex:none;width:8px;height:8px;border-radius:50%;background:${this.proofColor()}`,
+      footerProvenance: this.strategy() + ' · ' + this.modelVersion(),
+      whyOpen: st.why,
+      toggleWhy: () => this.setState({ why: !st.why }),
+      whyRows: [
+        { label: 'Request ID', value: st.reqId },
+        { label: 'Raw strategy', value: this.strategy() },
+        { label: 'Fallback', value: this.isFallback() ? 'true' : 'false' },
+        { label: 'Model version', value: this.isFallback() ? 'n/a' : this.modelVersion() },
+        { label: 'Excluded products', value: String(exclude.length) },
+      ],
+      correlationId: st.corrId,
+
+      // product detail
+      productLoading: st.productLoading, productReady: !st.productLoading && !!detailItem,
+      detail: detailItem ? {
+        name: detailItem.name, category: detailItem.cat, description: detailItem.desc,
+        priceLabel: this.money(detailItem.price),
+        soldOut: detailItem.id === this.unavailableId,
+        addLabel: detailItem.id === this.unavailableId ? 'Unavailable' : 'Add to cart',
+        availLabel: detailItem.id === this.unavailableId ? 'Unavailable — not orderable in this demo' : 'In stock · ships in 2 days',
+      } : {},
+      detailTileStyle: detailItem ? this.tile(detailItem, 0) : 'display:none',
+      detailBlobStyle: detailItem ? this.blob(detailItem) : 'display:none',
+      detailAvailDotStyle: `flex:none;width:8px;height:8px;border-radius:50%;background:${detailItem && detailItem.id === this.unavailableId ? 'var(--error)' : 'var(--verified)'}`,
+      detailAvailTextStyle: `color:${detailItem && detailItem.id === this.unavailableId ? 'var(--error)' : 'var(--verified)'};font-weight:600`,
+      detailFacts: detailItem ? [
+        { label: 'Size', value: detailItem.size },
+        { label: 'Category', value: detailItem.cat },
+        { label: 'SKU', value: detailItem.id.toUpperCase() },
+      ] : [],
+      qty: String(st.qty),
+      incQty: () => this.setState({ qty: st.qty + 1 }),
+      decQty: () => this.setState({ qty: Math.max(1, st.qty - 1) }),
+      addDetail: () => detailItem && this.addToCart(detailItem.id, st.qty),
+
+      // compare
+      compareConditions: 'Top-' + this.recN() + ' · seed ' + (st.seed + st.compareSeedBump) + ' · shared exclusions: Satin Lip Balm, Neroli Hand Wash · identical request body for every shopper.',
+      compareRunLabel: 'Run ' + st.compareRun,
+      compareColumns,
+      compareDiffShown: !!st.compareDiff,
+      compareDiffLabel: st.compareDiff === 'identical'
+        ? 'Re-run produced byte-identical rankings for all four shoppers. Ordering is repeatable at this seed.'
+        : 'Re-run produced different rankings — the seed changed, so ordering is not comparable to the previous run.',
+      compareDiffStyle: `margin:var(--space-4) 0 0;padding:12px 16px;border-radius:999px;font-size:13px;background:${st.compareDiff === 'identical' ? '#E4F0E9' : '#F7ECD8'};color:${st.compareDiff === 'identical' ? 'var(--verified)' : 'var(--preview)'}`,
+      rerunCompare: () => this.rerun(),
+      pairRows: pairs,
+      summaryRows: [
+        { label: 'Unique products across personas', value: uniqueAll + ' of ' + (this.recN() * 4) + ' slots' },
+        { label: 'Distinct ranking orders', value: distinct + ' of 4' },
+        { label: 'Ordering repeatable at this seed', value: 'Yes' },
+        { label: 'Serving path', value: this.strategy() },
+      ],
+      gateStyle: `margin-top:var(--space-2);padding:var(--space-3) var(--space-4);border-radius:var(--radius-md);background:${gateOk ? '#E4F0E9' : '#F7ECD8'};color:${gateOk ? 'var(--verified)' : 'var(--preview)'}`,
+      gateIcon: gateOk ? '✓' : '!',
+      gateTitle: gateOk ? 'Proof gate passed' : 'Unverified',
+      gateBody: gateOk
+        ? 'Rankings differ per shopper, repeat exactly at a fixed seed, and carry a model version. This is model-backed personalization.'
+        : 'The SaaS integration returns rankings and they repeat at a fixed seed, but the query vector is not yet user-specific. Do not present this as verified personalization.',
+
+      // order
+      orderId: st.orderId || '',
+      orderLines: (st.orderSnapshot || []).map(l => ({ name: l.name, qtyLabel: '× ' + l.qty, total: this.money(l.price * l.qty) })),
+      orderTotal: this.money(st.orderTotalV),
+      receiptLine: 'event: order.simulated · id ' + (st.orderId || '') + ' · queued · ' + this.modelVersion(),
+
+      // cart drawer
+      drawerOpen: st.drawer,
+      openDrawer: () => this.setState({ drawer: true, personaMenu: false }),
+      closeDrawer: () => this.setState({ drawer: false }),
+      drawerPanelStyle: 'position:relative;width:min(440px,100%);height:100%;display:flex;flex-direction:column;background:var(--color-bg);border-left:1px solid var(--color-divider)',
+      cartNamespace: 'cart · ' + st.persona,
+      cartEmpty: cartLineData.length === 0, cartHasItems: cartLineData.length > 0,
+      cartSubtotal: this.money(subtotal),
+      cartLines: cartLineData.map(l => ({
+        name: l.name, qty: String(l.qty), priceLabel: this.money(l.price) + ' · ' + l.size,
+        total: this.money(l.price * l.qty), thumbStyle: this.swatch(l, 56),
+        incAria: 'Increase quantity of ' + l.name, decAria: 'Decrease quantity of ' + l.name,
+        onInc: () => this.setQty(l.id, 1), onDec: () => this.setQty(l.id, -1),
+        onRemove: () => this.setQty(l.id, -l.qty),
+      })),
+      simulatePurchase: () => this.simulatePurchase(),
+
+      // demo rail
+      railOpen: st.rail, railClosed: !st.rail,
+      openRail: () => this.setState({ rail: true }),
+      closeRail: () => this.setState({ rail: false }),
+      railSession: [
+        { label: 'persona cookie', value: 'facet_demo_user=' + st.persona },
+        { label: 'session', value: 'sess_' + st.persona + '_01' },
+        { label: 'request', value: st.reqId },
+        { label: 'seed', value: String(st.seed + st.compareSeedBump) },
+        { label: 'model', value: this.isFallback() ? 'n/a' : this.modelVersion() },
+        { label: 'health', value: st.recPhase === 'error' ? 'degraded' : 'ok' },
+      ],
+      proofOptions: [
+        { label: 'Verified', checked: st.proof === 'verified', onPick: () => this.force('verified') },
+        { label: 'Preview', checked: st.proof === 'preview', onPick: () => this.force('preview') },
+        { label: 'Fallback', checked: st.proof === 'fallback', onPick: () => this.force('fallback') },
+      ],
+      proofExplainer: st.proof === 'verified'
+        ? 'Rankings are user-specific and the proof gate passes.'
+        : st.proof === 'fallback'
+          ? 'Every shelf serves the popular catalog, labelled as a fallback.'
+          : 'The serving path works but the query vector is not user-specific yet.',
+      railStates: railStateDefs.map(([k, label, hint]) => ({
+        label, hint, active: st.forced === k,
+        btnStyle: `width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;border-radius:var(--radius-md);cursor:pointer;text-align:left;font-family:var(--font-body);border:1px solid ${st.forced === k ? 'var(--color-accent)' : 'var(--color-divider)'};background:${st.forced === k ? 'var(--color-accent-100)' : 'var(--color-bg)'};color:var(--color-text)`,
+        markStyle: `font-size:12px;color:var(--color-accent);opacity:${st.forced === k ? 1 : 0}`,
+        mark: '●',
+        onForce: () => this.force(k),
+      })),
+      resetDemo: () => this.reset(),
+
+      // toast
+      toastShown: !!st.toast,
+      toastMessage: st.toast ? st.toast.message : '',
+      toastStyle: `position:fixed;left:var(--space-6);bottom:var(--space-6);z-index:70;display:flex;align-items:center;gap:12px;max-width:380px;padding:12px 12px 12px 16px;border-radius:999px;background:var(--color-surface);border:1px solid ${st.toast && st.toast.kind === 'warn' ? 'var(--preview)' : 'var(--color-divider)'}`,
+      toastDotStyle: `flex:none;width:8px;height:8px;border-radius:50%;background:${st.toast && st.toast.kind === 'warn' ? 'var(--preview)' : st.toast && st.toast.kind === 'ok' ? 'var(--verified)' : 'var(--ink-2)'}`,
+      toastActionLabel: st.toast && st.toast.kind === 'ok' ? 'View cart' : 'Dismiss',
+      toastAction: () => this.setState({ toast: null, drawer: st.toast && st.toast.kind === 'ok' }),
+    };
+  }
+}
+
+</script>
+</body>
+</html>
