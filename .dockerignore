@@ -3,6 +3,9 @@
 .venv
 __pycache__
 *.pyc
-frontend
+frontend_02
+sdks
+Claude outputs
+*.zip
 docs
 diagrams

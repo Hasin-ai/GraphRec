@@ -1,0 +1,155 @@
+/* Modernist design-system tokens and component classes (ported from design/_ds/.../styles.css).
+   Semantic state roles (--ok/--warn/--danger/--info/--neu) and the dark theme come from the
+   console prototype (design/GraphRec Console.dc.html); Modernist itself is a mono palette. */
+@import url("https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&display=swap");
+
+:root {
+  color-scheme: light;
+  --color-bg: #f3f2f2;
+  --color-surface: #eae9e9;
+  --color-text: #201e1d;
+  --color-accent: #ec3013;
+  --color-accent-2: #e15b47;
+  --color-divider: color-mix(in srgb, #201e1d 40%, transparent);
+
+  --color-neutral-100: #f8f4f4;
+  --color-neutral-200: #eae7e7;
+  --color-neutral-300: #d7d3d3;
+  --color-neutral-400: #bab6b6;
+  --color-neutral-500: #9b9797;
+  --color-neutral-600: #7d7979;
+  --color-neutral-700: #605d5d;
+  --color-neutral-800: #444141;
+  --color-neutral-900: #2d2b2b;
+
+  --color-accent-100: #fff2ef;
+  --color-accent-200: #ffe0d9;
+  --color-accent-300: #ffc4b8;
+  --color-accent-400: #ff9783;
+  --color-accent-500: #ff563c;
+  --color-accent-600: #dd2b0f;
+  --color-accent-700: #ae1800;
+  --color-accent-800: #7c1405;
+  --color-accent-900: #4d170e;
+
+  --font-heading: "Archivo", system-ui, sans-serif;
+  --font-heading-weight: 800;
+  --font-body: "Archivo", system-ui, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-6: 24px; --space-8: 32px;
+  --radius-sm: 0px; --radius-md: 0px; --radius-lg: 0px;
+
+  --shadow-sm: 0 1px 2px color-mix(in srgb, #2d2b2b 14%, transparent);
+  --shadow-md: 0 3px 10px color-mix(in srgb, #2d2b2b 16%, transparent);
+  --shadow-lg: 0 12px 32px color-mix(in srgb, #2d2b2b 22%, transparent);
+
+  --ok: #3f6b4a; --ok-bg: #e7eee8;
+  --warn: #8a6414; --warn-bg: #f3ead6;
+  --danger: #ae1800; --danger-bg: #ffe0d9;
+  --info: #3d5a70; --info-bg: #e5eaee;
+  --neu: #605d5d; --neu-bg: #eae7e7;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-bg: #1a1918; --color-surface: #232221; --color-text: #f2efec;
+  --color-divider: color-mix(in srgb, #f2efec 32%, transparent);
+  --color-accent: #ff5c3d;
+  --color-accent-100: #3b201a; --color-accent-200: #4d251c; --color-accent-600: #ff7a5f;
+  --color-accent-700: #ff9783; --color-accent-800: #ffc4b8;
+  --color-neutral-100: #2c2a29; --color-neutral-200: #333130; --color-neutral-500: #8a8686;
+  --color-neutral-600: #a3a0a0; --color-neutral-700: #b8b4b4; --color-neutral-800: #d7d3d3; --color-neutral-900: #efecec;
+  --ok: #9cc194; --ok-bg: #212a20;
+  --warn: #dcb469; --warn-bg: #332815;
+  --danger: #eb9c8c; --danger-bg: #3a201a;
+  --info: #a4c0d8; --info-bg: #1f2932;
+  --neu: #b0acac; --neu-bg: #2f2d2c;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--color-bg); color: var(--color-text);
+  font-family: var(--font-body); font-size: 15px; line-height: 1.55; font-weight: 400;
+}
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  line-height: 1.12; letter-spacing: -0.015em; margin: 0 0 var(--space-2);
+}
+h1 { font-size: 42px; } h2 { font-size: 32px; } h3 { font-size: 25px; } h4 { font-size: 20px; }
+p { margin: 0 0 var(--space-3); }
+a { color: var(--color-accent); text-decoration: none; text-underline-offset: 3px; }
+a:hover { color: var(--color-accent-600); text-decoration: underline; }
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+::selection { background: color-mix(in srgb, var(--color-accent) 30%, transparent); }
+.text-muted { color: color-mix(in srgb, var(--color-text) 55%, transparent); }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  cursor: pointer; text-decoration: none;
+  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  font-size: 14px; line-height: 1.2; color: var(--color-text);
+  background: transparent; border: 1px solid transparent;
+  padding: var(--space-2) calc(var(--space-3) * 1.2);
+  border-radius: var(--radius-md);
+}
+.btn:hover { text-decoration: none; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-primary { background: var(--color-accent); color: var(--color-bg); }
+.btn-primary:hover { background: var(--color-accent-600); color: var(--color-bg); }
+.btn-primary:active { background: var(--color-accent-700); }
+.btn-secondary { border-color: var(--color-divider); }
+.btn-secondary:hover { background: color-mix(in srgb, var(--color-text) 7%, transparent); color: var(--color-text); }
+.btn-secondary:active { background: color-mix(in srgb, var(--color-text) 14%, transparent); }
+.btn-ghost { color: var(--color-accent); padding-inline: var(--space-1); }
+.btn-ghost:hover { background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
+.btn-sm { font-size: 12px; padding: 3px 10px; }
+.btn-xs { font-size: 12px; padding: 2px 6px; }
+
+.field > label {
+  display: block; font-size: 12px; margin-bottom: 5px;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+.input {
+  width: 100%; min-height: 36px; padding: 6px 10px; font: inherit;
+  font-size: 14px; color: var(--color-text); caret-color: var(--color-accent);
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider); border-radius: var(--radius-md);
+}
+.input:hover { border-color: color-mix(in srgb, var(--color-text) 45%, transparent); }
+.input:focus-visible { border-color: var(--color-accent); outline-offset: 0; }
+.input.mono { font-family: var(--mono); }
+textarea.input { min-height: 90px; resize: vertical; }
+
+.tag {
+  display: inline-flex; align-items: center; font-size: 11px; letter-spacing: 0.02em;
+  padding: 3px 10px; border-radius: calc(var(--radius-md) * 0.75); white-space: nowrap;
+}
+.tag.mono { font-family: var(--mono); }
+
+.table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.table th {
+  text-align: left; font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--color-neutral-700); padding: 11px 15px; white-space: nowrap;
+  background: var(--color-bg); position: sticky; top: 0;
+  border-bottom: 2px solid var(--color-divider);
+}
+.table td { padding: 12px 15px; border-bottom: 1px solid var(--color-divider); vertical-align: top; }
+.table tbody tr:hover { background: color-mix(in srgb, var(--color-text) 4%, transparent); }
+.table .right { text-align: right; }
+
+.dialog-backdrop {
+  position: fixed; inset: 0; display: grid; place-items: center; padding: var(--space-4);
+  background: color-mix(in srgb, var(--color-neutral-900) 50%, transparent);
+}
+.dialog {
+  width: min(440px, 100%); display: flex; flex-direction: column; gap: var(--space-4);
+  padding: var(--space-4); border-radius: var(--radius-lg);
+  background: var(--color-surface); border: 1px solid var(--color-divider); box-shadow: var(--shadow-lg);
+}
+.dialog-title { font-family: var(--font-heading); font-weight: var(--font-heading-weight); font-size: 20px; }
+.dialog-body { font-size: 14px; display: flex; flex-direction: column; gap: 12px; }
+.dialog-body p { margin: 0; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-2); }
