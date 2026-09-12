@@ -67,12 +67,12 @@ yarn-error.log*
 *.h5
 *.pkl
 *.pickle
-data/
-datasets/
-snapshots/
-artifacts/
-models/
-checkpoints/
+/data/
+/datasets/
+/snapshots/
+/artifacts/
+/models/
+/checkpoints/
 exports/
 
 # ==========================================
@@ -112,3 +112,13 @@ rabbitmq_data/
 docs/
 diagrams/
 
+
+# ==========================================
+# Research notebooks (kept out of the repo)
+# ==========================================
+/dgsr_notebooks/
+.ipynb_checkpoints/
+
+# Playwright
+frontend_02/e2e-results/
+frontend_02/e2e-screens/
