@@ -1,0 +1,48 @@
+{
+  "name": "@graphrec/sdk",
+  "version": "0.2.0",
+  "description": "Official TypeScript/JavaScript SDK for the GraphRec multi-tenant recommendation platform for e-commerce",
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./ecommerce": {
+      "types": "./dist/ecommerce/index.d.ts",
+      "import": "./dist/ecommerce/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=18.17"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm test && npm run build",
+    "smoke": "npm run build && node --experimental-strip-types examples/end-to-end-smoke.ts"
+  },
+  "keywords": [
+    "recommendations",
+    "ecommerce",
+    "recommender-systems",
+    "graphrec",
+    "dgsr",
+    "sdk"
+  ],
+  "devDependencies": {
+    "@types/node": "22.15.3",
+    "typescript": "5.8.3",
+    "vitest": "5.0.0"
+  }
+}
