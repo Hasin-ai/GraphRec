@@ -44,10 +44,11 @@ def main() -> None:
 
         admin.model_versions.activate(candidate.id)
         status = admin.deployment.get()
-        print(f"deployment {status.status}, ready replicas {status.ready_replicas}")
+        print(f"deployment {status.status}, serving {status.active_model_version_id}")
 
         metrics = admin.metrics.summary()
-        if previous is not None and metrics.error_rate > 0.05:
+        # error_rate is None until the new version has served a request.
+        if previous is not None and (metrics.error_rate or 0) > 0.05:
             print("error rate too high, rolling back")
             admin.model_versions.rollback(previous.id)
 

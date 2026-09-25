@@ -113,7 +113,7 @@ def order_id_for(persona_key: str, client_order_key: str) -> str:
 @router.post("/purchase", response_model=Envelope[PurchaseOut])
 async def purchase(body: PurchaseIn, ident: Identity = Depends(identity), svc: Services = Depends(services)) -> Envelope[PurchaseOut]:
     # Validate lines against the catalog first so nothing is sent for an unknown SKU.
-    products = {p.external_id: p for p in await svc.catalog.all()}
+    products = await svc.catalog.lookup([line.product_id for line in body.lines])
     order_id = order_id_for(ident.persona.key, body.client_order_key)
     builder = EventBuilder(default_context={"source": "demo-storefront", "app": "facet"})
     context = ident.context(body.surface)
@@ -183,7 +183,7 @@ async def compare(
 ) -> Envelope[CompareOut]:
     excluded = _clean_ids(exclude)
     results = await asyncio.gather(*(_compare_persona(svc, PERSONAS[k], top_n=top_n, exclude=excluded) for k in PERSONAS))
-    products = {p.external_id: p for p in await svc.catalog.all()}
+    products = await svc.catalog.lookup([item.external_product_id for first, _, _ in results if first is not None for item in first.items])
 
     rankings: Dict[str, List[str]] = {}
     columns: List[CompareColumn] = []

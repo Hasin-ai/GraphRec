@@ -32,6 +32,7 @@ from graphrec_core.settings import Settings
 ROLE_SCOPES: dict[str, list[str]] = {
     "tenant_administrator": [
         "keys:write",
+        "users:write",
         "billing:read",
         "usage:read",
         "catalog:read",

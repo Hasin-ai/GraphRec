@@ -31,6 +31,7 @@ SYNC_TO_ASYNC = {
     resources.RecommendationsResource: resources.AsyncRecommendationsResource,
     resources.Feedback: resources.AsyncFeedback,
     resources.Platform: resources.AsyncPlatform,
+    resources.TenantUsers: resources.AsyncTenantUsers,
 }
 
 
@@ -44,8 +45,14 @@ def test_async_resources_mirror_sync_signatures(sync_cls: type) -> None:
     sync_methods, async_methods = _public_methods(sync_cls), _public_methods(async_cls)
     assert set(sync_methods) == set(async_methods)
     for name, fn in sync_methods.items():
-        assert inspect.iscoroutinefunction(async_methods[name]), name
-        assert str(inspect.signature(fn)) == str(inspect.signature(async_methods[name])), name
+        counterpart = async_methods[name]
+        if inspect.isgeneratorfunction(fn):
+            # A paging iterator becomes an async generator; only the return type differs.
+            assert inspect.isasyncgenfunction(counterpart), name
+            assert inspect.signature(fn).parameters == inspect.signature(counterpart).parameters, name
+            continue
+        assert inspect.iscoroutinefunction(counterpart), name
+        assert str(inspect.signature(fn)) == str(inspect.signature(counterpart)), name
 
 
 def test_clients_expose_the_same_resources() -> None:

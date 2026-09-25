@@ -28,9 +28,10 @@ export type Scope =
   | "recommendations:read"
   | "deployments:read"
   | "metrics:read"
-  | "keys:write";
+  | "keys:write"
+  | "users:write";
 
-export type ApiKeyScope = Exclude<Scope, "keys:write">;
+export type ApiKeyScope = Exclude<Scope, "keys:write" | "users:write">;
 
 /** Decimal money values travel as strings to avoid float rounding; numbers are accepted too. */
 export type Money = string | number;
@@ -293,69 +294,31 @@ export interface TrainingJobList {
 export interface DeploymentStatus {
   status: string;
   active_model_version_id: string | null;
-  desired_model_version_id: string | null;
-  desired_replicas: number;
-  current_replicas: number;
-  ready_replicas: number;
-  last_transition_at: string;
+  /** When the active version was activated; null when nothing is active. */
+  last_transition_at: string | null;
   failure_reason: string | null;
 }
 
-export interface Replica {
-  id: string;
-  model_version_id: string | null;
-  status: string;
-  ready: boolean;
-  started_at: string;
-}
-
-export interface ReplicaStatus {
-  desired_replicas: number;
-  current_replicas: number;
-  ready_replicas: number;
-  replicas: Replica[];
-}
-
-export interface ScalingAction {
-  occurred_at: string;
-  from_replicas: number;
-  to_replicas: number;
-  reason: string;
-}
-
-export interface AutoscalingStatus {
-  min_replicas: number;
-  max_replicas: number;
-  cpu_target_percent: number;
-  inflight_target: number | null;
-  desired_replicas: number;
-  ready_replicas: number;
-  capacity_blocked: boolean;
-  metrics_available: boolean;
-  recent_actions: ScalingAction[];
-}
-
 export interface QualitySummary {
-  hit_at_10: number;
-  ndcg_at_10: number;
-  retrieval_recall_at_k: number;
-  catalog_coverage: number;
-  intra_list_diversity: number;
-  training_loss: number;
-  validation_loss: number;
+  model_version_id: string;
+  version_tag: string;
   recorded_at: string;
+  /** The metrics the training run recorded, verbatim; empty when it recorded none. */
+  metrics: Record<string, unknown>;
 }
 
 export interface MetricsSummary {
   window_start: string;
   window_end: string;
+  request_count: number;
+  /** Requests per minute over the window. */
   request_rate: number;
-  error_rate: number;
-  fallback_rate: number;
-  p95_latency_ms: number;
+  /** Null when no request was recorded: a rate over zero requests is undefined. */
+  error_rate: number | null;
+  fallback_rate: number | null;
+  /** Null when no request was served successfully in the window. */
+  p95_latency_ms: number | null;
   active_model_version_id: string | null;
-  desired_replicas: number;
-  ready_replicas: number;
   quality: QualitySummary | null;
 }
 

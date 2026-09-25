@@ -15,6 +15,7 @@ from graphrec_core.auth.platform import platform_administrator
 from graphrec_core.database.models import PricingPlan
 from graphrec_core.database.session import get_db
 from graphrec_core.errors import ApiError
+from graphrec_core.subscription.service import SubscriptionService
 from graphrec_core.schemas.platform import (
     PlatformAuditItem,
     PlatformAuditListResponse,
@@ -42,6 +43,29 @@ class TenantStatusUpdate(BaseModel):
 
 class QuotaOverrideUpdate(BaseModel):
     overrides: dict[str, Any] = Field(default_factory=dict)
+
+
+class PlanAssignment(BaseModel):
+    plan_id: UUID
+
+
+@router.get("/tenants/{tenant_id}/quotas")
+def get_tenant_quota(tenant_id: UUID, db: Session = Depends(get_db)) -> dict[str, Any]:
+    config = db.scalar(text("SELECT public.platform_tenant_plan(:tenant_id)"), {"tenant_id": tenant_id})
+    if config is None:
+        raise _tenant_not_found(tenant_id)
+    return {"plan_id": config['plan_id'], "plan_code": config['plan_code'], "overrides": config['overrides'],
+        "limits": SubscriptionService._effective_limits(config['plan_limits'], config['quota_limits'], config['overrides'])}
+
+
+@router.post("/tenants/{tenant_id}/plan")
+def assign_tenant_plan(tenant_id: UUID, payload: PlanAssignment, request: Request, db: Session = Depends(get_db)):
+    changed = db.scalar(text("SELECT public.platform_assign_plan(:tenant_id, :plan_id, :correlation_id)"),
+        {"tenant_id": tenant_id, "plan_id": payload.plan_id, "correlation_id": request.state.correlation_id})
+    if not changed:
+        raise ApiError(404, "resource_not_found", "Tenant or active plan not found.")
+    db.commit()
+    return get_tenant_quota(tenant_id, db)
 
 
 def _tenant_not_found(tenant_id: UUID) -> ApiError:
@@ -121,6 +145,10 @@ def set_tenant_quota_override(
     request: Request,
     db: Session = Depends(get_db),
 ) -> PlatformQuotaOverride:
+    current = get_tenant_quota(tenant_id, db)
+    if any(key not in current['limits'] or isinstance(value, bool) or not isinstance(value, int) or value < 0
+           for key, value in payload.overrides.items()):
+        raise ApiError(422, "validation_failed", "Overrides must name supported limits and contain non-negative integers.")
     row = (
         db.execute(
             text(
@@ -171,9 +199,11 @@ def list_platform_audit_logs(db: Session = Depends(get_db)) -> PlatformAuditList
 
 @router.get("/status")
 def get_platform_status(db: Session = Depends(get_db)) -> dict[str, Any]:
+    worker = "unavailable"
     try:
         db.execute(text("SELECT 1"))
         database = "connected"
+        worker = "online" if db.scalar(text("SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND classid = 0 AND objid = 714629381 AND granted)")) else "unavailable"
     except SQLAlchemyError:
         db.rollback()
         database = "unavailable"
@@ -181,6 +211,6 @@ def get_platform_status(db: Session = Depends(get_db)) -> dict[str, Any]:
         "status": "healthy" if database == "connected" else "degraded",
         "api_cluster": "online",
         "database": database,
-        "worker_pool": "not_deployed",
+        "worker_pool": worker,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }

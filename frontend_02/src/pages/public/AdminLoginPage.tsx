@@ -52,7 +52,7 @@ export function AdminLoginPage() {
   }
 
   return (
-    <Page kicker="GraphRec · platform" title="Platform sign-in" subtitle="A separate authentication realm. A platform operator is not a tenant user and resolves no tenant scope.">
+    <Page kicker="GraphRec · platform" title="Platform sign-in" subtitle="Sign in to manage tenants and platform operations.">
       <Form onSubmit={submit} error={error} submitLabel="Sign in" busy={busy} width={420} secondary={{ label: "Tenant sign-in", to: "/login" }}>
         <Field id="token" label="Platform administrator token" wide hint="Configured as PLATFORM_ADMIN_TOKEN on the API. Leaving it empty there disables this realm.">
           <TextInput id="token" type="password" value={token} onChange={setToken} autoComplete="off" required />

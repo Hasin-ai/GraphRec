@@ -46,7 +46,7 @@ function CreateDialog({ onClose, onCreated }: { onClose: () => void; onCreated: 
       <Field id="d-expiry" label="Expiry">
         <Select id="d-expiry" value={expiry} onChange={setExpiry} options={EXPIRY_OPTIONS} />
       </Field>
-      <Field id="d-scopes" label="Allowed integration operations" hint={tenant.role === "tenant_developer" ? "A developer may delegate catalog and event scopes only." : undefined}>
+      <Field id="d-scopes" label="Allowed integration operations" hint={tenant.role === "tenant_developer" ? "A developer may delegate catalog, event and recommendation scopes only." : undefined}>
         <CheckGroup options={API_KEY_SCOPES.filter((s) => allowed.includes(s.scope)).map((s) => ({ value: s.scope, label: s.label }))} value={scopes} onChange={setScopes} />
       </Field>
     </Dialog>
@@ -151,15 +151,13 @@ export function CredentialsPage() {
       subtitle="Credentials authenticate your e-commerce application server-to-server. The secret is displayed once, at creation or rotation, and is not retained."
       actions={[{ label: "Create credential", variant: "primary", onClick: () => setDialog({ kind: "create" }) }]}
     >
-      {keys.error ? <ErrorBanner error={keys.error} /> : null}
-      {keys.loading && !keys.data ? (
-        <Skeleton />
-      ) : (
+      {keys.error ? <ErrorBanner error={keys.error} onRetry={keys.reload} /> : null}
+      {!keys.data ? (keys.loading ? <Skeleton /> : null) : (
         <DataTable
-          minWidth={1080}
-          columns={["Name", "Prefix", "Allowed operations", "Expires", "Revoked at", "Last used", "Authorizes", { label: "", align: "right" }]}
+          minWidth={920}
+          columns={["Name", "Prefix", "Allowed operations", "Expires", "Revoked at", "Last used", "Status", { label: "", align: "right" }]}
           rows={rows}
-          count={`${rows.length} of ${rows.length}`}
+          count={`${rows.length} credentials`}
           empty={{ title: "No credentials yet", body: "Create a credential so your application can authenticate.", action: { label: "Create credential", onClick: () => setDialog({ kind: "create" }) } }}
         />
       )}

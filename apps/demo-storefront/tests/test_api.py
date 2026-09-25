@@ -275,7 +275,7 @@ def test_gate_logic() -> None:
 
 async def test_health_and_error_envelopes(api: httpx.AsyncClient, harness: Harness) -> None:
     ok = await api.get(f"{API}/health")
-    assert ok.json()["data"] == {"storefront": "ok", "graphrec": "ok", "graphrecBaseUrl": "http://graphrec.test", "proofConfigured": False, "proofVersionId": None, "catalogProducts": 23, "correlationId": None}
+    assert ok.json()["data"] == {"storefront": "ok", "graphrec": "ok", "graphrecBaseUrl": "http://graphrec.test", "proofConfigured": False, "proofVersionId": None, "catalogProducts": 24, "correlationId": None}
     harness.client.healthy = False
     down = await api.get(f"{API}/health")
     assert down.json()["data"]["graphrec"] == "unreachable" and down.json()["data"]["correlationId"] == "cid-503"

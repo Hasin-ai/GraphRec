@@ -108,7 +108,8 @@ def main(base_url: str, platform_token: Optional[str]) -> None:
         assert job.model_version_id is not None, job
         version = admin.model_versions.activate(job.model_version_id)
         print(version.version_tag, version.status, admin.deployment.get().status)
-        print("p95", admin.metrics.summary().p95_latency_ms, "ms")
+        summary = admin.metrics.summary()
+        print("requests", summary.request_count, "p95", summary.p95_latency_ms, "ms")
 
         step("recommendations & feedback")
         widget = RecommendationSession(store)

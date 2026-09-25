@@ -59,14 +59,14 @@ describe("CredentialsPage", () => {
     expect(calls.filter((c) => c.init.method === "POST")).toHaveLength(0);
   });
 
-  it("offers a developer only the delegatable catalog and event scopes", async () => {
+  it("offers a developer only the delegatable storefront scopes", async () => {
     signInAsDeveloper();
     const user = userEvent.setup();
     mockFetch([{ path: "/v1/api-keys", body: { items: [] } }, { path: /\/v1\/.*/, body: { items: [] } }]);
     renderAt("/credentials");
     await user.click(await screen.findByRole("button", { name: "Create credential" }));
     const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getAllByRole("checkbox")).toHaveLength(4);
+    expect(within(dialog).getAllByRole("checkbox")).toHaveLength(5);
     expect(within(dialog).queryByLabelText(/Model activation/)).not.toBeInTheDocument();
   });
 

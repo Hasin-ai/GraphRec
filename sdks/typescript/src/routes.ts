@@ -67,6 +67,8 @@ export const ROUTES: ReadonlyMap<string, Route> = new Map<string, Route>([
   r("api_keys.create", "POST", "/v1/api-keys", { auth: "bearer", scope: "keys:write", body: "json" }),
   r("api_keys.rotate", "POST", "/v1/api-keys/{key_id}/rotate", { auth: "bearer", scope: "keys:write", body: "json" }),
   r("api_keys.revoke", "DELETE", "/v1/api-keys/{key_id}", { auth: "bearer", scope: "keys:write", idempotent: true }),
+  r("tenant_users.list", "GET", "/v1/tenant/users", { auth: "bearer", scope: "users:write", idempotent: true }),
+  r("tenant_users.invite", "POST", "/v1/tenant/users", { auth: "bearer", scope: "users:write", body: "json" }),
   // -- billing -------------------------------------------------------------------------
   r("subscription.get", "GET", "/v1/subscription", { scope: "billing:read", idempotent: true }),
   r("usage.get", "GET", "/v1/usage", { scope: "usage:read", idempotent: true }),
@@ -98,8 +100,6 @@ export const ROUTES: ReadonlyMap<string, Route> = new Map<string, Route>([
   r("training_jobs.list", "GET", "/v1/training-jobs", { scope: "training:read", idempotent: true }),
   // -- serving status ------------------------------------------------------------------
   r("deployment.get", "GET", "/v1/deployment", { scope: "deployments:read", idempotent: true }),
-  r("deployment.replicas", "GET", "/v1/deployment/replicas", { scope: "deployments:read", idempotent: true }),
-  r("deployment.autoscaling", "GET", "/v1/deployment/autoscaling", { scope: "deployments:read", idempotent: true }),
   r("metrics.summary", "GET", "/v1/metrics/summary", { scope: "metrics:read", idempotent: true }),
   // -- recommendations & feedback ------------------------------------------------------
   r("recommendations.get", "POST", "/v1/recommendations", { scope: "recommendations:read", idempotent: true, body: "json" }),

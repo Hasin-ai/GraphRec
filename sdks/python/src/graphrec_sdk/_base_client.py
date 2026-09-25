@@ -12,6 +12,7 @@ import platform
 import time
 import uuid
 from functools import lru_cache
+from urllib.parse import urlencode
 from typing import Any, Callable, Dict, Mapping, Optional, Tuple, Union, cast
 
 import httpx
@@ -116,8 +117,18 @@ class _BaseClient:
                 f"{route.method} {route.path} requires a bearer credential. {hint}"
             )
 
-    def _url(self, route: Route, path_params: Optional[Mapping[str, object]]) -> str:
-        return self.base_url + route.build_path(path_params)
+    def _url(
+        self,
+        route: Route,
+        path_params: Optional[Mapping[str, object]],
+        query: Optional[Mapping[str, object]] = None,
+    ) -> str:
+        url = self.base_url + route.build_path(path_params)
+        # ``None`` values are omitted so callers can pass optional filters directly.
+        pairs = [(key, value) for key, value in (query or {}).items() if value is not None]
+        if pairs:
+            url += "?" + urlencode([(key, str(value)) for key, value in pairs])
+        return url
 
     def _base_headers(
         self,
@@ -237,6 +248,7 @@ class SyncAPIClient(_BaseClient):
         *,
         cast_to: Any,
         path_params: Optional[Mapping[str, object]] = None,
+        query: Optional[Mapping[str, object]] = None,
         json: Any = OMIT,
         files: Optional[Mapping[str, FileTuple]] = None,
         idempotency_key: Optional[str] = None,
@@ -245,7 +257,7 @@ class SyncAPIClient(_BaseClient):
     ) -> Any:
         route = ROUTES[route_key]
         self._check_auth(route)
-        url = self._url(route, path_params)
+        url = self._url(route, path_params, query)
         body = self._encode_body(route, json)
         correlation_id = str(uuid.uuid4())
         attempt = 0
@@ -356,6 +368,7 @@ class AsyncAPIClient(_BaseClient):
         *,
         cast_to: Any,
         path_params: Optional[Mapping[str, object]] = None,
+        query: Optional[Mapping[str, object]] = None,
         json: Any = OMIT,
         files: Optional[Mapping[str, FileTuple]] = None,
         idempotency_key: Optional[str] = None,
@@ -364,7 +377,7 @@ class AsyncAPIClient(_BaseClient):
     ) -> Any:
         route = ROUTES[route_key]
         self._check_auth(route)
-        url = self._url(route, path_params)
+        url = self._url(route, path_params, query)
         body = self._encode_body(route, json)
         correlation_id = str(uuid.uuid4())
         attempt = 0

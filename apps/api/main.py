@@ -18,6 +18,7 @@ from apps.api.routes.platform import router as platform_router
 from apps.api.routes.products import router as products_router
 from apps.api.routes.recommendations import router as recommendations_router
 from apps.api.routes.subscriptions import router as subscriptions_router
+from apps.api.routes.tenant_users import router as tenant_users_router
 from apps.api.routes.tenants import router as tenants_router
 from apps.api.routes.usage import router as usage_router
 from graphrec_core.database.session import engine
@@ -37,6 +38,7 @@ app.add_exception_handler(StarletteHTTPException, http_error_handler)
 app.include_router(tenants_router)
 app.include_router(auth_router)
 app.include_router(api_keys_router)
+app.include_router(tenant_users_router)
 app.include_router(subscriptions_router)
 app.include_router(usage_router)
 app.include_router(products_router)

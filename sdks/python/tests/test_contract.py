@@ -131,7 +131,7 @@ def _parse_router_file(path: Path, decorator_target: str) -> List[ServerRoute]:
                     route.authenticated = True
                 elif default_call == "File":
                     route.body = "multipart"
-                elif default_call in {"Depends", "Header"}:
+                elif default_call in {"Depends", "Header", "Query"}:
                     continue
                 elif annotation and annotation.split("[")[0] not in NON_BODY_ANNOTATIONS:
                     route.body = "json"
@@ -259,9 +259,6 @@ RESPONSE_MODELS: List[Tuple[str, Type[BaseModel]]] = [
     ("TrainingJobResource", m.TrainingJob),
     ("TrainingJobListResponse", m.TrainingJobList),
     ("DeploymentStatus", m.DeploymentStatus),
-    ("ReplicaItem", m.Replica),
-    ("ReplicaStatusResponse", m.ReplicaStatus),
-    ("AutoscalingStatus", m.AutoscalingStatus),
     ("QualitySummary", m.QualitySummary),
     ("MetricsSummary", m.MetricsSummary),
     ("RecommendationItem", m.RecommendationItem),

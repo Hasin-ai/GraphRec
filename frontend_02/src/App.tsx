@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { SessionProvider, useSession } from "./hooks/useSession";
 import { ToastProvider } from "./hooks/useToast";
 import { ErrorLayout, PlatformLayout, PublicLayout, RequirePlatform, RequireScope, RequireTenant, TenantLayout } from "./layouts/Layouts";
@@ -25,6 +25,7 @@ import { ServiceStatusPage } from "./pages/tenant/ServiceStatusPage";
 import { SubmissionPage } from "./pages/tenant/SubmissionPage";
 import { TrainingJobPage, TrainingPage } from "./pages/tenant/TrainingPages";
 import { UsagePage } from "./pages/tenant/UsagePage";
+import { UsersPage } from "./pages/tenant/UsersPage";
 
 /** `/` resolves by identity: tenant -> /home, platform -> /admin, otherwise sign-in. */
 function Root() {
@@ -33,6 +34,8 @@ function Root() {
   if (platform) return <Navigate to="/admin/status" replace />;
   return <Navigate to="/login" replace />;
 }
+
+function SetupRedirect() { const location = useLocation(); return <Navigate to={{ pathname: "/setup", hash: location.hash }} replace />; }
 
 const scoped = (scope: string, element: ReactElement) => <RequireScope scope={scope}>{element}</RequireScope>;
 
@@ -47,7 +50,7 @@ export function AppRoutes() {
         <Route path="/setup" element={<SetupPage />} />
         <Route path="/invite/accept" element={<SetupPage />} />
         <Route path="/recover" element={<RecoverPage />} />
-        <Route path="/recover/confirm" element={<Navigate to="/setup" replace />} />
+        <Route path="/recover/confirm" element={<SetupRedirect />} />
         <Route path="/admin/login" element={<AdminLoginPage />} />
       </Route>
 
@@ -55,6 +58,7 @@ export function AppRoutes() {
         <Route element={<TenantLayout />}>
           <Route path="/home" element={<HomePage />} />
           <Route path="/account" element={<AccountPage />} />
+          <Route path="/users" element={scoped("users:write", <UsersPage />)} />
           <Route path="/integration" element={<IntegrationPage />} />
           <Route path="/credentials" element={scoped("keys:write", <CredentialsPage />)} />
           <Route path="/products" element={scoped("catalog:read", <ProductsPage />)} />

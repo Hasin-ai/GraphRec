@@ -113,11 +113,11 @@ Any rejected token throws `AuthenticationError` with `code === "invalid_setup_to
 
 ### Scopes
 
-Users get their scopes from their role: administrators hold every tenant scope, developers hold `keys:write`, `catalog:*`, `events:*` and `training:read`. Access tokens keep the scopes granted at login, so sign in again after a role change. An API key gets the scopes chosen when it's created, limited to what the creating role may delegate. Administrators can delegate any scope; developers only `catalog:*` and `events:*`. The server checks the scope on every tenant route and answers `403 insufficient_scope` (`PermissionDeniedError`) when it is missing.
+Users get their scopes from their role: administrators hold every tenant scope, developers hold `keys:write`, `catalog:*`, `events:*` and `training:read`. Access tokens keep the scopes granted at login, so sign in again after a role change. An API key gets the scopes chosen when it's created, limited to what the creating role may delegate. Administrators can delegate any scope; developers only `catalog:*`, `events:*` and `recommendations:read` (enough to connect a store). Administrators additionally hold `users:write` to invite tenant users. The server checks the scope on every tenant route and answers `403 insufficient_scope` (`PermissionDeniedError`) when it is missing.
 
 | Preset | Scopes |
 |---|---|
-| `STOREFRONT_KEY_SCOPES` | `catalog:read`, `catalog:write`, `events:read`, `events:write`, `recommendations:read` (the last one needs an administrator to delegate it) |
+| `STOREFRONT_KEY_SCOPES` | `catalog:read`, `catalog:write`, `events:read`, `events:write`, `recommendations:read` |
 | `CATALOG_SYNC_KEY_SCOPES` | `catalog:read`, `catalog:write` |
 
 Every scope is in the `Scope` union type. `ROLE_SCOPES` and `DELEGATABLE_SCOPES` mirror the server.
@@ -157,7 +157,7 @@ Every method maps to exactly one route (`products.update` and the `wait`/`find`/
 | | `list()`, `get(id)`, `getActive()` | `GET /v1/model-versions[/{id}]` | `models:read` ✔ |
 | | `activate(id)` / `rollback(id)` | `POST /v1/model-versions/{id}:activate`, `POST /v1/models/{id}:rollback` | `models:deploy` ✔ |
 | | `archive(id)` | `POST /v1/model-versions/{id}:archive` | `models:write` ✔ |
-| `deployment` | `get()`, `replicas()`, `autoscaling()` | `GET /v1/deployment[/replicas\|/autoscaling]` | `deployments:read` ✔ |
+| `deployment` | `get()` | `GET /v1/deployment` | `deployments:read` ✔ |
 | `metrics` | `summary()` | `GET /v1/metrics/summary` | `metrics:read` ✔ |
 | `recommendations` | `get({ userId?, topN?, context?, excludeProductIds? })` | `POST /v1/recommendations` | `recommendations:read` ✔ |
 | | `forSession({ sessionId, recentProductIds?, … })` | `POST /v1/recommendations/session` | `recommendations:read` ✔ |

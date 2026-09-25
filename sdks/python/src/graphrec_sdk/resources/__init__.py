@@ -1,4 +1,5 @@
 from .api_keys import ApiKeys, AsyncApiKeys
+from .tenant_users import AsyncTenantUsers, TenantUsers
 from .billing import AsyncSubscriptions, AsyncUsage, Subscriptions, Usage
 from .datasets import AsyncDatasets, Datasets
 from .events import AsyncEvents, Events
@@ -17,6 +18,8 @@ from .tenants import AsyncAuthentication, AsyncTenants, Authentication, Tenants
 __all__ = [
     "ApiKeys",
     "AsyncApiKeys",
+    "TenantUsers",
+    "AsyncTenantUsers",
     "AsyncAuthentication",
     "AsyncDatasets",
     "AsyncDeployment",

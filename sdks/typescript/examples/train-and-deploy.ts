@@ -43,10 +43,11 @@ async function main(): Promise<void> {
 
   await admin.modelVersions.activate(candidate.id);
   const status = await admin.deployment.get();
-  console.log(`deployment ${status.status}, ready replicas ${status.ready_replicas}`);
+  console.log(`deployment ${status.status}, serving ${status.active_model_version_id ?? "nothing"}`);
 
   const metrics = await admin.metrics.summary();
-  if (previous !== null && metrics.error_rate > 0.05) {
+  // error_rate is null until the new version has served a request.
+  if (previous !== null && (metrics.error_rate ?? 0) > 0.05) {
     console.log("error rate too high, rolling back");
     await admin.modelVersions.rollback(previous.id);
   }

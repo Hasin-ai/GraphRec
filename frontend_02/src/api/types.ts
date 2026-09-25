@@ -60,6 +60,20 @@ export interface SetupPasswordInput {
 
 export type TenantUserRole = "tenant_administrator" | "tenant_developer";
 
+export interface TenantUserResource {
+  id: string;
+  email: string;
+  display_name: string;
+  role: TenantUserRole;
+  status: string;
+  created_at: string;
+  last_authenticated_at: string | null;
+}
+export interface TenantUserInvitation extends TenantUserResource {
+  setup_token: string;
+  setup_token_expires_at: string;
+}
+
 export interface AuthTokenPair {
   access_token: string;
   token_type: "Bearer";
@@ -258,21 +272,20 @@ export interface ModelVersionResource {
   activated_at: string | null;
 }
 
-export type TrainingJobStatus =
-  | "queued"
-  | "preparing_data"
-  | "training"
-  | "succeeded"
-  | "failed"
-  | string;
+/** A job runs synchronously inside the request that created it. */
+export type TrainingJobStatus = "running" | "succeeded" | "failed" | string;
 
 export interface TrainingJobCreate {
+  request_id?: string;
   model_type?: string;
   dataset_snapshot_id?: string | null;
   configuration?: Record<string, unknown>;
 }
 
 export interface TrainingJobResource {
+  progress: number;
+  stage: string;
+  cancel_requested: boolean;
   id: string;
   model_type: string;
   status: TrainingJobStatus;
@@ -287,64 +300,36 @@ export interface TrainingJobResource {
 
 // ── serving ────────────────────────────────────────────────────
 export interface DeploymentStatus {
+  /** "available" when a model version is active, otherwise "stopped". */
   status: string;
   active_model_version_id: string | null;
-  desired_model_version_id: string | null;
-  desired_replicas: number;
-  current_replicas: number;
-  ready_replicas: number;
-  last_transition_at: string;
+  /** When the active version took over; null when nothing is active. */
+  last_transition_at: string | null;
   failure_reason: string | null;
 }
 
-export interface ReplicaItem {
-  id: string;
-  model_version_id: string | null;
-  status: string;
-  ready: boolean;
-  started_at: string;
-}
-
-export interface ReplicaStatusResponse {
-  desired_replicas: number;
-  current_replicas: number;
-  ready_replicas: number;
-  replicas: ReplicaItem[];
-}
-
-export interface AutoscalingStatus {
-  min_replicas: number;
-  max_replicas: number;
-  cpu_target_percent: number;
-  inflight_target: number | null;
-  desired_replicas: number;
-  ready_replicas: number;
-  capacity_blocked: boolean;
-  metrics_available: boolean;
-  recent_actions: { occurred_at: string; from_replicas: number; to_replicas: number; reason: string }[];
-}
-
+/** Offline measures recorded for the active version at training time. */
 export interface QualitySummary {
-  hit_at_10: number;
-  ndcg_at_10: number;
-  retrieval_recall_at_k: number;
-  catalog_coverage: number;
-  intra_list_diversity: number;
-  training_loss: number;
-  validation_loss: number;
+  model_version_id: string;
+  version_tag: string;
   recorded_at: string;
+  /** Whatever the training run recorded; empty when it recorded none. */
+  metrics: Record<string, unknown>;
 }
 
+/** Measured over the tenant's own requests in the window. */
 export interface MetricsSummary {
   window_start: string;
   window_end: string;
+  request_count: number;
+  /** Requests per minute over the window. */
   request_rate: number;
-  error_rate: number;
-  fallback_rate: number;
-  p95_latency_ms: number;
+  /** Null when no request was recorded: a rate over zero requests is undefined. */
+  error_rate: number | null;
+  fallback_rate: number | null;
+  /** Null when no request was served successfully in the window. */
+  p95_latency_ms: number | null;
   active_model_version_id: string | null;
-  desired_replicas: number;
-  ready_replicas: number;
   quality: QualitySummary | null;
 }
 

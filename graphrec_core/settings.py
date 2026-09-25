@@ -48,6 +48,12 @@ class Settings(BaseSettings):
     qdrant_embedding_dim: int = Field(default=128, ge=16, le=4096)
     qdrant_top_k: int = Field(default=100, ge=1, le=1000)
 
+    # DGSR model artifacts. A training job with ``configuration.pretrained_artifact``
+    # imports ``<model_artifact_root>/<name>/`` (best.pt, config.json, id_maps.json,
+    # interactions.npz) instead of training; unset disables imports.
+    model_artifact_root: str | None = None
+    generated_model_root: str = "/app/generated_artifacts"
+
     @field_validator("platform_admin_token", mode="before")
     @classmethod
     def _blank_token_disables_platform(cls, value: object) -> object:

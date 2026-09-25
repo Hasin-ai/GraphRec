@@ -1,46 +1,52 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { billing, datasets, models, training } from "../../api";
 import type { TrainingJobResource } from "../../api/types";
 import { useResource } from "../../hooks/useResource";
 import { useSession } from "../../hooks/useSession";
 import { useToast } from "../../hooks/useToast";
-import { fmtDateTime, fmtNumber, shortId } from "../../lib/format";
-import { JOB_STAGES, jobStageIndex } from "../../lib/status";
+import { fmtDateTime, fmtNumber, shortId, flattenMetrics } from "../../lib/format";
+import { quotaState } from "../../lib/quota";
+import { useQueryState } from "../../hooks/useQueryState";
+import { JOB_STATES } from "../../lib/status";
 import { Dialog } from "../../ui/Dialog";
-import { Field, Select, TextArea } from "../../ui/Form";
+import { Field, Select, TextArea, TextInput } from "../../ui/Form";
 import { Page } from "../../ui/Page";
-import { ActionsCell, Badge, Cell, DataTable, DefinitionList, ErrorBanner, FilterBar, Footnote, Panel, Skeleton, StageRail, Stats } from "../../ui/primitives";
+import { QualitySummary } from "../../ui/QualitySummary";
+import { ActionsCell, Badge, Cell, DataTable, DefinitionList, ErrorBanner, FilterBar, Footnote, Panel, Skeleton, Banner } from "../../ui/primitives";
 import { NotFoundPage } from "../errors/ErrorPages";
 
-const MODEL_TYPES = ["simplified_dgsr"];
-const ACTIVE_STATES = ["queued", "preparing_data", "training"];
+/** The only non-terminal state the API records. */
+const ACTIVE_STATES = ["queued", "running"];
 
 interface Eligibility {
   ok: boolean;
   reason: string;
 }
 
-function eligibility(jobs: TrainingJobResource[] | undefined, trainingRemaining: number | null | undefined, canWrite: boolean): Eligibility {
+export function eligibility(jobs: TrainingJobResource[] | undefined, trainingRemaining: number | null | undefined, canWrite: boolean): Eligibility {
   if (!canWrite) return { ok: false, reason: "Requesting training requires training:write." };
   const running = jobs?.find((j) => ACTIVE_STATES.includes(j.status));
-  if (running) return { ok: false, reason: `Job ${shortId(running.id)} is already running. Training concurrency is 1.` };
+  if (running) return { ok: false, reason: `Job ${shortId(running.id)} is still running. Wait for it to finish before starting another.` };
   if (trainingRemaining === 0) return { ok: false, reason: "The training quota for this period is exhausted." };
   return { ok: true, reason: "" };
 }
 
 function StartTrainingDialog({ el, onClose, onStarted }: { el: Eligibility; onClose: () => void; onStarted: (job: TrainingJobResource) => void }) {
   const snapshots = useResource(() => datasets.listSnapshots(), []);
-  const [type, setType] = useState(MODEL_TYPES[0]);
   const [snapshot, setSnapshot] = useState("");
   const [config, setConfig] = useState("");
+  const [mode, setMode] = useState("train");
+  const [artifact, setArtifact] = useState("");
+  const [requestId] = useState(() => crypto.randomUUID());
   return (
     <Dialog
       title="Start training"
       width={640}
       confirmLabel="Request training"
-      body="A training job builds from a dataset snapshot, trains the model, registers an eligible version and indexes its embeddings. It does not activate anything."
-      consequence={el.ok ? "In this release the job runs synchronously and returns as succeeded; model metrics are recorded by the training worker in a later slice." : `This request will be rejected: ${el.reason}`}
+      confirmDisabled={!el.ok || snapshots.loading || !!snapshots.error}
+      body="Create a model version. Activation is a separate step."
+      consequence={mode === 'train' ? 'Trains a DGSR model from an immutable tenant snapshot. Local CPU training supports up to 20,000 events, 10,000 products and 10 epochs. Activation remains a separate step.' : mode === 'checkpoint' ? 'Imports a DGSR checkpoint prepared on the API host. The backend verifies its compatibility with this tenant.' : 'Development only: creates synthetic embeddings, not a trained model. This consumes training quota.'}
       onConfirm={async () => {
         if (!el.ok) return el.reason;
         let configuration: Record<string, unknown> | undefined;
@@ -53,22 +59,27 @@ function StartTrainingDialog({ el, onClose, onStarted }: { el: Eligibility; onCl
             return "Configuration is not valid JSON.";
           }
         }
-        onStarted(await training.create({ model_type: type, dataset_snapshot_id: snapshot || null, ...(configuration ? { configuration } : {}) }));
+        if (mode === "checkpoint" && !artifact.trim()) return "Enter the checkpoint directory name configured by your operator.";
+        configuration = { ...configuration };
+        configuration.mode = mode;
+        if (mode === "checkpoint") configuration.pretrained_artifact = artifact.trim();
+        else delete configuration.pretrained_artifact;
+        onStarted(await training.create({ request_id: requestId, dataset_snapshot_id: snapshot || null, ...(configuration ? { configuration } : {}) }));
       }}
       onClose={onClose}
     >
-      <Field id="d-type" label="Model type">
-        <Select id="d-type" value={type} onChange={setType} options={MODEL_TYPES} />
-      </Field>
-      <Field id="d-snapshot" label="Dataset snapshot" hint={snapshots.data && !snapshots.data.items.length ? "No snapshot yet; the job trains from the live catalog." : undefined}>
+      <Field id="d-mode" label="Model source"><Select id="d-mode" value={mode} onChange={setMode} options={[{ value: "train", label: "Train from tenant data" }, { value: "checkpoint", label: "Trained DGSR checkpoint" }, { value: "placeholder", label: "Placeholder — development only" }]} /></Field>
+      {mode === "checkpoint" ? <Field id="d-artifact" label="Checkpoint directory" hint="Directory name under the API's configured model artifact root."><TextInput id="d-artifact" value={artifact} onChange={setArtifact} /></Field> : null}
+      {snapshots.error ? <ErrorBanner error={snapshots.error} title="Snapshots unavailable" onRetry={snapshots.reload} /> : null}
+      <Field id="d-snapshot" label="Dataset snapshot" hint="Training requires at least four product interactions for a shopper, including held-out validation and test targets.">
         <Select
           id="d-snapshot"
           value={snapshot}
           onChange={setSnapshot}
-          options={[{ value: "", label: "Latest data (no snapshot)" }, ...(snapshots.data?.items ?? []).map((s) => ({ value: s.id, label: `${shortId(s.id, 13)} · ${fmtDateTime(s.cutoff_at)} · ${fmtNumber(s.event_count)} events` }))]}
+          options={[{ value: "", label: "Capture current tenant data" }, ...(snapshots.data?.items ?? []).map((s) => ({ value: s.id, label: `${shortId(s.id, 13)} · ${fmtDateTime(s.cutoff_at)} · ${fmtNumber(s.event_count)} events` }))]}
         />
       </Field>
-      <Field id="d-config" label="Configuration (optional JSON)" hint='Defaults to { "batch_size": 256, "learning_rate": 0.001 }.'>
+      <Field id="d-config" label="Configuration (optional JSON)" hint="Optional backend configuration. Checkpoint selection above takes precedence.">
         <TextArea id="d-config" rows={3} value={config} onChange={setConfig} mono placeholder='{ "epochs": 20 }' />
       </Field>
     </Dialog>
@@ -81,12 +92,21 @@ export function TrainingPage() {
   const navigate = useNavigate();
   const jobs = useResource(() => training.list(), []);
   const usage = useResource(() => (can("usage:read") ? billing.usage() : Promise.resolve(null)), [can("usage:read")]);
-  const [state, setState] = useState("all states");
+  const [state, setState] = useQueryState("status", "all states");
   const [starting, setStarting] = useState(false);
 
   const trainingDim = usage.data?.dimensions.find((d) => d.type === "training_jobs");
-  const eventsDim = usage.data?.dimensions.find((d) => d.type === "accepted_events");
-  const el = eligibility(jobs.data?.items, trainingDim?.remaining, can("training:write"));
+  const checking = jobs.loading || (can("usage:read") && usage.loading);
+  const unavailable = !!jobs.error || (can("usage:read") && (!!usage.error || !trainingDim));
+  const el = !can("training:write") ? eligibility(undefined, undefined, false)
+    : checking ? { ok: false, reason: "Checking training and quota…" }
+    : unavailable ? { ok: false, reason: "Training availability could not be verified. Refresh to try again." }
+    : eligibility(jobs.data?.items, trainingDim ? quotaState(trainingDim.used, trainingDim.limit).remaining : undefined, true);
+  useEffect(() => {
+    if (!jobs.data?.items.some(job => ACTIVE_STATES.includes(job.status))) return;
+    const timer = window.setInterval(() => { if (!document.hidden) { void jobs.reload(); void usage.reload(); } }, 5000);
+    return () => window.clearInterval(timer);
+  }, [jobs.data, jobs.reload, usage.reload]);
   const list = (jobs.data?.items ?? []).filter((j) => state === "all states" || j.status === state);
 
   const rows = list.map((j) => (
@@ -114,29 +134,21 @@ export function TrainingPage() {
       crumbs={[{ label: "Home", to: "/home" }, { label: "Training" }]}
       kicker="Model production"
       title="Training"
-      subtitle="Offline batch training with a concurrency of one job. A request is accepted only when data, quota and scope all allow it."
-      actions={[{ label: "Start training", variant: "primary", disabled: !el.ok, reason: el.reason, onClick: () => setStarting(true) }]}
+      subtitle="Review jobs and prepare a model for activation."
+      actions={[{ label: "Start training", variant: "primary", disabled: !el.ok, reason: el.reason, onClick: () => setStarting(true) }, { label: "Refresh", onClick: () => { void jobs.reload(); void usage.reload(); } }]}
     >
-      {jobs.error ? <ErrorBanner error={jobs.error} /> : null}
-      <Stats
-        items={[
-          { label: "Concurrency", value: "1", note: "platform-wide" },
-          { label: "Eligibility", value: el.ok ? "eligible" : "blocked", note: el.ok ? "a request would be accepted" : el.reason, tone: el.ok ? "ok" : "warn" },
-          { label: "Interaction data", value: eventsDim ? fmtNumber(eventsDim.used) : usage.loading ? "…" : "n/a", note: eventsDim ? "accepted events this period" : "usage:read not held" },
-          { label: "Training quota", value: trainingDim ? `${fmtNumber(trainingDim.used)} / ${trainingDim.limit === null ? "∞" : fmtNumber(trainingDim.limit)}` : usage.loading ? "…" : "n/a", note: usage.data ? `resets ${fmtDateTime(usage.data.reset_at)}` : "" },
-          { label: "Jobs", value: String(jobs.data?.items.length ?? 0), note: `${jobs.data?.items.filter((j) => j.status === "succeeded").length ?? 0} succeeded` },
-        ]}
-      />
-      <FilterBar filters={[{ id: "state", label: "State", value: state, onChange: setState, options: ["all states", ...JOB_STAGES, "failed"] }]} onClear={() => setState("all states")} />
-      {jobs.loading && !jobs.data ? (
-        <Skeleton />
-      ) : (
+      {jobs.error ? <ErrorBanner error={jobs.error} onRetry={jobs.reload} /> : null}
+      {usage.error ? <ErrorBanner error={usage.error} title="Usage unavailable" onRetry={usage.reload} /> : null}
+      <Banner tone="info" title="Training source">Train a DGSR model from tenant data, or import a prepared checkpoint for a larger dataset. Jobs report progress and can be cancelled before completion.</Banner>
+      {trainingDim ? <p className="footnote">Training jobs this period: {fmtNumber(trainingDim.used)} / {trainingDim.limit === null ? 'no limit' : fmtNumber(trainingDim.limit)}. Resets {fmtDateTime(usage.data?.reset_at)}.</p> : !can('usage:read') ? <p className="footnote">Your session cannot read quotas. The API checks limits when you submit.</p> : null}
+      <FilterBar filters={[{ id: "state", label: "State", value: state, onChange: setState, options: ["all states", ...JOB_STATES] }]} onClear={() => setState("all states")} />
+      {!jobs.data ? (jobs.loading ? <Skeleton /> : null) : (
         <DataTable
           minWidth={980}
           columns={["Job", "State", "Model type", "Requested at", "Completed at", "Snapshot", { label: "", align: "right" }]}
           rows={rows}
           count={`${list.length} of ${jobs.data?.items.length ?? 0}`}
-          empty={{ title: "No training jobs yet", body: "Request training to produce your first model version.", action: el.ok ? { label: "Start training", onClick: () => setStarting(true) } : undefined }}
+          empty={{ title: state === "all states" ? "No training jobs yet" : "No jobs match this filter", body: state === "all states" ? "Request training to produce your first model version." : "Choose another state or clear the filter.", action: el.ok ? { label: "Start training", onClick: () => setStarting(true) } : undefined }}
         />
       )}
       {starting ? (
@@ -155,28 +167,34 @@ export function TrainingPage() {
 }
 
 export function TrainingJobPage() {
+  const [cancelling, setCancelling] = useState(false);
   const { jobId = "" } = useParams();
   const navigate = useNavigate();
   // The API lists jobs but has no single-job read; find it in the tenant's list (gate 4 for free).
   const jobs = useResource(() => training.list(), []);
   const job = jobs.data?.items.find((j) => j.id === jobId);
-  const version = useResource(async () => (job?.model_version_id ? models.get(job.model_version_id) : null), [job?.model_version_id]);
+  const { can } = useSession();
+  const version = useResource(async () => (job?.model_version_id && can("models:read") ? models.get(job.model_version_id) : null), [job?.model_version_id, can("models:read")]);
+  useEffect(() => {
+    if (!job || !ACTIVE_STATES.includes(job.status)) return;
+    const timer = window.setInterval(() => { if (!document.hidden) void jobs.reload(); }, 5000);
+    return () => window.clearInterval(timer);
+  }, [job?.status, jobs.reload]);
   const crumbs = [{ label: "Home", to: "/home" }, { label: "Training", to: "/training" }, { label: shortId(jobId, 13), mono: true }];
 
   if (jobs.data && !job) return <NotFoundPage />;
   if (!job) {
     return (
       <Page crumbs={crumbs} kicker="Training job" title={shortId(jobId, 13)}>
-        {jobs.error ? <ErrorBanner error={jobs.error} /> : <Skeleton />}
+        {jobs.error ? <ErrorBanner error={jobs.error} onRetry={jobs.reload} /> : <Skeleton />}
       </Page>
     );
   }
   const active = ACTIVE_STATES.includes(job.status);
   const failed = job.status === "failed";
   const done = job.status === "succeeded";
-  const at = jobStageIndex(job.status);
   const v = version.data;
-  const metricEntries = v ? Object.entries(v.metrics ?? {}) : [];
+  const metricEntries = v ? flattenMetrics(v.metrics) : [];
 
   return (
     <Page
@@ -184,15 +202,18 @@ export function TrainingJobPage() {
       kicker="Training job"
       title={shortId(job.id, 13)}
       badge={<Badge group="job" value={job.status} />}
-      subtitle={active ? "The job is running. Refresh to update." : done ? "The job completed and registered a model version. Activation is a separate, deliberate action." : failed ? "The job stopped before producing a version." : undefined}
+      subtitle={active ? "The job is running. Status updates automatically while this page is visible." : done ? "The job completed and registered a model version. Activation is a separate, deliberate action." : failed ? "The job stopped before producing a version." : undefined}
       actions={[
+        ...(active && can('training:write') ? [{ label: job.cancel_requested ? 'Cancellation requested' : 'Cancel job', disabled: job.cancel_requested, onClick: () => setCancelling(true) }] : []),
         { label: "Refresh", onClick: () => void jobs.reload() },
-        { label: "Cancel job", disabled: true, reason: active ? "Cancellation is not available in this release." : "Only a job in an active state can be cancelled.", onClick: () => undefined },
       ]}
     >
-      <StageRail title="Pipeline stage" stages={JOB_STAGES} at={at} failed={failed} note={failed ? `Stopped: ${job.failure_reason ?? "no reason recorded"}` : done ? "All stages complete." : "Stage in progress."} />
+      {jobs.error ? <ErrorBanner error={jobs.error} onRetry={jobs.reload} /> : null}
+      {version.error ? <ErrorBanner error={version.error} title="Model details unavailable" onRetry={version.reload} /> : null}
+      {!job.configuration?.pretrained_artifact && job.configuration?.mode !== 'train' ? <Banner tone="warn" title="Development placeholder">This job uses synthetic embeddings. A succeeded status confirms the backend operation, not a trained recommendation model.</Banner> : null}
       <DefinitionList
         items={[
+          { label: 'Progress', value: `${job.progress ?? 0}% · ${job.stage ?? job.status}`, mono: true },
           { label: "Requested model type", value: job.model_type, mono: true },
           { label: "Requested at", value: fmtDateTime(job.created_at), mono: true },
           { label: "Completed at", value: fmtDateTime(job.completed_at), mono: true },
@@ -203,7 +224,9 @@ export function TrainingJobPage() {
       />
       <div className="panels">
         {done && v ? (
-          <Panel title="Quality measures" badge={<Badge group="model" value={v.status} />} note={`produced ${v.version_tag}`} body={metricEntries.length ? undefined : "No offline metrics were recorded for this version. Real metrics come from the training worker in a later slice."} dl={metricEntries.map(([k, val]) => ({ label: k, value: typeof val === "number" ? val.toFixed(4) : String(val), mono: true }))} actions={[{ label: `Open model version ${v.version_tag}`, variant: "primary", onClick: () => navigate(`/models/${v.id}`) }]} />
+          <Panel title="Quality measures" badge={<Badge group="model" value={v.status} />} note={`produced ${v.version_tag}`} body={metricEntries.length ? 'Held-out model metrics and the recorded popularity baseline. Higher ranking scores are better; sample size and evaluation protocol affect comparisons.' : "No offline metrics were recorded for this version. Train a DGSR model or import a checkpoint to record validation quality."} actions={[{ label: `Open model version ${v.version_tag}`, variant: "primary", onClick: () => navigate(`/models/${v.id}`) }]}>
+            {metricEntries.length ? <QualitySummary metrics={v.metrics} /> : null}
+          </Panel>
         ) : null}
         {failed ? <Panel title="Failure reason" badge={<Badge group="job" value="failed" />} body={job.failure_reason ?? "No reason was recorded."} /> : null}
         <Panel title="Configuration" body="The configuration the job ran with.">
@@ -217,7 +240,8 @@ export function TrainingJobPage() {
           ) : null}
         </Panel>
       </div>
-      <Footnote>Snapshot construction, graph building and indexing are platform processes; they appear here only as stages.</Footnote>
+      {cancelling ? <Dialog title="Cancel training job" body="The worker stops at its next processing boundary. No model version is activated." confirmLabel="Cancel job" onClose={() => setCancelling(false)} onConfirm={async () => { await training.cancel(job.id); setCancelling(false); await jobs.reload(); }} /> : null}
+      <Footnote>Training uses the captured tenant snapshot. Validation selects the checkpoint; test metrics use held-out next-item targets. Local worker capacity is bounded and queued work survives restarts.</Footnote>
     </Page>
   );
 }

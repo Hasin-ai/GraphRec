@@ -302,14 +302,12 @@ describe("model versions & training", () => {
 });
 
 describe("serving", () => {
-  it("reads deployment, replicas, autoscaling and metrics", async () => {
-    const mock = mockFetch({ body: { status: "ready", desired_replicas: 1, p95_latency_ms: 12 } });
+  it("reads deployment status and measured metrics", async () => {
+    const mock = mockFetch({ body: { status: "available", request_count: 3, p95_latency_ms: 12 } });
     const c = client(mock, { apiKey: "gr_live_x" });
     await c.deployment.get();
-    await c.deployment.replicas();
-    await c.deployment.autoscaling();
     expect((await c.metrics.summary()).p95_latency_ms).toBe(12);
-    expect(mock.calls.map((call) => call.url.replace("http://api.test", ""))).toEqual(["/v1/deployment", "/v1/deployment/replicas", "/v1/deployment/autoscaling", "/v1/metrics/summary"]);
+    expect(mock.calls.map((call) => call.url.replace("http://api.test", ""))).toEqual(["/v1/deployment", "/v1/metrics/summary"]);
   });
 });
 

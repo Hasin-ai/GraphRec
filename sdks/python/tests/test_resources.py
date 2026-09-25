@@ -97,6 +97,23 @@ CASES: List[Case] = [
         client_kwargs=BEARER,
     ),
     Case(
+        "tenant_users.list",
+        "/v1/tenant/users",
+        {"items": [fx.tenant_user()], "total": 1},
+        lambda c: c.tenant_users.list(),
+        check=lambda r: r.total == 1 and r[0].role == "tenant_developer",
+        client_kwargs=BEARER,
+    ),
+    Case(
+        "tenant_users.invite",
+        "/v1/tenant/users",
+        fx.tenant_user(invited=True),
+        lambda c: c.tenant_users.invite("dev@shop.test", role="tenant_developer", display_name="dev"),
+        body=_eq({"email": "dev@shop.test", "role": "tenant_developer", "display_name": "dev"}),
+        check=lambda r: r.setup_token == "one-time-setup-token",
+        client_kwargs=BEARER,
+    ),
+    Case(
         "api_keys.get",
         f"/v1/api-keys/{fx.UUID_A}",
         fx.api_key(),
@@ -347,50 +364,10 @@ CASES: List[Case] = [
         {
             "status": "available",
             "active_model_version_id": fx.UUID_B,
-            "desired_model_version_id": fx.UUID_B,
-            "desired_replicas": 1,
-            "current_replicas": 1,
-            "ready_replicas": 1,
             "last_transition_at": fx.NOW,
             "failure_reason": None,
         },
         lambda c: c.deployment.get(),
-    ),
-    Case(
-        "deployment.replicas",
-        "/v1/deployment/replicas",
-        {
-            "desired_replicas": 1,
-            "current_replicas": 1,
-            "ready_replicas": 1,
-            "replicas": [
-                {
-                    "id": "replica-1",
-                    "model_version_id": None,
-                    "status": "idle",
-                    "ready": False,
-                    "started_at": fx.NOW,
-                }
-            ],
-        },
-        lambda c: c.deployment.replicas(),
-        check=lambda r: r.replicas[0].id == "replica-1",
-    ),
-    Case(
-        "deployment.autoscaling",
-        "/v1/deployment/autoscaling",
-        {
-            "min_replicas": 1,
-            "max_replicas": 2,
-            "cpu_target_percent": 65,
-            "inflight_target": None,
-            "desired_replicas": 1,
-            "ready_replicas": 1,
-            "capacity_blocked": False,
-            "metrics_available": True,
-            "recent_actions": [{"reason": "cpu_target_nominal"}],
-        },
-        lambda c: c.deployment.autoscaling(),
     ),
     Case(
         "metrics.summary",
@@ -398,26 +375,39 @@ CASES: List[Case] = [
         {
             "window_start": fx.NOW,
             "window_end": fx.NOW,
-            "request_rate": 14.5,
-            "error_rate": 0.001,
-            "fallback_rate": 0.02,
+            "request_count": 40,
+            "request_rate": 0.667,
+            "error_rate": 0.0,
+            "fallback_rate": 0.025,
             "p95_latency_ms": 185,
-            "active_model_version_id": None,
-            "desired_replicas": 1,
-            "ready_replicas": 1,
+            "active_model_version_id": fx.UUID_B,
             "quality": {
-                "hit_at_10": 0.88,
-                "ndcg_at_10": 0.79,
-                "retrieval_recall_at_k": 0.91,
-                "catalog_coverage": 0.74,
-                "intra_list_diversity": 0.68,
-                "training_loss": 0.14,
-                "validation_loss": 0.18,
+                "model_version_id": fx.UUID_B,
+                "version_tag": "v1",
                 "recorded_at": fx.NOW,
+                "metrics": {"validation": {"NDCG@10": 0.3378}},
             },
         },
         lambda c: c.metrics.summary(),
-        check=lambda r: r.quality is not None and r.quality.ndcg_at_10 == 0.79,
+        check=lambda r: r.quality is not None
+        and r.quality.metrics["validation"]["NDCG@10"] == 0.3378,
+    ),
+    Case(
+        "metrics.summary",
+        "/v1/metrics/summary",
+        {
+            "window_start": fx.NOW,
+            "window_end": fx.NOW,
+            "request_count": 0,
+            "request_rate": 0.0,
+            "error_rate": None,
+            "fallback_rate": None,
+            "p95_latency_ms": None,
+            "active_model_version_id": None,
+            "quality": None,
+        },
+        lambda c: c.metrics.summary(window_minutes=120),
+        check=lambda r: r.p95_latency_ms is None and r.error_rate is None,
     ),
     Case(
         "recommendations.get",
@@ -791,5 +781,10 @@ def test_required_scopes() -> None:
         if route.auth != "none" and not route.key.startswith("platform.")
     ]
     assert tenant_routes and all(route.scope_enforced for route in tenant_routes)
-    for role, scopes in g.ROLE_SCOPES.items():
-        assert g.DELEGATABLE_SCOPES[role] <= scopes, role
+    # A role delegates API-key-compatible scopes only. It need not hold every
+    # scope it delegates: a developer grants a storefront key
+    # recommendations:read without serving recommendations from the console.
+    for role in g.ROLE_SCOPES:
+        assert g.DELEGATABLE_SCOPES[role] <= g.API_KEY_SCOPES, role
+    assert "recommendations:read" in g.DELEGATABLE_SCOPES["tenant_developer"]
+    assert not g.DELEGATABLE_SCOPES["tenant_developer"] & {"training:write", "models:deploy"}

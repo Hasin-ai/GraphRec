@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 
 class RecommendationRequest(BaseModel):
+    request_id: str | None = Field(default=None, min_length=1, max_length=128)
     user_id: str | None = None
     top_n: int = Field(default=10, ge=1, le=100)
     exclude_product_ids: list[str] = Field(default_factory=list, max_length=200)
@@ -30,16 +31,16 @@ class RecommendationResponse(BaseModel):
 
 
 class ImpressionFeedback(BaseModel):
-    event_id: str
-    request_id: str
-    items: list[RecommendationItem]
+    event_id: str = Field(min_length=1, max_length=128)
+    request_id: str = Field(min_length=1, max_length=128)
+    items: list[RecommendationItem] = Field(min_length=1, max_length=100)
     occurred_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     context: dict[str, Any] = Field(default_factory=dict)
 
 
 class ClickFeedback(BaseModel):
-    event_id: str
-    request_id: str
+    event_id: str = Field(min_length=1, max_length=128)
+    request_id: str = Field(min_length=1, max_length=128)
     impression_event_id: str | None = None
     external_product_id: str
     position: int
@@ -48,8 +49,8 @@ class ClickFeedback(BaseModel):
 
 
 class ConversionFeedback(BaseModel):
-    event_id: str
-    request_id: str
+    event_id: str = Field(min_length=1, max_length=128)
+    request_id: str = Field(min_length=1, max_length=128)
     external_product_id: str
     position: int | None = None
     value: Decimal | None = Field(default=None, ge=0)

@@ -1,14 +1,15 @@
 import { apiKeys } from "../../api";
+import { apiUrl } from "../../api/client";
 import { useResource } from "../../hooks/useResource";
 import { useSession } from "../../hooks/useSession";
 import { fmtDateTime } from "../../lib/format";
 import { SCOPE_SHORT } from "../../lib/scopes";
 import { Page } from "../../ui/Page";
-import { Cell, DefinitionList, Panel, PanelTable, Snippet } from "../../ui/primitives";
+import { Cell, DefinitionList, Panel, PanelTable, Snippet, ErrorBanner, Skeleton } from "../../ui/primitives";
 
 const SNIPPETS = {
   bulk: `POST /v1/products:bulk-upsert
-Authorization: ApiKey gr_live_...
+Authorization: ApiKey <credential secret>
 {
   "products": [
     {
@@ -76,7 +77,7 @@ const ERRORS: [string, string, string, string][] = [
   ["insufficient_scope", "403", "The credential lacks the required scope", "keys:write, catalog:write, …"],
   ["resource_not_found", "404", "No such resource in this tenant", "another tenant's resource looks identical"],
   ["duplicate_resource / conflict", "409", "State or uniqueness prevents the operation", "model version tag already exists"],
-  ["payload_too_large", "413", "Body exceeds the configured limit", "16 KiB JSON; 10 MiB dataset upload"],
+  ["payload_too_large", "413", "Body exceeds the configured limit", "JSON bodies and dataset uploads have separate limits"],
   ["rate_limit_exceeded", "429", "A per-source or per-principal limit is exhausted", "Retry-After header is set"],
   ["service_unavailable", "503", "A dependency is unavailable; retry later", "retryable: true"],
 ];
@@ -85,14 +86,15 @@ export function IntegrationPage() {
   const { can } = useSession();
   const keys = useResource(() => (can("keys:write") ? apiKeys.list() : Promise.resolve({ items: [] })), [can("keys:write")]);
   const usable = keys.data?.items.filter((k) => k.status === "active") ?? [];
-  const base = `${window.location.origin}/v1`;
+  // The origin this console actually calls: VITE_API_BASE_URL when set, otherwise this origin.
+  const base = new URL(apiUrl("/v1"), window.location.origin).toString();
 
   return (
     <Page
       crumbs={[{ label: "Home", to: "/home" }, { label: "Integration" }]}
       kicker="Reference"
       title="Integration"
-      subtitle="The API contract in one place: base URL, authentication, request and response shapes, the error vocabulary and your own credential scopes. This page issues no write requests."
+      subtitle="Connect your application to the GraphRec API."
     >
       <DefinitionList
         items={[
@@ -105,8 +107,9 @@ export function IntegrationPage() {
         ]}
       />
       <div className="panels">
-        <Panel title="Your active credentials" note={`${usable.length} usable`} body="Only the operations granted to a credential may be performed with it. Anything else is rejected with 403 insufficient_scope before the operation is accepted.">
-          {usable.length ? (
+        {can("keys:write") ? <Panel title="Your active credentials" note={keys.data ? `${usable.length} usable` : undefined} body="Only the operations granted to a credential may be performed with it. Anything else is rejected with 403 insufficient_scope before the operation is accepted.">
+          {keys.error ? <ErrorBanner error={keys.error} onRetry={keys.reload} /> : null}
+          {!keys.data ? keys.loading ? <Skeleton rows={2} /> : null : usable.length ? (
             <PanelTable
               columns={["Prefix", "Granted operations", "Expires"]}
               rows={usable.map((k) => (
@@ -120,7 +123,8 @@ export function IntegrationPage() {
           ) : (
             <p className="p-body">No usable credential yet. Create one under API Credentials.</p>
           )}
-        </Panel>
+        </Panel> : null}
+        <p className="footnote">The examples below use illustrative identifiers and values. Replace them with your own data and keep credential secrets on your server.</p>
         <Panel title="Catalog synchronization" body="Bulk upsert is bounded by the request body limit. Individual invalid items are reported as failures without discarding the accepted remainder.">
           <div className="snippets">
             <Snippet label="POST /v1/products:bulk-upsert" code={SNIPPETS.bulk} />
@@ -135,7 +139,7 @@ export function IntegrationPage() {
             <Snippet label="Batch result" code={SNIPPETS.batchResult} />
           </div>
         </Panel>
-        <Panel title="Recommendation request and feedback" body="Server-to-server only. These operations have no screen in this console; the fallback rate and serving metrics on Service Status are their only trace here. Scoring is a placeholder in this release.">
+        <Panel title="Recommendation request and feedback" body="Server-to-server only. These operations have no screen in this console; the fallback rate and serving metrics on Service Status are their only trace here. Responses name the serving model version and strategy (personalized, session or popular_fallback).">
           <div className="snippets">
             <Snippet label="POST /v1/recommendations" code={SNIPPETS.recommend} />
             <Snippet label="POST /v1/feedback/impressions | clicks | conversions" code={SNIPPETS.feedback} />

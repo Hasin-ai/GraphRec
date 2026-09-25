@@ -84,6 +84,9 @@ ROUTES: Dict[str, Route] = dict(
         _r(Route("api_keys.create", "POST", "/v1/api-keys", auth="bearer", scope="keys:write", scope_enforced=True, body="json")),
         _r(Route("api_keys.rotate", "POST", "/v1/api-keys/{key_id}/rotate", auth="bearer", scope="keys:write", scope_enforced=True, body="json")),
         _r(Route("api_keys.revoke", "DELETE", "/v1/api-keys/{key_id}", auth="bearer", scope="keys:write", scope_enforced=True, idempotent=True)),
+        # -- tenant users (administrator bearer tokens only) -------------------------------
+        _r(Route("tenant_users.list", "GET", "/v1/tenant/users", auth="bearer", scope="users:write", scope_enforced=True, idempotent=True)),
+        _r(Route("tenant_users.invite", "POST", "/v1/tenant/users", auth="bearer", scope="users:write", scope_enforced=True, body="json")),
         # -- billing -----------------------------------------------------------------------
         _r(Route("subscription.get", "GET", "/v1/subscription", scope="billing:read", scope_enforced=True, idempotent=True)),
         _r(Route("usage.get", "GET", "/v1/usage", scope="usage:read", scope_enforced=True, idempotent=True)),
@@ -115,8 +118,6 @@ ROUTES: Dict[str, Route] = dict(
         _r(Route("training_jobs.list", "GET", "/v1/training-jobs", scope="training:read", scope_enforced=True, idempotent=True)),
         # -- serving status ----------------------------------------------------------------
         _r(Route("deployment.get", "GET", "/v1/deployment", scope="deployments:read", scope_enforced=True, idempotent=True)),
-        _r(Route("deployment.replicas", "GET", "/v1/deployment/replicas", scope="deployments:read", scope_enforced=True, idempotent=True)),
-        _r(Route("deployment.autoscaling", "GET", "/v1/deployment/autoscaling", scope="deployments:read", scope_enforced=True, idempotent=True)),
         _r(Route("metrics.summary", "GET", "/v1/metrics/summary", scope="metrics:read", scope_enforced=True, idempotent=True)),
         # -- recommendations & feedback ----------------------------------------------------
         _r(Route("recommendations.get", "POST", "/v1/recommendations", scope="recommendations:read", scope_enforced=True, idempotent=True, body="json")),

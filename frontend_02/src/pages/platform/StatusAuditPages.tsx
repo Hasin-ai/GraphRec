@@ -1,6 +1,6 @@
-import { useState } from "react";
 import { Link } from "react-router-dom";
 import { platform } from "../../api";
+import { useClearQuery, useQueryState } from "../../hooks/useQueryState";
 import { useResource } from "../../hooks/useResource";
 import { fmtDateTime, relativeSeconds, shortId } from "../../lib/format";
 import { Page } from "../../ui/Page";
@@ -25,23 +25,14 @@ export function PlatformStatusPage() {
       updated={status.loadedAt ? `updated ${relativeSeconds(status.loadedAt)}` : undefined}
       actions={[{ label: "Refresh", onClick: () => { void status.reload(); void tenants.reload(); void failures.reload(); } }]}
     >
-      {status.error ? <ErrorBanner error={status.error} /> : null}
+      {status.error ? <ErrorBanner error={status.error} onRetry={status.reload} /> : null}
       {!s && status.loading ? (
         <Skeleton />
       ) : s ? (
         <>
-          <Stats
-            items={[
-              { label: "Overall", value: s.status, tone: s.status === "healthy" ? "ok" : "warn" },
-              { label: "API cluster", value: s.api_cluster },
-              { label: "Database", value: s.database, tone: s.database === "connected" ? undefined : "danger" },
-              { label: "Worker pool", value: s.worker_pool, note: s.worker_pool === "not_deployed" ? "training runs in the API in this release" : "" },
-              { label: "Active tenants", value: tenants.data ? String(activeTenants) : "…", note: tenants.data ? `of ${tenants.data.items.length} accounts` : "" },
-              { label: "Security events", value: recentFailures === undefined ? "…" : String(recentFailures), note: "last 24 hours" },
-            ]}
-          />
           <DefinitionList
             items={[
+              { label: "Overall", badge: <Badge group="platform" value={s.status} /> },
               { label: "Reported at", value: fmtDateTime(s.timestamp), mono: true },
               { label: "API cluster", badge: <Badge group="platform" value={s.api_cluster} /> },
               { label: "Database", badge: <Badge group="platform" value={s.database} /> },
@@ -50,7 +41,13 @@ export function PlatformStatusPage() {
           />
         </>
       ) : null}
-      <Footnote>A gap in measurement is reported as a gap. It is never rendered as a zero.</Footnote>
+      {tenants.error ? <ErrorBanner error={tenants.error} title="Tenant counts unavailable" onRetry={tenants.reload} /> : null}
+      {failures.error ? <ErrorBanner error={failures.error} title="Recent failures unavailable" onRetry={failures.reload} /> : null}
+      <Stats items={[
+        { label: "Active tenants", value: tenants.data ? String(activeTenants) : tenants.loading ? "Loading…" : "Unavailable", note: tenants.data ? `of ${tenants.data.items.length} accounts` : undefined },
+        { label: "Recent failures", value: recentFailures === undefined ? failures.loading ? "Loading…" : "Unavailable" : String(recentFailures), note: "Last 24 hours within the 50 latest records" },
+      ]} />
+      <Footnote>Training runs in the API process. A worker pool marked not deployed is not a health failure.</Footnote>
     </Page>
   );
 }
@@ -58,30 +55,31 @@ export function PlatformStatusPage() {
 type Tab = "Failures" | "Audit records";
 
 export function PlatformAuditPage() {
-  const [tab, setTab] = useState<Tab>("Failures");
+  const clearQuery = useClearQuery();
+  const [tabParam, setTab] = useQueryState("view", "Failures");
+  const tab: Tab = tabParam === "Audit records" ? "Audit records" : "Failures";
   const failures = useResource(() => platform.listFailures(), []);
   const audit = useResource(() => platform.listAudit(), []);
-  const [severity, setSeverity] = useState("all severities");
-  const [action, setAction] = useState("all action types");
-  const [tenant, setTenant] = useState("");
+  const [severity, setSeverity] = useQueryState("severity", "all severities");
+  const [action, setAction] = useQueryState("action", "all action types");
+  const [tenant, setTenant] = useQueryState("tenant", "");
 
   const failureList = (failures.data?.items ?? []).filter((f) => severity === "all severities" || f.severity === severity);
   const auditItems = audit.data?.items ?? [];
   const actionTypes = Array.from(new Set(auditItems.map((a) => a.action_type))).sort();
-  const auditList = auditItems.filter((a) => (action === "all action types" || a.action_type === action) && (!tenant.trim() || a.tenant_id.startsWith(tenant.trim())));
+  const auditList = auditItems.filter((a) => (action === "all action types" || a.action_type === action) && (!tenant.trim() || a.tenant_id?.startsWith(tenant.trim())));
 
   return (
     <Page crumbs={[{ label: "Platform", to: "/admin/status" }, { label: "Failures & Audit", to: "/admin/audit" }, { label: tab }]} kicker="Audit permission" title="Failures & Audit" subtitle={tab === "Failures" ? "Redacted security and failure events across the platform. Details are sanitized before they are stored." : "Immutable, append-only history. Sensitive details stay redacted."}>
       <Tabs tabs={["Failures", "Audit records"] as Tab[]} value={tab} onChange={setTab} />
+      <div className="stack" id="view-panel" role="tabpanel" aria-labelledby={`tab-${tab.replaceAll(" ", "-")}`}>
       {tab === "Failures" ? (
         <>
-          {failures.error ? <ErrorBanner error={failures.error} /> : null}
+          {failures.error ? <ErrorBanner error={failures.error} onRetry={failures.reload} /> : null}
           <FilterBar filters={[{ id: "sev", label: "Severity", value: severity, onChange: setSeverity, options: ["all severities", ...Array.from(new Set((failures.data?.items ?? []).map((f) => f.severity))).sort()] }]} onClear={() => setSeverity("all severities")} />
-          {failures.loading && !failures.data ? (
-            <Skeleton />
-          ) : (
+          {!failures.data ? (failures.loading ? <Skeleton /> : null) : (
             <DataTable
-              minWidth={1000}
+              minWidth={850}
               columns={["Occurred at", "Severity", "Event type", "Detail", "Tenant"]}
               rows={failureList.map((f) => (
                 <tr key={f.id}>
@@ -107,22 +105,17 @@ export function PlatformAuditPage() {
         </>
       ) : (
         <>
-          {audit.error ? <ErrorBanner error={audit.error} /> : null}
+          {audit.error ? <ErrorBanner error={audit.error} onRetry={audit.reload} /> : null}
           <FilterBar
             filters={[
               { id: "action", label: "Action type", value: action, onChange: setAction, options: ["all action types", ...actionTypes] },
               { id: "tenant", label: "Tenant id", value: tenant, onChange: setTenant, placeholder: "starts with…" },
             ]}
-            onClear={() => {
-              setAction("all action types");
-              setTenant("");
-            }}
+            onClear={() => clearQuery('action', 'tenant')}
           />
-          {audit.loading && !audit.data ? (
-            <Skeleton />
-          ) : (
+          {!audit.data ? (audit.loading ? <Skeleton /> : null) : (
             <DataTable
-              minWidth={1080}
+              minWidth={850}
               columns={["Occurred at", "Actor type", "Action type", "Resource type", "Outcome", "Tenant"]}
               rows={auditList.map((a) => (
                 <tr key={a.id}>
@@ -134,7 +127,7 @@ export function PlatformAuditPage() {
                     <Badge group="outcome" value={a.outcome} />
                   </td>
                   <Cell mono muted>
-                    <Link to={`/admin/tenants/${a.tenant_id}`}>{shortId(a.tenant_id)}</Link>
+                    {a.tenant_id ? <Link to={`/admin/tenants/${a.tenant_id}`}>{shortId(a.tenant_id)}</Link> : "Platform"}
                   </Cell>
                 </tr>
               ))}
@@ -144,6 +137,7 @@ export function PlatformAuditPage() {
           )}
         </>
       )}
+      </div>
       <Footnote>The API returns the 50 most recent records of each kind. Records are written by the platform and cannot be edited or deleted from this console.</Footnote>
     </Page>
   );

@@ -3,12 +3,13 @@ import { Link, useNavigate } from "react-router-dom";
 import { events } from "../../api";
 import { isApiError } from "../../api/client";
 import type { EventBatchResponse, EventSubmit, EventSubmitResponse } from "../../api/types";
+import { useQueryState } from "../../hooks/useQueryState";
 import { useResource } from "../../hooks/useResource";
 import { useSession } from "../../hooks/useSession";
 import { fmtDateTime, fmtNumber } from "../../lib/format";
 import { Field, Form, Select, TextArea, TextInput, type FormError } from "../../ui/Form";
 import { Page } from "../../ui/Page";
-import { ActionsCell, Badge, Cell, DataTable, DefinitionList, ErrorBanner, FilterBar, Footnote } from "../../ui/primitives";
+import { ActionsCell, Badge, Cell, DataTable, DefinitionList, ErrorBanner, FilterBar, Footnote, Skeleton } from "../../ui/primitives";
 
 const EVENT_TYPES = ["view", "add_to_cart", "purchase", "remove_from_cart", "search", "click"];
 
@@ -34,7 +35,7 @@ export function parseEventCollection(text: string): { items?: EventSubmit[]; err
 }
 
 function mapError(caught: unknown): FormError {
-  if (isApiError(caught) && caught.status === 413) return { title: "Batch rejected: too large", body: "The request body exceeds the API limit (16 KiB by default). Split the collection or use a dataset upload.", tone: "warn" };
+  if (isApiError(caught) && caught.status === 413) return { title: "Batch rejected: too large", body: "The request body exceeds the limit the API is configured with. Split the collection or use a dataset upload.", tone: "warn" };
   if (isApiError(caught) && caught.code === "validation_failed") return { title: "The submission cannot be accepted", body: caught.fields.map((f) => `${f.field}: ${f.message}`).join("; ") || caught.message };
   if (isApiError(caught) && caught.status === 403) return { title: "Not permitted", body: "Your credential does not grant events:write." };
   if (isApiError(caught) && caught.status === 429) return { title: "Quota or rate limit reached", body: caught.message, tone: "warn" };
@@ -73,22 +74,23 @@ function RecentBatches() {
   ));
   return (
     <>
-      {batches.error ? <ErrorBanner error={batches.error} /> : null}
-      <DataTable
+      {batches.error ? <ErrorBanner error={batches.error} onRetry={batches.reload} /> : null}
+      {!batches.data ? batches.loading ? <Skeleton /> : null : <DataTable
         title="Recent batch submissions"
         minWidth={900}
         columns={["Submission", "Status", { label: "Accepted", align: "right" }, { label: "Duplicates", align: "right" }, { label: "Rejected", align: "right" }, "Submitted at", { label: "", align: "right" }]}
         rows={rows}
         count={`${rows.length} batches`}
         empty={{ title: "No batch submissions yet", body: "Batches you submit here appear with their result counts." }}
-      />
+      />}
     </>
   );
 }
 
 export function EventsPage() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState("single event");
+  const [mode, setMode] = useQueryState("mode", "single event");
+  const { can } = useSession();
   const [single, setSingle] = useState({ event_id: "", user_id: "", external_product_id: "", event_type: "view", occurred_at: "", context: "" });
   const [batch, setBatch] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -173,10 +175,10 @@ export function EventsPage() {
   if (result?.kind === "batch") {
     const b = result.batch;
     return (
-      <Page crumbs={crumbs} kicker="Result" title="Batch accepted" badge={<Badge group="batch" value={b.status} />} subtitle={`The batch was processed with the counts below.`} actions={[{ label: "Open submission result", variant: "primary", onClick: () => navigate(`/submissions/${b.id}`) }, { label: "Submit another", onClick: () => setResult(null) }]}>
+      <Page crumbs={crumbs} kicker="Result" title={b.rejected_count ? "Batch processed with rejections" : "Batch accepted"} badge={<Badge group="batch" value={b.status} />} subtitle={`The batch was processed with the counts below.`} actions={[...(can("events:read") ? [{ label: "Open submission result", onClick: () => navigate(`/submissions/${b.id}`) }] : []), { label: "Submit another", onClick: () => setResult(null) }]}>
         <DefinitionList
           items={[
-            { label: "Submission id", value: <Link to={`/submissions/${b.id}`}>{b.id}</Link>, mono: true, copy: b.id },
+            { label: "Submission id", value: can("events:read") ? <Link to={`/submissions/${b.id}`}>{b.id}</Link> : b.id, mono: true, copy: b.id },
             { label: "Received", value: fmtNumber(result.received), mono: true },
             { label: "Accepted", value: fmtNumber(b.accepted_count), mono: true },
             { label: "Duplicates", value: fmtNumber(b.duplicate_count), mono: true },
@@ -189,8 +191,8 @@ export function EventsPage() {
   }
 
   return (
-    <Page crumbs={crumbs} kicker="Ingestion" title="Submit events" subtitle="Interaction events feed the dataset snapshot a training job builds from. Single and batch share one event shape.">
-      <FilterBar filters={[{ id: "mode", label: "Submission mode", value: mode, onChange: setMode, options: ["single event", "batch"] }]} onClear={() => setMode("single event")} />
+    <Page crumbs={crumbs} kicker="Ingestion" title="Submit events" subtitle="Send customer interactions and inspect batch outcomes.">
+      <FilterBar filters={[{ id: "mode", label: "Submission mode", value: mode, onChange: value => { setMode(value); setError(null); setFieldErrors({}); }, options: ["single event", "batch"] }]} onClear={() => setMode("single event")} />
       {mode === "single event" ? (
         <Form onSubmit={submitSingle} error={error} submitLabel="Submit event" busy={busy} width={860}>
           <Field id="event_id" label="Event identifier" error={fieldErrors.event_id} hint="Idempotency key. A repeat is confirmed as a duplicate.">
@@ -214,7 +216,7 @@ export function EventsPage() {
         </Form>
       ) : (
         <Form onSubmit={submitBatch} error={error} submitLabel="Submit batch" busy={busy} width={860}>
-          <Field id="batch" label="Event collection (JSON)" wide error={fieldErrors.batch} hint="Bounded by the request body limit (16 KiB by default).">
+          <Field id="batch" label="Event collection (JSON)" wide error={fieldErrors.batch} hint="Bounded by the request body limit the API is configured with.">
             <TextArea id="batch" rows={12} value={batch} onChange={setBatch} mono placeholder={BATCH_EXAMPLE} />
           </Field>
         </Form>

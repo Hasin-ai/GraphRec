@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 export interface Crumb {
@@ -17,7 +17,7 @@ export interface HeaderAction {
 
 export function Breadcrumbs({ items }: { items: Crumb[] }) {
   return (
-    <div className="crumbs" aria-label="Breadcrumb">
+    <nav className="crumbs" aria-label="Breadcrumb">
       {items.map((c, i) => {
         const last = i === items.length - 1;
         const style = c.mono ? { fontFamily: "var(--mono)" } : undefined;
@@ -25,18 +25,18 @@ export function Breadcrumbs({ items }: { items: Crumb[] }) {
           <span key={i}>
             {c.to && !last ? (
               <Link to={c.to} style={style}>
-                {c.label}
+                {c.label === "Home" ? "Overview" : c.label}
               </Link>
             ) : (
-              <span className={last ? "current" : undefined} style={style}>
-                {c.label}
+              <span className={last ? "current" : undefined} aria-current={last ? "page" : undefined} style={style}>
+                {c.label === "Home" ? "Overview" : c.label}
               </span>
             )}
             {!last ? <span className="sep">{"›"}</span> : null}
           </span>
         );
       })}
-    </div>
+    </nav>
   );
 }
 
@@ -46,7 +46,6 @@ export function Breadcrumbs({ items }: { items: Crumb[] }) {
  */
 export function Page({
   crumbs,
-  kicker,
   title,
   badge,
   actions,
@@ -63,11 +62,11 @@ export function Page({
   updated?: ReactNode;
   children?: ReactNode;
 }) {
+  useEffect(() => { document.title = `${title} · GraphRec`; }, [title]);
   return (
     <>
       {crumbs && crumbs.length ? <Breadcrumbs items={crumbs} /> : null}
       <header className="page-header">
-        {kicker ? <div className="kicker">{kicker}</div> : null}
         <div className="title-row">
           <h1>{title}</h1>
           {badge}
@@ -91,7 +90,7 @@ export function Page({
           ) : null}
         </div>
         {subtitle ? <p className="subtitle">{subtitle}</p> : null}
-        {updated ? <div className="updated pulse">{updated}</div> : null}
+        {updated ? <div className="updated">{updated}</div> : null}
       </header>
       <div className="page-body">{children}</div>
     </>

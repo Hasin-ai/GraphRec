@@ -2,6 +2,7 @@
 
 from ._base import GraphRecModel, InputModel, ItemList
 from .api_keys import ApiKey, ApiKeyList, ApiKeyWithSecret
+from .tenant_users import TenantUser, TenantUserInvitation, TenantUserList
 from .auth import AuthTokenPair, TenantRegistration
 from .billing import Subscription, UsageDimension, UsageSummary
 from .catalog import (
@@ -27,22 +28,21 @@ from .platform import (
 )
 from .recommendations import FeedbackReceipt, RecommendationItem, Recommendations
 from .serving import (
-    AutoscalingStatus,
     DeploymentStatus,
     MetricsSummary,
     QualitySummary,
-    Replica,
-    ReplicaStatus,
 )
 
 __all__ = [
+    "TenantUser",
+    "TenantUserInvitation",
+    "TenantUserList",
     "ApiKey",
     "ApiKeyList",
     "ApiKeyWithSecret",
     "AuditRecord",
     "AuditRecordList",
     "AuthTokenPair",
-    "AutoscalingStatus",
     "BulkUpsertFailure",
     "DatasetSnapshot",
     "DatasetSnapshotList",
@@ -74,8 +74,6 @@ __all__ = [
     "QuotaOverride",
     "RecommendationItem",
     "Recommendations",
-    "Replica",
-    "ReplicaStatus",
     "Subscription",
     "TenantRegistration",
     "TrainingJob",

@@ -1,12 +1,47 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getTenantSession } from "../auth/session";
-import { mockFetch, signInAsAdmin } from "../test/helpers";
+import { getTenantSession, setTenantSession } from "../auth/session";
+import { mockFetch, signInAsAdmin, tokenPair } from "../test/helpers";
 import { describeError, request } from "./client";
 import { GraphRecApiError } from "./types";
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe("request", () => {
+  it("does not deliver an old account's mutation result into a new session", async () => {
+    setTenantSession('a@example.org', tokenPair({ access_token: 'a' }));
+    let finish!: (response: Response) => void;
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(resolve => { finish = resolve; })));
+    const pending = request('/v1/api-keys', { method: 'POST', json: { name: 'old account key' } });
+    setTenantSession('b@example.org', tokenPair({ access_token: 'b' }));
+    finish(new Response(JSON.stringify({ secret: 'old-secret' })));
+    await expect(pending).rejects.toMatchObject({ code: 'session_changed' });
+    expect(getTenantSession()?.accessToken).toBe('b');
+  });
+  it("does not expire a newer session when an obsolete request returns 401", async () => {
+    setTenantSession('a@example.org', tokenPair({ access_token: 'old' }));
+    let finish!: (response: Response) => void;
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(resolve => { finish = resolve; })));
+    const old = request('/v1/products').catch(error => error);
+    setTenantSession('b@example.org', tokenPair({ access_token: 'new' }));
+    finish(new Response(JSON.stringify({ error: { code: 'token_expired' } }), { status: 401 }));
+    await old;
+    expect(getTenantSession()?.accessToken).toBe('new');
+  });
+  it("deduplicates simultaneous reads but never shares them across sessions", async () => {
+    setTenantSession('a@example.org', tokenPair({ access_token: 'a' }));
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ items: [] })));
+    vi.stubGlobal('fetch', fetcher);
+    const a = request('/v1/products'); const duplicate = request('/v1/products');
+    setTenantSession('b@example.org', tokenPair({ access_token: 'b' }));
+    const results = await Promise.allSettled([a, duplicate, request('/v1/products')]);
+    expect(results.map(result => result.status)).toEqual(['rejected', 'rejected', 'fulfilled']);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+  it("rejects a successful HTTP response containing HTML instead of JSON", async () => {
+    signInAsAdmin();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('<html>Proxy failure</html>')));
+    await expect(request('/v1/usage')).rejects.toMatchObject({ code: 'invalid_response' });
+  });
   it("sends JSON headers only when there is a body, and the bearer token for the tenant realm", async () => {
     signInAsAdmin();
     const { calls } = mockFetch([

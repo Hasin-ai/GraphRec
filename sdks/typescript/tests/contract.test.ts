@@ -131,7 +131,7 @@ function parseRouterFile(source: string, decoratorTarget: "router" | "app"): Ser
       const defaultCall = defaultValue.match(/^(\w+)\(/)?.[1] ?? "";
       if (annotation === "AuthenticatedPrincipal") route.authenticated = true;
       else if (defaultCall === "File") route.body = "multipart";
-      else if (defaultCall === "Depends" || defaultCall === "Header") continue;
+      else if (defaultCall === "Depends" || defaultCall === "Header" || defaultCall === "Query") continue;
       else if (annotation && !NON_BODY_ANNOTATIONS.has(annotation.split("[")[0])) route.body = "json";
     }
     const bodyEnd = source.slice(sigEnd).search(/\n\S/);
@@ -341,9 +341,6 @@ const RESPONSE_TYPES: [string, string][] = [
   ["TrainingJobResource", "TrainingJob"],
   ["TrainingJobListResponse", "TrainingJobList"],
   ["DeploymentStatus", "DeploymentStatus"],
-  ["ReplicaItem", "Replica"],
-  ["ReplicaStatusResponse", "ReplicaStatus"],
-  ["AutoscalingStatus", "AutoscalingStatus"],
   ["QualitySummary", "QualitySummary"],
   ["MetricsSummary", "MetricsSummary"],
   ["RecommendationItem", "RecommendationItem"],

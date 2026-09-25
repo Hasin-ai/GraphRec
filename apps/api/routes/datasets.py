@@ -3,6 +3,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
 from graphrec_core.auth.principal import AuthenticatedPrincipal, authenticated_principal
@@ -34,7 +35,8 @@ async def upload_dataset_file(
         raise ApiError(413, "payload_too_large", "The uploaded file exceeds the configured limit")
     raw_content = content_bytes.decode("utf-8", errors="ignore")
     service = DatasetService(db)
-    return service.upload_dataset_content(principal.tenant_id, raw_content)
+    # Large interaction logs take seconds; keep the event loop free meanwhile.
+    return await run_in_threadpool(service.upload_dataset_content, principal.tenant_id, raw_content)
 
 
 @router.post("/v1/datasets/snapshots", response_model=DatasetSnapshotResource)

@@ -1,12 +1,13 @@
-import { roleLabel } from "../../auth/session";
+import { roleLabel, sessionTenantId } from "../../auth/session";
 import { useSession, useTenant } from "../../hooks/useSession";
 import { fmtDateTime } from "../../lib/format";
 import { scopeLabel } from "../../lib/scopes";
 import { Page } from "../../ui/Page";
-import { Badge, Cell, DefinitionList, Footnote, Panel, PanelTable } from "../../ui/primitives";
+import { Tag, Cell, DefinitionList, Footnote, Panel, PanelTable } from "../../ui/primitives";
 
 const CAPABILITIES: [string, string][] = [
   ["Credential management", "keys:write"],
+  ["User invitations", "users:write"],
   ["Catalog read", "catalog:read"],
   ["Catalog write & synchronization", "catalog:write"],
   ["Event submission", "events:write"],
@@ -14,9 +15,13 @@ const CAPABILITIES: [string, string][] = [
   ["Training request", "training:write"],
   ["Training and snapshot read", "training:read"],
   ["Model version read", "models:read"],
+  ["Model version write", "models:write"],
   ["Model activation and roll back", "models:deploy"],
-  ["Usage and subscription", "usage:read"],
-  ["Deployment and metrics", "deployments:read"],
+  ["Recommendation serving", "recommendations:read"],
+  ["Usage read", "usage:read"],
+  ["Subscription read", "billing:read"],
+  ["Deployment read", "deployments:read"],
+  ["Serving metrics read", "metrics:read"],
 ];
 
 /** Own record only: what the session carries. There is no profile or password-change endpoint. */
@@ -33,9 +38,9 @@ export function AccountPage() {
     >
       <DefinitionList
         items={[
-          { label: "Email", value: tenant.email, mono: true, copy: tenant.email },
+          { label: "Tenant ID", value: sessionTenantId(tenant) ?? "Unavailable in this session", mono: true, copy: sessionTenantId(tenant) ?? undefined },
+          { label: "Email", value: tenant.email || "Not provided during account setup", mono: true, copy: tenant.email || undefined },
           { label: "Role", value: roleLabel(tenant.role), mono: true },
-          { label: "Account status", badge: <Badge group="tenant" value="active" /> },
           { label: "Signed in", value: fmtDateTime(tenant.signedInAt), mono: true },
           { label: "Session expires", value: fmtDateTime(tenant.expiresAt), mono: true },
         ]}
@@ -50,7 +55,7 @@ export function AccountPage() {
                 {scope}
               </Cell>
               <td>
-                <Badge group="outcome" value={tenant.scopes.includes(scope) ? "succeeded" : "denied"} />
+                <Tag tone={tenant.scopes.includes(scope) ? "ok" : "neu"}>{tenant.scopes.includes(scope) ? "Granted" : "Not granted"}</Tag>
               </td>
             </tr>
           ))}

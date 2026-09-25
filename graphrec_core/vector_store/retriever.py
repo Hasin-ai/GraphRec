@@ -23,8 +23,12 @@ from uuid import UUID
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
 
-from graphrec_core.vector_store.collections import collection_name
+from graphrec_core.vector_store.collections import collection_name, ensure_payload_indexes
 from graphrec_core.settings import get_settings
+
+
+#: Collections whose payload indexes were verified by this process.
+_INDEXED_COLLECTIONS: set[str] = set()
 
 
 def retrieve_candidates(
@@ -63,6 +67,13 @@ def retrieve_candidates(
 
     if coll not in existing:
         return []
+    if coll not in _INDEXED_COLLECTIONS:
+        # Collections created before payload indexes existed get them lazily.
+        try:
+            ensure_payload_indexes(client, coll)
+        except Exception:  # noqa: BLE001
+            return []
+        _INDEXED_COLLECTIONS.add(coll)
 
     # Build payload filter: tenant isolation + optional exclusion list
     must_conditions: list[qmodels.Condition] = [
@@ -72,20 +83,19 @@ def retrieve_candidates(
         )
     ]
 
-    must_not_conditions: list[qmodels.Condition] = []
     if exclude_ids:
-        for eid in exclude_ids:
-            must_not_conditions.append(
-                qmodels.FieldCondition(
-                    key="external_id",
-                    match=qmodels.MatchValue(value=eid),
-                )
+        # One MatchExcept condition instead of one must_not per id: with the
+        # keyword payload index this costs ~10 ms for hundreds of exclusions,
+        # where per-id conditions took seconds (a shopper's whole history is
+        # excluded on every request).
+        must_conditions.append(
+            qmodels.FieldCondition(
+                key="external_id",
+                match=qmodels.MatchExcept(**{"except": list(dict.fromkeys(exclude_ids))}),
             )
+        )
 
-    query_filter = qmodels.Filter(
-        must=must_conditions,
-        must_not=must_not_conditions if must_not_conditions else None,
-    )
+    query_filter = qmodels.Filter(must=must_conditions)
 
     try:
         results = client.search(
@@ -100,6 +110,6 @@ def retrieve_candidates(
 
     return [
         hit.payload["external_id"]
-        for hit in results
+        for hit in sorted(results, key=lambda item: (-item.score, str((item.payload or {}).get("external_id", ""))))
         if hit.payload and "external_id" in hit.payload
     ]

@@ -1,8 +1,8 @@
 import type { CSSProperties, ReactNode } from "react";
-import { Link } from "react-router-dom";
 import { describeError, isApiError } from "../api/client";
 import { useToast } from "../hooks/useToast";
 import { toneFor, type Tone } from "../lib/status";
+import { quotaState } from "../lib/quota";
 
 const TONE_STYLE: Record<Tone, CSSProperties> = {
   ok: { background: "var(--ok-bg)", color: "var(--ok)" },
@@ -13,20 +13,68 @@ const TONE_STYLE: Record<Tone, CSSProperties> = {
 };
 
 // ── tags ───────────────────────────────────────────────────────
-export function Tag({ tone = "neu", mono, children }: { tone?: Tone; mono?: boolean; children: ReactNode }) {
+export function Tag({
+  tone = "neu",
+  mono,
+  dot,
+  children,
+}: {
+  tone?: Tone;
+  mono?: boolean;
+  /** Leading status dot. Used by Badge so a state reads at a glance, not only by hue. */
+  dot?: boolean;
+  children: ReactNode;
+}) {
   return (
     <span className={`tag${mono ? " mono" : ""}`} style={TONE_STYLE[tone]}>
+      {dot ? <span className="dot" aria-hidden="true" /> : null}
       {children}
     </span>
   );
 }
 
-/** A state badge: the value in mono with its fixed semantic colour. */
+/** A state badge: the value in mono, with its fixed semantic colour and a status dot. */
 export function Badge({ group, value }: { group: string; value: string }) {
   return (
-    <Tag tone={toneFor(group, value)} mono>
+    <Tag tone={toneFor(group, value)} mono dot>
       {value}
     </Tag>
+  );
+}
+
+// ── meter ──────────────────────────────────────────────────────
+/**
+ * A measured quantity against its limit. `limit` of null means the dimension is
+ * informational: the track renders at rest rather than implying a full bar.
+ */
+export function Meter({
+  used,
+  limit,
+  caption,
+}: {
+  used: number;
+  limit: number | null;
+  caption?: ReactNode;
+}) {
+  const quota = quotaState(used, limit);
+  const fraction = Math.max(0, Math.min(1, quota.ratio ?? 0));
+  const tone = quota.tone;
+  if (limit === null || limit === 0) return <span className={`meter ${tone}`}><span className="cap">{caption ?? quota.label}</span></span>;
+  return (
+    <div
+      className={`meter ${tone}`}
+      role="meter"
+      aria-valuenow={Math.min(limit, Math.max(0, used))}
+      aria-valuemin={0}
+      aria-valuemax={limit}
+      aria-valuetext={`${used} of ${limit}. ${quota.label}`}
+      aria-label={typeof caption === "string" ? caption : "Quota usage"}
+    >
+      <div className="track">
+        <div className="fill" style={{ width: `${fraction * 100}%` }} />
+      </div>
+      {caption ? <span className="cap">{caption}</span> : null}
+    </div>
   );
 }
 
@@ -58,11 +106,12 @@ export function Banner({
 }
 
 /** Non-disclosing rendering of a failed request, with the correlation reference to quote. */
-export function ErrorBanner({ error, title = "The request could not be completed" }: { error: unknown; title?: string }) {
+export function ErrorBanner({ error, title = "The request could not be completed", onRetry }: { error: unknown; title?: string; onRetry?: () => void }) {
   const ref = isApiError(error) ? error.correlationId : undefined;
   return (
     <Banner tone={isApiError(error) && error.status === 429 ? "warn" : "danger"} title={title}>
       {describeError(error)}
+      {onRetry ? <button type="button" className="btn btn-secondary btn-sm" onClick={onRetry} style={{ marginLeft: 12 }}>Try again</button> : null}
       {ref ? (
         <>
           {" "}
@@ -97,46 +146,18 @@ export function Stats({ items }: { items: Stat[] }) {
   );
 }
 
-// ── stage rail ─────────────────────────────────────────────────
-export function StageRail({
-  title,
-  stages,
-  at,
-  failed,
-  note,
-}: {
-  title: string;
-  stages: readonly string[];
-  at: number;
-  failed?: boolean;
-  note?: ReactNode;
-}) {
-  return (
-    <section className="rail">
-      <h2>{title}</h2>
-      <div className="stages" style={{ gridTemplateColumns: `repeat(${stages.length}, 1fr)` }}>
-        {stages.map((label, i) => {
-          const cur = i === at;
-          const cls = failed && cur ? "fail" : cur ? "cur" : i < at ? "done" : "";
-          return (
-            <div className={`stage${cur ? " cur" : ""}`} key={label}>
-              <div className={`bar ${cls}`} />
-              <span>{label}</span>
-            </div>
-          );
-        })}
-      </div>
-      {note ? <div className="note">{note}</div> : null}
-    </section>
-  );
-}
-
 // ── tabs ───────────────────────────────────────────────────────
 export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: T[]; value: T; onChange: (t: T) => void }) {
   return (
-    <div className="tabs" role="tablist">
+    <div className="tabs" role="tablist" aria-label="Audit views">
       {tabs.map((t) => (
-        <button key={t} type="button" role="tab" aria-selected={t === value} className={t === value ? "active" : ""} onClick={() => onChange(t)}>
+        <button key={t} id={`tab-${t.replaceAll(' ', '-')}`} aria-controls="view-panel" tabIndex={t === value ? 0 : -1} type="button" role="tab" aria-selected={t === value} className={t === value ? "active" : ""} onClick={() => onChange(t)} onKeyDown={event => {
+          const index = tabs.indexOf(t);
+          const next = event.key === 'ArrowRight' ? (index + 1) % tabs.length : event.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : -1;
+          if (next < 0) return;
+          event.preventDefault(); onChange(tabs[next]);
+          document.getElementById(`tab-${tabs[next].replaceAll(' ', '-')}`)?.focus();
+        }}>
           {t}
         </button>
       ))}
@@ -180,67 +201,11 @@ export function FilterBar({ filters, onClear }: { filters: FilterSpec[]; onClear
   );
 }
 
-// ── cards / checklist ──────────────────────────────────────────
-export interface CardSpec {
-  route: string;
-  title: string;
-  body: string;
-}
-
-export function Cards({ items }: { items: CardSpec[] }) {
-  return (
-    <div className="grid-cells cards">
-      {items.map((c) => (
-        <Link className="card-link" to={c.route} key={c.route}>
-          <span className="route">{c.route}</span>
-          <span className="title">{c.title}</span>
-          <span className="body">{c.body}</span>
-        </Link>
-      ))}
-    </div>
-  );
-}
-
-export interface ChecklistStep {
-  label: string;
-  route: string;
-  done: boolean;
-  note: string;
-}
-
-export function Checklist({ title, steps, onDismiss }: { title: string; steps: ChecklistStep[]; onDismiss: () => void }) {
-  const done = steps.filter((s) => s.done).length;
-  return (
-    <section className="checklist">
-      <div className="head">
-        <h2>{title}</h2>
-        <span className="progress">
-          {done} of {steps.length} complete
-        </span>
-        <button type="button" className="btn btn-secondary btn-sm" style={{ marginLeft: "auto" }} onClick={onDismiss}>
-          Dismiss
-        </button>
-      </div>
-      <ol>
-        {steps.map((s) => (
-          <li key={s.route + s.label}>
-            <span className={`mark${s.done ? " done" : ""}`}>{s.done ? "✓" : "—"}</span>
-            <Link to={s.route} className={s.done ? "done" : ""}>
-              {s.label}
-            </Link>
-            <Tag tone={s.done ? "ok" : "info"}>{s.done ? "done" : "to do"}</Tag>
-            <span className="note">{s.note}</span>
-          </li>
-        ))}
-      </ol>
-    </section>
-  );
-}
-
 // ── skeleton / empty ───────────────────────────────────────────
 export function Skeleton({ rows = 5 }: { rows?: number }) {
   return (
-    <div className="skeleton" aria-busy="true" aria-label="Loading">
+    <div className="skeleton" role="status" aria-busy="true" aria-label="Loading">
+      <span className="sr-only">Loading…</span>
       {Array.from({ length: rows }, (_, i) => (
         <div key={i} />
       ))}
@@ -368,6 +333,7 @@ export function DataTable({
   count,
   title,
   empty,
+  footer,
 }: {
   columns: (string | Column)[];
   rows: ReactNode[];
@@ -375,20 +341,22 @@ export function DataTable({
   count?: string;
   title?: string;
   empty?: { title: string; body: string; action?: { label: string; onClick: () => void } };
+  /** Extra footer content, e.g. a "Load more" control for paged lists. */
+  footer?: ReactNode;
 }) {
-  if (rows.length === 0 && empty) return <EmptyState {...empty} />;
   return (
     <section className="table-section">
       {title ? <h2>{title}</h2> : null}
-      <div className="table-wrap">
+      {rows.length ? <p className="table-scroll-hint">Scroll horizontally to see all columns →</p> : null}
+      {rows.length === 0 && empty ? <EmptyState {...empty} /> : <div className="table-wrap" tabIndex={0} role="region" aria-label={title ?? "Results table"}>
         <table className="table" style={{ minWidth }}>
           <thead>
             <tr>
               {columns.map((c, i) => {
                 const col = typeof c === "string" ? { label: c } : c;
                 return (
-                  <th key={i} className={col.align === "right" ? "right" : undefined}>
-                    {col.label}
+                  <th scope="col" key={i} className={col.align === "right" ? "right" : undefined}>
+                    {col.label || <span className="sr-only">Actions</span>}
                   </th>
                 );
               })}
@@ -396,10 +364,11 @@ export function DataTable({
           </thead>
           <tbody>{rows}</tbody>
         </table>
-      </div>
-      {count ? (
+      </div>}
+      {count || footer ? (
         <div className="table-foot">
-          <span className="count">{count}</span>
+          {count ? <span className="count">{count}</span> : null}
+          {footer}
         </div>
       ) : null}
     </section>
@@ -484,14 +453,16 @@ export function Snippet({ label, code }: { label: string; code: string }) {
 
 export function PanelTable({ columns, rows }: { columns: (string | Column)[]; rows: ReactNode[] }) {
   return (
-    <div className="table-wrap">
-      <table className="table">
+    <>
+    <p className="table-scroll-hint">Scroll horizontally to see all columns →</p>
+    <div className="table-wrap" tabIndex={0} role="region" aria-label="Details table">
+      <table className="table" style={{ minWidth: 640 }}>
         <thead>
           <tr>
             {columns.map((c, i) => {
               const col = typeof c === "string" ? { label: c } : c;
               return (
-                <th key={i} className={col.align === "right" ? "right" : undefined}>
+                <th scope="col" key={i} className={col.align === "right" ? "right" : undefined}>
                   {col.label}
                 </th>
               );
@@ -501,6 +472,7 @@ export function PanelTable({ columns, rows }: { columns: (string | Column)[]; ro
         <tbody>{rows}</tbody>
       </table>
     </div>
+    </>
   );
 }
 

@@ -25,6 +25,27 @@ class Base(DeclarativeBase):
     pass
 
 
+class RecommendationRecord(Base):
+    __tablename__ = "recommendation_records"
+    tenant_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), primary_key=True)
+    request_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    response: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class RecommendationFeedback(Base):
+    __tablename__ = "recommendation_feedback"
+    __table_args__ = (ForeignKeyConstraint(["tenant_id", "request_id"], ["recommendation_records.tenant_id", "recommendation_records.request_id"]),)
+    tenant_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), primary_key=True)
+    event_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    request_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    feedback_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class PricingPlan(Base):
     __tablename__ = "pricing_plans"
 
@@ -354,9 +375,17 @@ class ModelVersion(Base):
 class TrainingJob(Base):
     __tablename__ = "training_jobs"
     __table_args__ = (
+        UniqueConstraint("tenant_id", "request_id", name="uq_training_jobs_tenant_request"),
         Index("ix_training_jobs_tenant_created", "tenant_id", "created_at"),
     )
 
+    progress: Mapped[int] = mapped_column(default=0)
+    stage: Mapped[str] = mapped_column(String(40), default="completed")
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancel_requested: Mapped[bool] = mapped_column(default=False)
+    attempts: Mapped[int] = mapped_column(default=0)
+    request_id: Mapped[str | None] = mapped_column(String(128))
+    payload_hash: Mapped[str | None] = mapped_column(String(64))
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
     tenant_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
@@ -391,3 +420,36 @@ class DatasetSnapshot(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class DatasetSnapshotContent(Base):
+    __tablename__ = "dataset_snapshot_contents"
+
+    snapshot_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("dataset_snapshots.id", ondelete="CASCADE"), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    content: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+
+
+class ServingRequest(Base):
+    """One row per recommendation request served, the source for /v1/metrics/summary.
+
+    Append-only: the API measures rates and latency percentiles over a window of
+    these rows rather than reporting nominal values.
+    """
+
+    __tablename__ = "serving_requests"
+    __table_args__ = (
+        CheckConstraint("outcome IN ('served','error')", name="ck_serving_requests_outcome"),
+        CheckConstraint("latency_ms >= 0", name="ck_serving_requests_latency"),
+        Index("ix_serving_requests_tenant_occurred", "tenant_id", "occurred_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    model_version_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    strategy: Mapped[str] = mapped_column(String(32), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(16), nullable=False)
+    fallback_used: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    item_count: Mapped[int] = mapped_column(nullable=False, default=0)
+    latency_ms: Mapped[int] = mapped_column(nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

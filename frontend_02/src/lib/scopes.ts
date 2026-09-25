@@ -18,7 +18,7 @@ export const API_KEY_SCOPES: { scope: ApiKeyScope; label: string; group: string 
   { scope: "usage:read", label: "Usage read", group: "Account" },
 ];
 
-const DEVELOPER_DELEGATED: ApiKeyScope[] = ["catalog:read", "catalog:write", "events:read", "events:write"];
+const DEVELOPER_DELEGATED: ApiKeyScope[] = ["catalog:read", "catalog:write", "events:read", "events:write", "recommendations:read"];
 
 /** Scopes a role may delegate to an API key (ADMIN_DELEGATED_SCOPES / DEVELOPER_DELEGATED_SCOPES). */
 export function delegatableScopes(role: TenantUserRole): ApiKeyScope[] {
@@ -32,6 +32,7 @@ export function scopeLabel(scope: string): string {
 }
 
 export const SCOPE_SHORT: Record<string, string> = {
+  "users:write": "user invitations",
   "catalog:read": "catalog read",
   "catalog:write": "catalog write",
   "events:read": "result read",

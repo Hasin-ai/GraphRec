@@ -5,15 +5,15 @@ import { fmtDateTime } from "../../lib/format";
 
 export function ForbiddenPage() {
   return (
-    <Page kicker="Gate 3" title="Not permitted" subtitle="Your role or credential scope does not include this operation. There is nothing to retry here.">
-      <Footnote>Permission errors are terminal by design. Choose a permitted destination from the navigation.</Footnote>
+    <Page title="Not permitted" subtitle="Your account does not have access to this operation.">
+      <Footnote>Contact your tenant administrator if you need access.</Footnote><Link className="btn btn-secondary" to="/">Back to start</Link>
     </Page>
   );
 }
 
 export function NotFoundPage() {
   return (
-    <Page kicker="Gate 4" title="Not found" subtitle="No such resource.">
+    <Page title="Not found" subtitle="No such resource.">
       <Footnote>A resource belonging to another tenant is indistinguishable from one that does not exist.</Footnote>
       <div>
         <Link className="btn btn-secondary" to="/">
@@ -32,10 +32,10 @@ export function FailurePage() {
       <DefinitionList
         items={[
           { label: "Error reference", value: state.reference ?? "not available", mono: true, copy: state.reference },
-          { label: "Occurred at", value: fmtDateTime(state.at ?? Date.now()), mono: true },
+          { label: "Occurred at", value: fmtDateTime(state.at), mono: true },
         ]}
       />
-      <Footnote>No credentials, payloads or other tenants’ information appear in an error reference.</Footnote>
+      <Link className="btn btn-secondary" to="/">Back to start</Link>
     </Page>
   );
 }

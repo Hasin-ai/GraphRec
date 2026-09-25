@@ -87,7 +87,7 @@ class CatalogSync:
         failures: Dict[str, str] = {}
         if disable_missing:
             feed: Set[str] = {item.external_id for item in items}
-            for product in self._client.products.list():
+            for product in self._client.products.iterate():
                 if product.is_active and product.external_id not in feed:
                     try:
                         self._client.products.disable(product.external_id)
@@ -125,7 +125,7 @@ class AsyncCatalogSync:
         failures: Dict[str, str] = {}
         if disable_missing:
             feed: Set[str] = {item.external_id for item in items}
-            for product in await self._client.products.list():
+            async for product in self._client.products.iterate():
                 if product.is_active and product.external_id not in feed:
                     try:
                         await self._client.products.disable(product.external_id)

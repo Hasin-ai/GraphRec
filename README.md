@@ -5,8 +5,9 @@ vertical slices. The hardened paths are public tenant registration, tenant-user
 sign-in, the protected subscription/quota overview, current usage
 reconciliation, and scoped API-key lifecycle management. A second group of
 domain paths (catalog, events, datasets, training, model versions, deployment
-status, recommendations, and platform administration) exists as a working
-scaffold whose model training and scoring are still placeholders.
+status, recommendations, and platform administration) supports real DGSR training
+and checkpoint serving. See [SRS acceptance](SRS_ACCEPTANCE.md) for verified
+workflows, local capacity limits, and remaining requirements.
 
 ## Hardened paths
 
@@ -25,18 +26,69 @@ scaffold whose model training and scoring are still placeholders.
 
 ## Domain scaffold
 
-- Catalog: `/v1/products`, `/v1/products:bulk-upsert`
+- Tenant users: `/v1/tenant/users` (administrators invite developers and
+  other administrators; the invitee gets a one-time setup token)
+- Catalog: `/v1/products` (paginated: `limit`, `offset`, `ids`), `/v1/products:bulk-upsert`
 - Events: `/v1/events`, `/v1/events/batches`
-- Datasets: `/v1/datasets/upload` (multipart JSON or CSV), `/v1/datasets/snapshots`
+- Datasets: `/v1/datasets/upload` (multipart JSON, CSV records, or a raw
+  `user_id,item_id,time` interaction log), `/v1/datasets/snapshots`
 - Training and models: `/v1/training-jobs`, `/v1/model-versions`
 - Serving: `/v1/recommendations`, `/v1/feedback/*`, `/v1/deployment*`, `/v1/metrics/summary`
 - Platform administration: `/v1/platform/*`, authenticated with the
   `PLATFORM_ADMIN_TOKEN` shared secret (leave it empty to disable these routes)
 
-Known placeholders in the scaffold: training jobs index synthetic embeddings
-into Qdrant instead of real GNN output, recommendation scoring uses a fixed
-query vector and Qdrant rank order, feedback endpoints acknowledge but do not
-persist, and deployment/autoscaling/metrics responses are static.
+Training without an artifact queues real tenant-data training in the Compose
+worker. Synthetic embeddings require explicit `configuration.mode="placeholder"`.
+Feedback is persisted with tenant ownership and replay validation, and admission
+limits enforce the main plan quotas. Serving status and metrics are
+measured: `/v1/deployment` reports the tenant's active model version and
+`/v1/metrics/summary` aggregates the `serving_requests` ledger. The platform
+runs one API process per deployment, so it has no replica or autoscaling state
+to report and exposes none.
+
+## DGSR serving
+
+`graphrec_core/dgsr/` is the DGSR implementation from `dgsr_notebooks/dgsr-beauty.ipynb`
+(config, data, temporal graph sampler, model) plus `serving.py`, which loads a
+checkpoint and encodes a shopper into the Eq. 18 query vector. Two paths share
+one model: a shopper from the training graph is encoded exactly as the notebook's
+`recommend()` does; any other history (a session, a shopper with new events, an
+unknown shopper) becomes a *virtual root* whose neighbourhood is expanded through
+the saved graph (an unknown shopper starts from the mean user embedding and is
+labelled `session`).
+
+A training job with `configuration.pretrained_artifact = "<name>"` imports
+`MODEL_ARTIFACT_ROOT/<name>/` (`best.pt`, `config.json`, `id_maps.json`,
+`interactions.npz`, optional `final_metrics.json`) instead of training: the
+checkpoint's engine, config, data fingerprint and vocabulary are verified, its
+item ids must be the tenant's product ids and its user ids the tenant's event
+user ids (coverage is recorded in the version metrics), and the real item table
+is indexed into Qdrant with dot-product distance. Compose mounts
+`MODEL_ARTIFACT_DIR` (default `./model_artifacts`) at `/artifacts`.
+
+Serving reads the shopper's events from PostgreSQL (plus
+`context.recent_product_ids`), encodes them, retrieves Top-K from Qdrant with
+the shopper's history excluded, filters to active products and returns the
+version, strategy (`personalized`, `session` or `popular_fallback`) and
+fallback tier. When the Qdrant collection is missing the item table is scored
+in-process so one capability stays ready.
+
+### Beauty end-to-end run
+
+`tests/e2e/USER_STORIES.md` writes every SRS role as user stories and
+`tests/e2e/beauty_e2e.py` executes them against a live stack with the Amazon
+Beauty log and the notebook's checkpoint (71 clauses: registration, invited
+developer, storefront credential, 394,908-event upload, artifact import,
+activation, rollback, archive, recommendations that match
+`recommendations_user_0.csv`, session and fallback behaviour, P95 latency,
+feedback, tenant isolation, platform operations):
+
+```bash
+mkdir -p model_artifacts/dgsr_beauty_t4_v2   # best.pt, config.json, id_maps.json, interactions.npz, final_metrics.json
+docker compose up -d --build
+python tests/e2e/beauty_e2e.py --platform-token "$PLATFORM_ADMIN_TOKEN" --write-storefront-env
+cd apps/demo-storefront && python scripts/verify_personalization.py   # then run the storefront
+```
 
 ## Account setup
 
@@ -58,11 +110,12 @@ docker compose exec api python -m scripts.issue_account_setup_token admin@exampl
 
 Every tenant route checks the credential's scope and answers `403
 insufficient_scope` when it is missing. `tenant_administrator` holds all
-tenant scopes; `tenant_developer` holds `keys:write`, `catalog:*`, `events:*`
-and `training:read`. Access tokens carry the scopes granted at login, so sign
-in again after a role or scope change. API keys are limited to the scopes the
-creating role may delegate (administrators: all 14 API-key scopes; developers:
-catalog and events).
+tenant scopes including `users:write`; `tenant_developer` holds `keys:write`,
+`catalog:*`, `events:*` and `training:read`. Access tokens carry the scopes
+granted at login, so sign in again after a role or scope change. API keys are
+limited to the scopes the creating role may delegate (administrators: all 14
+API-key scopes; developers: catalog, events and `recommendations:read`, enough
+to connect a store).
 
 ## Local sign-in demonstration
 

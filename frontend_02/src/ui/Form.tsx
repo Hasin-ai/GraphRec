@@ -1,6 +1,11 @@
-import type { FormEvent, ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Banner } from "./primitives";
+const FieldContext = createContext<{ invalid?: boolean; describedBy?: string; labelledBy?: string }>({});
+function useFieldAttributes() {
+  const field = useContext(FieldContext);
+  return { 'aria-invalid': field.invalid || undefined, 'aria-describedby': field.describedBy || undefined };
+}
 
 export interface FormError {
   title: string;
@@ -25,14 +30,14 @@ export function Field({
 }) {
   return (
     <div className={`field${wide ? " wide" : ""}`}>
-      <label htmlFor={id}>{label}</label>
-      {children}
+      <label id={`${id}-label`} htmlFor={id}>{label}</label>
+      <FieldContext.Provider value={{ invalid: !!error, describedBy: [error ? `${id}-error` : '', hint ? `${id}-hint` : ''].filter(Boolean).join(' '), labelledBy: `${id}-label` }}>{children}</FieldContext.Provider>
       {error ? (
-        <div className="err" role="alert">
+        <div className="err" id={`${id}-error`} role="alert">
           {error}
         </div>
       ) : null}
-      {hint ? <div className="hint">{hint}</div> : null}
+      {hint ? <div className="hint" id={`${id}-hint`}>{hint}</div> : null}
     </div>
   );
 }
@@ -54,6 +59,7 @@ interface InputProps {
 export function TextInput({ id, value, onChange, type = "text", placeholder, mono, autoComplete, required, disabled, min, max }: InputProps) {
   return (
     <input
+      {...useFieldAttributes()}
       className={`input${mono ? " mono" : ""}`}
       id={id}
       name={id}
@@ -71,12 +77,12 @@ export function TextInput({ id, value, onChange, type = "text", placeholder, mon
 }
 
 export function TextArea({ id, value, onChange, rows = 5, placeholder, mono }: { id: string; value: string; onChange: (v: string) => void; rows?: number; placeholder?: string; mono?: boolean }) {
-  return <textarea className={`input${mono ? " mono" : ""}`} id={id} name={id} rows={rows} placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} />;
+  return <textarea {...useFieldAttributes()} className={`input${mono ? " mono" : ""}`} id={id} name={id} rows={rows} placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} />;
 }
 
 export function Select({ id, value, onChange, options }: { id: string; value: string; onChange: (v: string) => void; options: { value: string; label?: string }[] | string[] }) {
   return (
-    <select className="input" id={id} name={id} value={value} onChange={(e) => onChange(e.target.value)}>
+    <select {...useFieldAttributes()} className="input" id={id} name={id} value={value} onChange={(e) => onChange(e.target.value)}>
       {options.map((o) => {
         const opt = typeof o === "string" ? { value: o, label: o } : o;
         return (
@@ -90,8 +96,9 @@ export function Select({ id, value, onChange, options }: { id: string; value: st
 }
 
 export function CheckGroup({ options, value, onChange }: { options: { value: string; label: string }[]; value: string[]; onChange: (v: string[]) => void }) {
+  const field = useContext(FieldContext);
   return (
-    <div className="check-group">
+    <div className="check-group" role="group" aria-labelledby={field.labelledBy} aria-describedby={field.describedBy}>
       {options.map((o) => {
         const checked = value.includes(o.value);
         return (
@@ -130,18 +137,23 @@ export function Form({
   width?: number;
   children: ReactNode;
 }) {
+  const ref = useRef<HTMLFormElement>(null);
+  const submitting = useRef(false);
+  useEffect(() => { if (error) ref.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(); }, [error]);
   function handle(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    void onSubmit();
+    if (busy || submitting.current) return;
+    submitting.current = true;
+    void Promise.resolve(onSubmit()).finally(() => { submitting.current = false; });
   }
   return (
-    <form className="form" style={{ maxWidth: width }} onSubmit={handle} noValidate>
+    <form ref={ref} className="form" aria-busy={busy || undefined} style={{ maxWidth: width }} onSubmit={handle} noValidate>
       {error ? (
         <Banner tone={error.tone ?? "danger"} title={error.title}>
           {error.body}
         </Banner>
       ) : null}
-      <div className="fields">{children}</div>
+      <fieldset className="fields" disabled={busy}>{children}</fieldset>
       <div className="submit-row">
         <button type="submit" className="btn btn-primary" disabled={busy}>
           {busy ? "Working…" : submitLabel}

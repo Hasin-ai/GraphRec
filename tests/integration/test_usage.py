@@ -227,9 +227,11 @@ def test_durable_ledger_reconciles_used_remaining_and_informational_values(
     assert dimensions["training_cpu_seconds"]["used"] == 12.5
     assert dimensions["training_cpu_seconds"]["limit"] is None
     assert dimensions["training_cpu_seconds"]["remaining"] is None
-    assert dimensions["stored_products"]["used"] == 6_000
+    # Inventory is measured from durable catalog rows, not monthly additions.
+    # A ledger entry alone must not invent stored products.
+    assert dimensions["stored_products"]["used"] == 0
     assert dimensions["stored_products"]["limit"] == 5_000
-    assert dimensions["stored_products"]["remaining"] == 0
+    assert dimensions["stored_products"]["remaining"] == 5_000
 
 
 def test_ledger_idempotency_is_tenant_local(client: TestClient) -> None:

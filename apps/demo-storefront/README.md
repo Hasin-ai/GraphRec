@@ -38,7 +38,7 @@ refuses to start: `GRAPHREC_API_KEY` must be a real `gr_live_` key.
 
 | Surface | Route | GraphRec calls |
 |---|---|---|
-| Catalog | `/` | `products` (cached 30 s), `recommendations` shelf, impression feedback |
+| Catalog | `/` | first page of `products` (up to 1000, cached 30 s; recommended and cart items are looked up by id), `recommendations` shelf, impression feedback |
 | Product | `/products/:id` | `view` event, "goes with" shelf that excludes the current item |
 | Cart / order | drawer, `/order/:id` | `add_to_cart` / `remove_from_cart` events, purchase batch |
 | Compare lab | `/demo/compare` | the same Top-N for every persona side by side, with pairwise overlap |
@@ -99,6 +99,7 @@ resolves itself once real training lands and the gate passes.
 | `DEMO_PORT` | `5190` | server port |
 | `DEMO_DISABLE_MISSING` | `false` | let `seed.py` disable tenant products that are not in the demo feed |
 | `DEMO_COOKIE_SECURE` | `false` | set `Secure` on the persona/session cookies |
+| `DEMO_PERSONA_USERS` | empty | map personas onto real shoppers, `maya=112:blurb,noah=40,lina=0`; `tests/e2e/beauty_e2e.py --write-storefront-env` fills it for the Beauty tenant |
 | `MODEL_PROOF_VERIFIED` / `MODEL_PROOF_VERSION_ID` | `false` / empty | only after the gate passed for that version |
 | `GRAPHREC_TIMEOUT_SECONDS` / `GRAPHREC_MAX_RETRIES` / `CATALOG_CACHE_SECONDS` | `2.0` / `1` / `30` | page-path bounds |
 

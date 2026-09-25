@@ -31,6 +31,8 @@ const shots = resolve(here, "..", "e2e-screens");
 let shotIndex = 0;
 let setupLink = "";
 let versionTag = "";
+// The usable storefront credential, carried to the serving-metrics story.
+let probeSecret = "";
 
 function platformToken(): string {
   const env = readFileSync(resolve(here, "..", "..", ".env"), "utf8");
@@ -42,7 +44,7 @@ function platformToken(): string {
 
 async function shot(page: Page, name: string) {
   shotIndex += 1;
-  await page.screenshot({ path: resolve(shots, `${String(shotIndex).padStart(2, "0")}-${name}.png`), fullPage: true });
+  await page.screenshot({ path: resolve(shots, `${String(shotIndex).padStart(2, "0")}-${name}.png`), fullPage: true, mask: [page.locator('[data-testid="secret-value"], [data-testid="setup-link"], input[type="password"]')] });
 }
 
 async function signIn(page: Page) {
@@ -96,10 +98,10 @@ test("setup: the token activates the administrator and signs them in", async () 
   await shot(page, "setup");
   await page.getByRole("button", { name: "Activate account" }).click();
 
-  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
   await expect(page.getByText("tenant administrator").first()).toBeVisible();
-  await expect(page.getByText("Getting to first recommendations")).toBeVisible();
-  await expect(page.getByText("0 usable")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Add your catalog" })).toBeVisible();
+  await expect(page.getByText("0 products", { exact: true })).toBeVisible();
   await shot(page, "home-fresh");
 
   // A used token is rejected without disclosure.
@@ -163,10 +165,13 @@ test("credentials: create shows the secret once; rotate and revoke enforce state
   await expect(row.getByRole("button", { name: "Rotate" })).toBeDisabled();
   await shot(page, "credentials-revoked");
 
-  // Create one that stays usable for the integration page.
+  // Create one that stays usable for the integration page and, later, for real serving traffic.
   await page.getByRole("button", { name: "Create credential" }).first().click();
   await page.getByRole("dialog").getByLabel("Credential name").fill("Event pipeline");
+  await page.getByRole("dialog").getByLabel(/Recommendation requests/).check();
   await page.getByRole("dialog").getByRole("button", { name: "Create credential" }).click();
+  probeSecret = (await page.getByTestId("secret-value").textContent()) ?? "";
+  expect(probeSecret).toMatch(/^gr_live_/);
   await page.getByRole("button", { name: "I have stored it" }).click();
 
   await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Integration" }).click();
@@ -200,14 +205,14 @@ test("catalog: synchronize, list, filter, detail, update and disable", async () 
 
   await page.getByRole("link", { name: "Open products" }).click();
   await expect(page.getByRole("heading", { name: "Products" })).toBeVisible();
-  await expect(page.getByRole("row", { name: /SKU-4471/ })).toContainText("served");
-  await page.getByLabel("Category").selectOption("Timber");
+  await expect(page.getByRole("row", { name: /SKU-4471/ })).toContainText("Eligible for recommendations");
+  await page.getByLabel("Search this page").fill("Oak");
   await expect(page.getByRole("row", { name: /SKU-5120/ })).toBeVisible();
   await expect(page.getByRole("row", { name: /SKU-4471/ })).toBeHidden();
   await page.getByRole("button", { name: "Clear" }).click();
   await shot(page, "products");
 
-  await page.getByRole("link", { name: "SKU-4471" }).click();
+  await page.getByRole("link", { name: "Brass hinge, 75mm" }).click();
   await expect(page.getByRole("heading", { name: "Brass hinge, 75mm" })).toBeVisible();
   await page.getByLabel("Title").fill("Brass hinge, 75 mm (solid)");
   await page.getByRole("button", { name: "Update product" }).click();
@@ -217,7 +222,7 @@ test("catalog: synchronize, list, filter, detail, update and disable", async () 
   await page.getByRole("button", { name: "Disable product" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Disable product" }).click();
   await expect(page.getByRole("heading", { name: "Products" })).toBeVisible();
-  await expect(page.getByRole("row", { name: /SKU-4471/ })).toContainText("ineligible");
+  await expect(page.getByRole("row", { name: /SKU-4471/ })).toContainText("Excluded from recommendations");
 
   // Add product: duplicate identifier is accepted as an idempotent update, not an error.
   await page.getByRole("button", { name: "Add product" }).click();
@@ -255,7 +260,9 @@ test("events: single accept, duplicate confirmation, batch and submission detail
 
   await page.getByRole("button", { name: "Open submission result" }).click();
   await expect(page.getByRole("heading", { name: /^Submission / })).toBeVisible();
-  await expect(page.getByText("All items handled.")).toBeVisible();
+  // The batch is applied in the submitting request: the console shows its final counts, not a pipeline.
+  await expect(page.getByText("these are its final counts", { exact: false })).toBeVisible();
+  await expect(page.locator(".stat").filter({ hasText: /^Received/ })).toContainText("6");
   await shot(page, "submission");
 });
 
@@ -263,26 +270,32 @@ test("datasets: take a snapshot and see it listed", async () => {
   await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Datasets" }).click();
   await expect(page.getByRole("heading", { name: "No snapshots yet" })).toBeVisible();
   await page.getByRole("button", { name: "Take snapshot" }).first().click();
-  await page.getByRole("dialog").getByLabel("Description (optional)").fill("e2e snapshot");
   await page.getByRole("dialog").getByRole("button", { name: "Create snapshot" }).click();
   await expect(page.getByRole("heading", { name: "Dataset snapshots" })).toBeVisible();
   await expect(page.getByText("1 snapshots")).toBeVisible();
+  await page.getByText("Import products and events from a file", { exact: true }).click();
+  await page.getByLabel("Dataset file").setInputFiles({ name: 'audit.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ products: [{ external_id: 'UPLOAD-1', title: 'Uploaded product', price: '4.00' }], events: [{ event_id: `upload-${tag}`, event_type: 'view', user_id: 'upload-user', external_product_id: 'UPLOAD-1' }] })) });
+  await page.getByRole('button', { name: 'Upload dataset' }).click();
+  await expect(page.getByText('2 snapshots')).toBeVisible();
+  await expect(page.locator('.stat').filter({ hasText: /^Accepted products/ })).toContainText('1');
   await shot(page, "datasets");
 });
 
 test("training and models: request a job, activate the version, see it serving", async () => {
   await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Training" }).click();
-  await expect(page.getByText("eligible", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Start training" }).first()).toBeEnabled();
   await shot(page, "training-empty");
 
   await page.getByRole("button", { name: "Start training" }).first().click();
   const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Model source").selectOption("placeholder");
   await dialog.getByLabel("Dataset snapshot").selectOption({ index: 1 });
   await dialog.getByRole("button", { name: "Request training" }).click();
 
   await expect(page.getByRole("heading", { name: /^[0-9a-f]{8}/ })).toBeVisible();
   await expect(page.getByText("The job completed and registered a model version", { exact: false })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Cancel job" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Cancel job" })).toHaveCount(0);
+  await expect(page.getByText("Development placeholder", { exact: true })).toBeVisible();
   await shot(page, "training-job");
 
   await page.getByRole("button", { name: /^Open model version / }).click();
@@ -290,19 +303,18 @@ test("training and models: request a job, activate the version, see it serving",
   versionTag = (await page.getByRole("heading", { level: 1 }).textContent()) ?? "";
   await expect(page.getByText("No offline metrics were recorded", { exact: false })).toBeVisible();
   await expect(page.getByRole("button", { name: "Activate" })).toBeEnabled();
-  await expect(page.getByRole("button", { name: "Roll back" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Roll back" })).toHaveCount(0);
   await shot(page, "model-version");
 
   await page.getByRole("button", { name: "Activate" }).click();
   await page.getByRole("dialog").getByRole("button", { name: /^Activate / }).click();
-  await expect(page.getByText("This version is serving traffic now.")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Archive" })).toBeDisabled();
+  await expect(page.getByText("This version is selected for recommendation requests.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Archive" })).toHaveCount(0);
   await shot(page, "model-version-active");
 
-  // The sidebar service rail reflects the activation on the next navigation.
+  // The registry and overview reflect the confirmed active model.
   await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Model Versions" }).click();
-  await expect(page.locator(".aside-badges")).toContainText(versionTag);
-  await expect(page.locator(".aside-badges")).toContainText("available");
+  await expect(page.locator(".model-summary")).toContainText(versionTag);
 
   // Quota: the free plan allows one training job per period, so the console blocks a second request.
   await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Training" }).click();
@@ -311,29 +323,68 @@ test("training and models: request a job, activate the version, see it serving",
   await shot(page, "training-blocked");
 
   await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Model Versions" }).click();
-  await expect(page.getByRole("row", { name: new RegExp(versionTag) })).toContainText("serving");
+  await expect(page.getByRole("row", { name: new RegExp(versionTag) })).toContainText("active");
   await shot(page, "models");
 
   await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Service Status" }).click();
   await expect(page.getByRole("heading", { name: "Service Status" })).toBeVisible();
   await expect(page.getByText("available").first()).toBeVisible();
   await expect(page.getByText(versionTag).first()).toBeVisible();
+  // This tenant has served no recommendation requests, so every measured rate reads
+  // "Not available" rather than a nominal zero, and the window is stated as empty.
+  await expect(page.getByText("No requests in this window", { exact: true })).toBeVisible();
+  await expect(page.locator(".stat").filter({ hasText: /^Latency p95/ })).toContainText("Not available");
+  await expect(page.locator(".stat").filter({ hasText: /^Error rate/ })).toContainText("Not available");
+  await expect(page.locator(".stat").filter({ hasText: /^Fallback rate/ })).toContainText("Not available");
+  await expect(page.getByText("not a live dependency health check", { exact: false })).toBeVisible();
   await shot(page, "service-status");
 });
 
-test("usage, account and home checklist reflect the work done", async () => {
+test("service status: serving traffic is measured and reported", async () => {
+  // Serving has no console screen, so drive it the way an integration does: the
+  // credential issued earlier, sending real requests through the same proxy this page reads from.
+  const served = await page.evaluate(async (s) => {
+    const codes: number[] = [];
+    for (let i = 0; i < 3; i += 1) {
+      const response = await fetch("/v1/recommendations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `ApiKey ${s}` },
+        body: JSON.stringify({ user_id: `cus-${i}`, top_n: 5 }),
+      });
+      codes.push(response.status);
+    }
+    return codes;
+  }, probeSecret);
+  expect(served).toEqual([200, 200, 200]);
+
+  // The board is already open from the previous test and still shows what it read
+  // then: nothing here polls, so the readings only change when they are re-read.
+  await expect(page.locator(".stat").filter({ hasText: /^Requests/ })).toContainText("0");
+  await page.getByRole("button", { name: "Refresh" }).click();
+  // The same three requests, now counted and timed by the API's own ledger.
+  await expect(page.locator(".stat").filter({ hasText: /^Requests/ })).toContainText("3");
+  await expect(page.locator(".stat").filter({ hasText: /^Latency p95/ })).toContainText("ms");
+  await expect(page.locator(".stat").filter({ hasText: /^Error rate/ })).toContainText("0%");
+  await expect(page.getByText("No requests in this window", { exact: true })).toBeHidden();
+  await shot(page, "service-status-measured");
+});
+
+test("usage, account and overview reflect the work done", async () => {
   await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Usage & Quotas" }).click();
-  await expect(page.getByText("9 of 9")).toBeVisible();
-  await expect(page.getByRole("row", { name: /^training_jobs 1 1 0/ })).toContainText("exhausted");
-  await expect(page.getByRole("heading", { name: "Subscription" })).toBeVisible();
+  await expect(page.getByText("9 usage types")).toBeVisible();
+  const trainingUsage = page.getByRole("row", { name: /^Training jobs / });
+  await expect(trainingUsage).toContainText("Exhausted");
+  await expect(trainingUsage.getByRole("meter", { name: "0 remaining" })).toBeVisible();
+  await expect(page.locator("summary").filter({ hasText: "Subscription" })).toBeVisible();
   await shot(page, "usage");
 
   await page.getByRole("link", { name: "Account" }).click();
   await expect(page.getByRole("heading", { name: "Capabilities of this session" })).toBeVisible();
   await shot(page, "account");
 
-  await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Home" }).click();
-  await expect(page.getByText(/\d of 7 complete/)).toHaveText("7 of 7 complete");
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Overview" }).click();
+  await expect(page.getByRole("link", { name: versionTag, exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Monitor recommendation traffic" })).toBeVisible();
   await shot(page, "home-complete");
 });
 
@@ -385,6 +436,11 @@ test("platform realm: token sign-in, tenant detail, quota override, suspension a
   await page.getByRole("dialog").getByLabel("Override limit").fill("8000000");
   await page.getByRole("dialog").getByRole("button", { name: "Approve override" }).click();
   await expect(page.getByRole("row", { name: /accepted_events/ })).toContainText("8,000,000");
+  await page.getByRole('button', { name: 'Assign plan', exact: true }).click();
+  await page.getByRole('dialog').getByLabel('Plan', { exact: true }).selectOption({ label: 'Pro' });
+  await page.getByRole('dialog').getByRole('button', { name: 'Assign plan', exact: true }).click();
+  await expect(page.getByText('Current: pro', { exact: true })).toBeVisible();
+  await expect(page.getByRole('row', { name: /accepted_events/ })).toContainText('8,000,000');
   await shot(page, "platform-tenant");
 
   await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Platform Status" }).click();
@@ -406,7 +462,6 @@ test("platform realm: token sign-in, tenant detail, quota override, suspension a
   await page.getByLabel("Search").fill(tenantName);
   await page.getByRole("row", { name: new RegExp(tenantName) }).getByRole("button", { name: "Change status" }).click();
   await page.getByRole("dialog").getByLabel("New status").selectOption("suspended");
-  await page.getByRole("dialog").getByLabel("Reason").fill("End of e2e run");
   await page.getByRole("dialog").getByRole("button", { name: "Apply status change" }).click();
   await expect(page.getByRole("row", { name: new RegExp(tenantName) })).toContainText("suspended");
   await shot(page, "platform-suspended");

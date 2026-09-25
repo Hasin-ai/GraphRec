@@ -4,10 +4,8 @@ import { isApiError } from "../../api/client";
 import { useResource } from "../../hooks/useResource";
 import { fmtDateTime, fmtNumber } from "../../lib/format";
 import { Page } from "../../ui/Page";
-import { Badge, DefinitionList, ErrorBanner, Footnote, Skeleton, StageRail, Stats } from "../../ui/primitives";
+import { Badge, DefinitionList, ErrorBanner, Footnote, Skeleton, Stats } from "../../ui/primitives";
 import { NotFoundPage } from "../errors/ErrorPages";
-
-const STAGES = ["received", "validating", "applying", "completed"] as const;
 
 /** Event-batch result. Product synchronization is synchronous and has no submission record. */
 export function SubmissionPage() {
@@ -19,7 +17,7 @@ export function SubmissionPage() {
   if (!batch.data) {
     return (
       <Page crumbs={crumbs} kicker="event batch" title={`Submission ${submissionId}`}>
-        {batch.error ? <ErrorBanner error={batch.error} /> : <Skeleton />}
+        {batch.error ? <ErrorBanner error={batch.error} onRetry={batch.reload} /> : <Skeleton />}
       </Page>
     );
   }
@@ -27,8 +25,8 @@ export function SubmissionPage() {
   const received = b.accepted_count + b.duplicate_count + b.rejected_count;
   const done = b.status === "completed";
   return (
-    <Page crumbs={crumbs} kicker="event batch" title={`Submission ${b.id}`} badge={<Badge group="batch" value={b.status} />} subtitle={done ? "Processing finished." : "Processing."} actions={[{ label: "Refresh", onClick: () => void batch.reload() }]}>
-      <StageRail title="Progress" stages={STAGES} at={done ? 3 : 2} failed={b.status === "failed"} note={done ? "All items handled." : "Reload to update the counts."} />
+    <Page crumbs={crumbs} kicker="event batch" title={`Submission ${b.id}`} badge={<Badge group="batch" value={b.status} />} subtitle={done ? "The batch was applied in the request that submitted it; these are its final counts." : "Reload to update the counts."} actions={[{ label: "Refresh", onClick: () => void batch.reload() }]}>
+      {batch.error ? <ErrorBanner error={batch.error} onRetry={batch.reload} /> : null}
       <Stats
         items={[
           { label: "Received", value: fmtNumber(received) },

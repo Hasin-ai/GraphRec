@@ -49,7 +49,7 @@ export function ProductSyncPage() {
     try {
       setResult({ received: items.length, response: await products.bulkUpsert(items) });
     } catch (caught) {
-      if (isApiError(caught) && caught.status === 413) setError({ title: "Submission rejected: too large", body: "The request body exceeds the API limit (16 KiB by default). Split the collection and submit it in parts, or use a dataset upload.", tone: "warn" });
+      if (isApiError(caught) && caught.status === 413) setError({ title: "Submission rejected: too large", body: "The request body exceeds the limit the API is configured with. Split the collection and submit it in parts, or use a dataset upload.", tone: "warn" });
       else if (isApiError(caught) && caught.code === "validation_failed") setError({ title: "The collection cannot be accepted", body: caught.fields.map((f) => `${f.field}: ${f.message}`).join("; ") || caught.message });
       else if (isApiError(caught) && caught.status === 403) setError({ title: "Not permitted", body: "Your credential does not grant catalog:write." });
       else setError({ title: "Synchronization failed", body: "Try again shortly." });
@@ -101,7 +101,7 @@ export function ProductSyncPage() {
   return (
     <Page crumbs={crumbs} kicker="Phase 1 of 2" title="Synchronize catalog" subtitle="Submit a product collection. Each external identifier is upserted: new ones are created, known ones updated, and invalid items are reported without discarding the rest.">
       <Form onSubmit={submit} error={error} submitLabel="Submit synchronization" busy={busy} width={860} secondary={{ label: "Cancel", to: "/products" }}>
-        <Field id="payload" label="Product collection (JSON)" wide error={fieldError} hint="Bounded by the request body limit (16 KiB by default). Larger catalogs go through a dataset upload.">
+        <Field id="payload" label="Product collection (JSON)" wide error={fieldError} hint="Bounded by the request body limit the API is configured with. Larger catalogs go through a dataset upload.">
           <TextArea id="payload" rows={12} value={payload} onChange={setPayload} mono placeholder={EXAMPLE} />
         </Field>
       </Form>

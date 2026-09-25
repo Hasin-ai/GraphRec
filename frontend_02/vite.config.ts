@@ -9,6 +9,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    // Browser evidence and trace HTML must not trigger development page reloads.
+    watch: { ignored: ['**/e2e-results/**', '**/e2e-screens/**'] },
     proxy: {
       "/v1": { target: apiProxy, changeOrigin: true },
       "/healthz": { target: apiProxy, changeOrigin: true },

@@ -1,12 +1,13 @@
 const dateTime = new Intl.DateTimeFormat(undefined, {
   year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
+  month: "short",
+  day: "numeric",
   hour: "2-digit",
   minute: "2-digit",
   hour12: false,
+  timeZoneName: "short",
 });
-const dateOnly = new Intl.DateTimeFormat(undefined, { year: "numeric", month: "2-digit", day: "2-digit" });
+const dateOnly = new Intl.DateTimeFormat(undefined, { year: "numeric", month: "short", day: "numeric" });
 const number = new Intl.NumberFormat();
 
 export const DASH = "—";
@@ -57,6 +58,16 @@ export function fmtPrice(value: number | string): string {
   return Number.isFinite(n) ? n.toFixed(2) : String(value);
 }
 
+/**
+ * A snake_case API identifier rendered as a reading label
+ * ("accepted_events" -> "Accepted events"). The raw identifier stays available
+ * for operators who integrate against it; this is what the screen shows.
+ */
+export function humanize(key: string): string {
+  const words = key.replace(/[_-]+/g, " ").trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 export function shortId(id: string, length = 8): string {
   return id.length > length ? `${id.slice(0, length)}…` : id;
 }
@@ -72,4 +83,22 @@ export function relativeSeconds(from: number, to = Date.now()): string {
 export function newIdempotencyKey(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+/**
+ * Flatten a metrics map one entry per leaf ("validation.NDCG@10", "source.artifact").
+ * Ranking measures (Hit@k, NDCG@k) are listed first so summaries lead with quality.
+ */
+export function flattenMetrics(metrics: Record<string, unknown> | null | undefined): [string, unknown][] {
+  const out: [string, unknown][] = [];
+  const walk = (value: unknown, prefix: string) => {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      for (const [k, v] of Object.entries(value as Record<string, unknown>)) walk(v, prefix ? `${prefix}.${k}` : k);
+    } else {
+      out.push([prefix, Array.isArray(value) ? value.join(", ") : value]);
+    }
+  };
+  walk(metrics ?? {}, "");
+  const rank = (key: string) => (/(^|\.)(hit|ndcg)@\d+$/i.test(key) ? 0 : 1);
+  return out.sort((a, b) => rank(a[0]) - rank(b[0]));
 }

@@ -66,7 +66,8 @@ def create_app(settings: Optional[Settings] = None, svc: Optional[Services] = No
         try:
             result = await svc_.client.health()
             graphrec_status = str(result.get("status", "ok")) if isinstance(result, dict) else "ok"
-            count = len(await svc_.catalog.listed())
+            await svc_.catalog.all()
+            count = svc_.catalog.total
         except APIError as error:
             graphrec_status = "unreachable"
             correlation_id = error.correlation_id

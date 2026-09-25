@@ -1,11 +1,15 @@
 from __future__ import annotations
 
-from typing import cast
+from typing import Any, Dict, Optional, cast
 
-from ..models.serving import AutoscalingStatus, DeploymentStatus, MetricsSummary, ReplicaStatus
+from ..models.serving import DeploymentStatus, MetricsSummary
 from ._base import AsyncResource, SyncResource
 
 __all__ = ["AsyncDeployment", "AsyncMetrics", "Deployment", "Metrics"]
+
+
+def _window(window_minutes: Optional[int]) -> Optional[Dict[str, Any]]:
+    return None if window_minutes is None else {"window_minutes": window_minutes}
 
 
 class Deployment(SyncResource):
@@ -18,21 +22,6 @@ class Deployment(SyncResource):
             DeploymentStatus, self._client.request("deployment.get", cast_to=DeploymentStatus)
         )
 
-    def replicas(self) -> ReplicaStatus:
-        """``GET /v1/deployment/replicas``."""
-
-        return cast(
-            ReplicaStatus, self._client.request("deployment.replicas", cast_to=ReplicaStatus)
-        )
-
-    def autoscaling(self) -> AutoscalingStatus:
-        """``GET /v1/deployment/autoscaling``."""
-
-        return cast(
-            AutoscalingStatus,
-            self._client.request("deployment.autoscaling", cast_to=AutoscalingStatus),
-        )
-
 
 class AsyncDeployment(AsyncResource):
     async def get(self) -> DeploymentStatus:
@@ -42,38 +31,32 @@ class AsyncDeployment(AsyncResource):
             DeploymentStatus, await self._client.request("deployment.get", cast_to=DeploymentStatus)
         )
 
-    async def replicas(self) -> ReplicaStatus:
-        """Async variant of :meth:`Deployment.replicas`."""
-
-        return cast(
-            ReplicaStatus, await self._client.request("deployment.replicas", cast_to=ReplicaStatus)
-        )
-
-    async def autoscaling(self) -> AutoscalingStatus:
-        """Async variant of :meth:`Deployment.autoscaling`."""
-
-        return cast(
-            AutoscalingStatus,
-            await self._client.request("deployment.autoscaling", cast_to=AutoscalingStatus),
-        )
-
 
 class Metrics(SyncResource):
-    """Serving and model-quality metrics. Scope: ``metrics:read``."""
+    """Measured serving metrics. Scope: ``metrics:read``."""
 
-    def summary(self) -> MetricsSummary:
-        """Request/error/fallback rates, p95 latency and offline quality.
+    def summary(self, *, window_minutes: Optional[int] = None) -> MetricsSummary:
+        """Request rate, error and fallback rates, p95 latency and offline quality.
 
+        Measured over the last ``window_minutes`` (the API defaults to 60).
         ``GET /v1/metrics/summary``.
         """
 
-        return cast(MetricsSummary, self._client.request("metrics.summary", cast_to=MetricsSummary))
+        return cast(
+            MetricsSummary,
+            self._client.request(
+                "metrics.summary", query=_window(window_minutes), cast_to=MetricsSummary
+            ),
+        )
 
 
 class AsyncMetrics(AsyncResource):
-    async def summary(self) -> MetricsSummary:
+    async def summary(self, *, window_minutes: Optional[int] = None) -> MetricsSummary:
         """Async variant of :meth:`Metrics.summary`."""
 
         return cast(
-            MetricsSummary, await self._client.request("metrics.summary", cast_to=MetricsSummary)
+            MetricsSummary,
+            await self._client.request(
+                "metrics.summary", query=_window(window_minutes), cast_to=MetricsSummary
+            ),
         )

@@ -27,7 +27,6 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
 
 from graphrec_core.vector_store.collections import collection_name, ensure_collection
-from graphrec_core.settings import get_settings
 
 BATCH_SIZE = 256
 
@@ -38,6 +37,7 @@ def index_item_embeddings(
     version_id: UUID,
     external_ids: list[str],
     embedding_matrix: np.ndarray,
+    distance: qmodels.Distance = qmodels.Distance.COSINE,
 ) -> int:
     """Index item embeddings into Qdrant for a specific model version.
 
@@ -47,7 +47,10 @@ def index_item_embeddings(
         version_id:       Model version UUID (determines collection name).
         external_ids:     List of item external IDs — must align row-for-row
                           with ``embedding_matrix``.
-        embedding_matrix: float32 ndarray of shape ``[N, dim]``.
+        embedding_matrix: float32 ndarray of shape ``[N, dim]``. The collection
+                          takes its dimension from the matrix; ``qdrant_embedding_dim``
+                          only sizes the synthetic placeholder embeddings.
+        distance:         Collection distance (see ``ensure_collection``).
 
     Returns:
         Number of vectors successfully indexed.
@@ -62,19 +65,15 @@ def index_item_embeddings(
             f"embedding_matrix rows ({embedding_matrix.shape[0]})"
         )
 
-    settings = get_settings()
-    dim = embedding_matrix.shape[1]
-    if dim != settings.qdrant_embedding_dim:
-        raise ValueError(
-            f"Embedding dim {dim} does not match configured "
-            f"qdrant_embedding_dim={settings.qdrant_embedding_dim}"
-        )
+    dim = int(embedding_matrix.shape[1])
+    if embedding_matrix.ndim != 2 or dim < 1:
+        raise ValueError("embedding_matrix must be a non-empty 2-D array")
 
     # Ensure float32 — Qdrant requires float32 vectors
     matrix = embedding_matrix.astype(np.float32)
 
     coll = collection_name(tenant_id, version_id)
-    ensure_collection(client, coll, dim)
+    ensure_collection(client, coll, dim, distance)
 
     tid_str = str(tenant_id)
     vid_str = str(version_id)

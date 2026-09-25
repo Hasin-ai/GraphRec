@@ -15,10 +15,13 @@ from graphrec_core.database.models import (
     TenantResourceQuota,
     TenantSubscription,
     UsageEvent,
+    Product,
+    ModelVersion,
 )
 from graphrec_core.errors import ApiError
 from graphrec_core.schemas.usage import UsageDimension, UsageSummaryResponse
 from graphrec_core.subscription.service import SubscriptionService
+from graphrec_core.usage.limits import artifact_storage_used
 
 DIMENSIONS: tuple[tuple[str, str | None, str], ...] = (
     ("accepted_events", "accepted_events", "count"),
@@ -74,6 +77,10 @@ class UsageService:
                     .group_by(UsageEvent.usage_type)
                 )
             }
+            # Stored inventory does not reset at the monthly metering boundary.
+            totals["stored_products"] = Decimal(self.session.scalar(select(func.count(Product.id)).where(Product.tenant_id == principal.tenant_id)) or 0)
+            totals["active_model_versions"] = Decimal(self.session.scalar(select(func.count(ModelVersion.id)).where(ModelVersion.tenant_id == principal.tenant_id, ModelVersion.status == "active")) or 0)
+            totals["artifact_storage_bytes"] = Decimal(artifact_storage_used(self.session, principal.tenant_id))
             reconciled_at = datetime.now(timezone.utc)
             dimensions = [
                 self._dimension(

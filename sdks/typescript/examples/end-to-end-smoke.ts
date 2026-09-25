@@ -94,7 +94,8 @@ async function main(baseUrl: string, platformToken: string | undefined): Promise
   assert(job.model_version_id !== null, `training job ${job.id} finished ${job.status} without a model version`);
   const version = await admin.modelVersions.activate(job.model_version_id);
   console.log(version.version_tag, version.status, (await admin.deployment.get()).status);
-  console.log("p95", (await admin.metrics.summary()).p95_latency_ms, "ms");
+  const summary = await admin.metrics.summary();
+  console.log("requests", summary.request_count, "p95", summary.p95_latency_ms, "ms");
 
   step("recommendations & feedback");
   const widget = new RecommendationSession(store);

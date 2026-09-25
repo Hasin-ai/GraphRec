@@ -216,6 +216,24 @@ def tokens(access: str = "access-1", expires_in: int = 900) -> Dict[str, Any]:
     }
 
 
+def tenant_user(invited: bool = False, **overrides: Any) -> Dict[str, Any]:
+    data = {
+        "id": UUID_A,
+        "email": "dev@shop.test",
+        "display_name": "dev",
+        "role": "tenant_developer",
+        "status": "invited",
+        "created_at": NOW,
+        "last_authenticated_at": None,
+    }
+    if invited:
+        data["setup_token"] = "one-time-setup-token"
+        data["setup_token_expires_at"] = NOW
+        data["next_step"] = "POST /v1/auth/setup-password with this setup_token"
+    data.update(overrides)
+    return data
+
+
 def api_key(secret: bool = False, **overrides: Any) -> Dict[str, Any]:
     data = {
         "id": UUID_A,

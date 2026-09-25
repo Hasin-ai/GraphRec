@@ -68,10 +68,13 @@ def authenticated_principal(
     if not separator or not token.strip():
         raise _authentication_failed()
     if scheme.lower() == "bearer":
-        return _bearer_principal(token.strip(), db, settings)
-    if scheme.lower() == "apikey":
-        return _api_key_principal(token.strip(), db, settings)
-    raise _authentication_failed()
+        principal = _bearer_principal(token.strip(), db, settings)
+    elif scheme.lower() == "apikey":
+        principal = _api_key_principal(token.strip(), db, settings)
+    else:
+        raise _authentication_failed()
+    request.state.authenticated_principal = principal
+    return principal
 
 
 def _bearer_principal(token: str, db: Session, settings: Settings) -> AuthenticatedPrincipal:

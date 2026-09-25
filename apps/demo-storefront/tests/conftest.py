@@ -54,7 +54,11 @@ class FakeProducts:
     items: List[Product]
     list_calls: int = 0
 
-    async def list(self) -> ProductList:
+    async def list(self, *, limit=None, offset=None, external_ids=None) -> ProductList:
+        if external_ids is not None:
+            wanted = set(external_ids)
+            items = [p for p in self.items if p.external_id in wanted]
+            return ProductList(items=items, total=len(items))
         self.list_calls += 1
         return ProductList(items=self.items, total=len(self.items))
 

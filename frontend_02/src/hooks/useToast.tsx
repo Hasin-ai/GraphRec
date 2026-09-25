@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 interface Toast {
   message: string;
@@ -15,6 +15,7 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toast, setToast] = useState<Toast | null>(null);
   const timer = useRef<number | null>(null);
+  useEffect(() => () => { if (timer.current) window.clearTimeout(timer.current); }, []);
 
   const flash = useCallback((message: string, tone: "ok" | "danger" = "ok") => {
     setToast({ message, tone });
@@ -23,13 +24,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const copy = useCallback(
-    (text: string) => {
+    async (text: string) => {
       try {
-        void navigator.clipboard?.writeText(String(text));
+        if (!navigator.clipboard) throw new Error("Clipboard unavailable");
+        await navigator.clipboard.writeText(String(text));
+        flash("Copied to clipboard.");
       } catch {
-        /* clipboard unavailable */
+        flash("Could not copy. Select the value and copy it manually.", "danger");
       }
-      flash("Copied to clipboard.");
     },
     [flash],
   );

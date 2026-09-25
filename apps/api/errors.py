@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from typing import Any
+from datetime import datetime, timezone
+import logging
 from uuid import UUID, uuid4
 
 from fastapi import Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.concurrency import run_in_threadpool
 
 from graphrec_core.errors import ApiError
 from graphrec_core.auth.audit import record_public_login_denial
@@ -45,6 +48,10 @@ def error_response(
 
 
 async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
+    principal = getattr(request.state, 'authenticated_principal', None)
+    if principal is not None and exc.status_code in {403, 404, 409, 422, 429, 503}:
+        await run_in_threadpool(_record_tenant_denial, principal, correlation_id_for(request), exc.code,
+                                getattr(request.scope.get('route'), 'path', 'unknown'))
     return error_response(
         correlation_id=correlation_id_for(request),
         status_code=exc.status_code,
@@ -54,6 +61,21 @@ async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
         retry_after_seconds=exc.retry_after_seconds,
         details=exc.details,
     )
+
+
+def _record_tenant_denial(principal, correlation_id, reason, route):
+    from graphrec_core.database.models import AuditLog
+    from graphrec_core.database.session import SessionLocal
+    from graphrec_core.database.tenancy import set_local_tenant
+    try:
+        with SessionLocal() as db, db.begin():
+            set_local_tenant(db, principal.tenant_id)
+            db.add(AuditLog(id=uuid4(), tenant_id=principal.tenant_id, actor_type=principal.actor_type,
+                actor_reference=principal.actor_reference, action_type='request_denied', resource_type='api_route',
+                outcome='denied', correlation_reference=correlation_id,
+                redacted_details={'reason': reason, 'route': route}, occurred_at=datetime.now(timezone.utc)))
+    except Exception:
+        logging.getLogger(__name__).warning('Could not persist denial audit for correlation %s', correlation_id)
 
 
 async def validation_error_handler(

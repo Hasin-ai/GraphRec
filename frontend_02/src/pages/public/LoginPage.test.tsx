@@ -8,7 +8,7 @@ import { renderAt } from "../../test/render";
 afterEach(() => vi.unstubAllGlobals());
 
 describe("LoginPage", () => {
-  it("signs in, stores the session and lands on Home", async () => {
+  it("signs in, stores the session and lands on Overview", async () => {
     const user = userEvent.setup();
     const { calls } = mockFetch([
       { method: "POST", path: "/v1/auth/login", body: tokenPair() },
@@ -20,7 +20,7 @@ describe("LoginPage", () => {
     await user.type(screen.getByLabelText("Password"), "correct horse");
     await user.click(screen.getByRole("button", { name: "Sign in" }));
 
-    await waitFor(() => expect(screen.getByRole("heading", { name: "Home" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Overview" })).toBeInTheDocument());
     expect(JSON.parse(calls[0].init.body as string)).toEqual({ email: "dana@northgate.example", password: "correct horse" });
     expect(getTenantSession()?.role).toBe("tenant_administrator");
     expect(getTenantSession()?.scopes).toContain("models:deploy");

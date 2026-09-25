@@ -34,12 +34,16 @@ class ModelVersionListResponse(BaseModel):
 
 
 class TrainingJobCreate(BaseModel):
-    model_type: str = Field(default="simplified_dgsr", max_length=64)
+    request_id: str | None = Field(default=None, min_length=1, max_length=128)
+    model_type: str = Field(default="dgsr", max_length=64)
     dataset_snapshot_id: UUID | None = None
     configuration: dict[str, Any] = Field(default_factory=dict)
 
 
 class TrainingJobResource(BaseModel):
+    progress: int = 0
+    stage: str = "completed"
+    cancel_requested: bool = False
     id: UUID
     model_type: str
     status: str

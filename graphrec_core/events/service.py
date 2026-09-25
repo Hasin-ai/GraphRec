@@ -8,7 +8,8 @@ from uuid import UUID, uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from graphrec_core.database.models import CustomerEvent, EventBatch, UsageEvent
+from graphrec_core.database.models import CustomerEvent, EventBatch, Product, UsageEvent
+from graphrec_core.usage.limits import lock_dimension, require_capacity
 from graphrec_core.errors import ApiError
 from graphrec_core.schemas.events import EventBatchResponse, EventBatchSubmit, EventSubmit
 
@@ -18,6 +19,7 @@ class EventService:
         self.db = db
 
     def submit_event(self, tenant_id: UUID, payload: EventSubmit) -> dict[str, Any]:
+        lock_dimension(self.db, tenant_id, "accepted_events")
         now = datetime.now(timezone.utc)
         existing = self.db.execute(
             select(CustomerEvent).where(
@@ -33,6 +35,8 @@ class EventService:
                 "received_at": now.isoformat(),
             }
 
+        self._validate_product(tenant_id, payload.external_product_id)
+        require_capacity(self.db, tenant_id, "accepted_events")
         event = CustomerEvent(
             id=uuid4(),
             tenant_id=tenant_id,
@@ -66,6 +70,14 @@ class EventService:
         }
 
     def submit_batch(self, tenant_id: UUID, payload: EventBatchSubmit) -> EventBatchResponse:
+        lock_dimension(self.db, tenant_id, "accepted_events")
+        identifiers = {item.event_id for item in payload.events}
+        existing_ids = set(self.db.scalars(select(CustomerEvent.event_id).where(
+            CustomerEvent.tenant_id == tenant_id, CustomerEvent.event_id.in_(identifiers))))
+        for item in payload.events:
+            if item.event_id not in existing_ids:
+                self._validate_product(tenant_id, item.external_product_id)
+        require_capacity(self.db, tenant_id, "accepted_events", len(identifiers - existing_ids))
         now = datetime.now(timezone.utc)
         accepted = 0
         duplicates = 0
@@ -132,6 +144,11 @@ class EventService:
             raise ApiError(404, "resource_not_found", f"Event batch '{batch_id}' not found.")
 
         return EventBatchResponse.model_validate(batch)
+
+    def _validate_product(self, tenant_id: UUID, external_id: str | None) -> None:
+        if external_id is not None and self.db.scalar(select(Product.id).where(
+            Product.tenant_id == tenant_id, Product.external_id == external_id)) is None:
+            raise ApiError(422, "invalid_product_reference", "The event product does not exist in this tenant catalog.")
 
     def list_batches(self, tenant_id: UUID) -> list[EventBatchResponse]:
         batches = (

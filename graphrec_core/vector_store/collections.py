@@ -36,6 +36,7 @@ def ensure_collection(
     client: QdrantClient,
     name: str,
     dim: int,
+    distance: qmodels.Distance = qmodels.Distance.COSINE,
 ) -> None:
     """Create the Qdrant collection if it does not already exist.
 
@@ -47,22 +48,42 @@ def ensure_collection(
         client: Active QdrantClient instance.
         name:   Collection name (from ``collection_name()``).
         dim:    Item embedding dimension matching the DGSR-lite output layer.
+        distance: COSINE for normalised synthetic vectors; DOT for DGSR, whose
+                scores are unnormalised ``query . item`` products (Eq. 18).
     """
     existing = {c.name for c in client.get_collections().collections}
-    if name in existing:
-        return
-
-    client.create_collection(
-        collection_name=name,
-        vectors_config=qmodels.VectorParams(
-            size=dim,
-            distance=qmodels.Distance.COSINE,
-            hnsw_config=qmodels.HnswConfigDiff(
-                m=16,
-                ef_construct=100,
+    if name not in existing:
+        client.create_collection(
+            collection_name=name,
+            vectors_config=qmodels.VectorParams(
+                size=dim,
+                distance=distance,
+                hnsw_config=qmodels.HnswConfigDiff(
+                    m=16,
+                    ef_construct=100,
+                ),
             ),
-        ),
-    )
+        )
+    ensure_payload_indexes(client, name)
+
+
+#: Payload fields every search filters on. Without keyword indexes Qdrant
+#: evaluates the filter point by point, and excluding a shopper's history
+#: (hundreds of ids) took seconds instead of milliseconds.
+INDEXED_PAYLOAD_FIELDS = ("external_id", "tenant_id")
+
+
+def ensure_payload_indexes(client: QdrantClient, name: str) -> None:
+    """Create the keyword payload indexes the retriever relies on (idempotent)."""
+    present = set(client.get_collection(name).payload_schema or {})
+    for field in INDEXED_PAYLOAD_FIELDS:
+        if field not in present:
+            client.create_payload_index(
+                collection_name=name,
+                field_name=field,
+                field_schema=qmodels.PayloadSchemaType.KEYWORD,
+                wait=True,
+            )
 
 
 def delete_collection(client: QdrantClient, name: str) -> None:

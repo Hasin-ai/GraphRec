@@ -49,7 +49,7 @@ export function SetupPage() {
     try {
       const normalized = email.trim().toLowerCase();
       const pair = await auth.setupPassword({ setup_token: token.trim(), password, ...(normalized ? { email: normalized } : {}) });
-      setTenantSession(normalized || "administrator", pair);
+      setTenantSession(normalized, pair);
       refresh();
       flash("Account activated.");
       navigate("/home", { replace: true });
@@ -69,10 +69,10 @@ export function SetupPage() {
   }
 
   return (
-    <Page kicker="GraphRec · account setup" title="Activate your account" subtitle="Choose the password for the invited administrator. This moves the account from invited to active and signs you in.">
+    <Page kicker="GraphRec · account setup" title="Activate your account" subtitle="Choose a password to activate your invited account.">
       <Form onSubmit={submit} error={error} submitLabel="Activate account" busy={busy} width={440} secondary={{ label: "Back to sign in", to: "/login" }}>
         <Field id="token" label="Setup token" wide error={fieldErrors.token} hint={linkToken ? "Read from your setup link." : "Paste the token from your setup link."}>
-          <TextInput id="token" value={token} onChange={setToken} mono placeholder="one-time token" autoComplete="off" required />
+          <TextInput id="token" type="password" value={token} onChange={setToken} mono placeholder="one-time token" autoComplete="off" required />
         </Field>
         <Field id="email" label="Email (optional cross-check)" wide>
           <TextInput id="email" type="email" value={email} onChange={setEmail} autoComplete="username" />

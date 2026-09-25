@@ -21,6 +21,8 @@ from .errors import ConfigurationError
 from .resources import (
     ApiKeys,
     AsyncApiKeys,
+    AsyncTenantUsers,
+    TenantUsers,
     AsyncAuthentication,
     AsyncDatasets,
     AsyncDeployment,
@@ -130,6 +132,7 @@ class GraphRec:
     tenants: Tenants
     auth: Authentication
     api_keys: ApiKeys
+    tenant_users: TenantUsers
     subscription: Subscriptions
     usage: Usage
     products: Products
@@ -193,6 +196,7 @@ class GraphRec:
         self.tenants = Tenants(self._api)
         self.auth = Authentication(self._api)
         self.api_keys = ApiKeys(self._api)
+        self.tenant_users = TenantUsers(self._api)
         self.subscription = Subscriptions(self._api)
         self.usage = Usage(self._api)
         self.products = Products(self._api)
@@ -271,6 +275,7 @@ class AsyncGraphRec:
     tenants: AsyncTenants
     auth: AsyncAuthentication
     api_keys: AsyncApiKeys
+    tenant_users: AsyncTenantUsers
     subscription: AsyncSubscriptions
     usage: AsyncUsage
     products: AsyncProducts
@@ -334,6 +339,7 @@ class AsyncGraphRec:
         self.tenants = AsyncTenants(self._api)
         self.auth = AsyncAuthentication(self._api)
         self.api_keys = AsyncApiKeys(self._api)
+        self.tenant_users = AsyncTenantUsers(self._api)
         self.subscription = AsyncSubscriptions(self._api)
         self.usage = AsyncUsage(self._api)
         self.products = AsyncProducts(self._api)

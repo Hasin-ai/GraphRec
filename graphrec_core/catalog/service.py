@@ -4,11 +4,12 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from graphrec_core.database.models import Product, UsageEvent
 from graphrec_core.errors import ApiError
+from graphrec_core.usage.limits import lock_dimension, require_capacity
 from graphrec_core.schemas.products import (
     ProductBulkFailure,
     ProductBulkUpsertRequest,
@@ -25,6 +26,11 @@ class CatalogService:
     def bulk_upsert(
         self, tenant_id: UUID, payload: ProductBulkUpsertRequest
     ) -> ProductBulkUpsertResponse:
+        lock_dimension(self.db, tenant_id, "stored_products")
+        identifiers = {item.external_id for item in payload.products}
+        existing_ids = set(self.db.scalars(select(Product.external_id).where(
+            Product.tenant_id == tenant_id, Product.external_id.in_(identifiers))))
+        require_capacity(self.db, tenant_id, "stored_products", len(identifiers - existing_ids))
         now = datetime.now(timezone.utc)
         created_count = 0
         updated_count = 0
@@ -105,16 +111,28 @@ class CatalogService:
             failures=failures,
         )
 
-    def list_products(self, tenant_id: UUID) -> list[ProductResource]:
-        products = (
-            self.db.execute(
-                select(Product)
-                .where(Product.tenant_id == tenant_id)
-                .order_by(Product.created_at.desc())
-            )
-            .scalars()
-            .all()
-        )
+    def count_products(self, tenant_id: UUID, external_ids: list[str] | None = None) -> int:
+        query = select(func.count(Product.id)).where(Product.tenant_id == tenant_id)
+        if external_ids is not None:
+            query = query.where(Product.external_id.in_(external_ids))
+        return int(self.db.execute(query).scalar_one())
+
+    def list_products(
+        self,
+        tenant_id: UUID,
+        *,
+        limit: int | None = None,
+        offset: int = 0,
+        external_ids: list[str] | None = None,
+    ) -> list[ProductResource]:
+        query = select(Product).where(Product.tenant_id == tenant_id)
+        if external_ids is not None:
+            query = query.where(Product.external_id.in_(external_ids))
+        # Newest first, external_id as the stable tie-break so pages never overlap.
+        query = query.order_by(Product.created_at.desc(), Product.external_id.asc()).offset(offset)
+        if limit is not None:
+            query = query.limit(limit)
+        products = self.db.execute(query).scalars().all()
         return [
             ProductResource(
                 id=p.id,
@@ -187,6 +205,7 @@ class CatalogService:
     def update_product(
         self, tenant_id: UUID, external_id: str, payload: ProductUpsert
     ) -> ProductResource:
+        lock_dimension(self.db, tenant_id, "stored_products")
         now = datetime.now(timezone.utc)
         product = self.db.execute(
             select(Product).where(
@@ -195,6 +214,7 @@ class CatalogService:
         ).scalar_one_or_none()
 
         if not product:
+            require_capacity(self.db, tenant_id, "stored_products")
             product = Product(
                 id=uuid4(),
                 tenant_id=tenant_id,
@@ -237,4 +257,3 @@ class CatalogService:
             created_at=product.created_at,
             updated_at=product.updated_at,
         )
-

@@ -30,14 +30,14 @@ export const API_KEY_SCOPES: readonly ApiKeyScope[] = [
  * at login, so sign in again after the server changes them.
  */
 export const ROLE_SCOPES: Readonly<Record<TenantUserRole, readonly Scope[]>> = {
-  tenant_administrator: ["keys:write", ...API_KEY_SCOPES],
+  tenant_administrator: ["keys:write", "users:write", ...API_KEY_SCOPES],
   tenant_developer: ["keys:write", "catalog:read", "catalog:write", "events:read", "events:write", "training:read"],
 };
 
 /** Scopes each role may grant to the API keys it creates. */
 export const DELEGATABLE_SCOPES: Readonly<Record<TenantUserRole, readonly ApiKeyScope[]>> = {
   tenant_administrator: API_KEY_SCOPES,
-  tenant_developer: ["catalog:read", "catalog:write", "events:read", "events:write"],
+  tenant_developer: ["catalog:read", "catalog:write", "events:read", "events:write", "recommendations:read"],
 };
 
 /**

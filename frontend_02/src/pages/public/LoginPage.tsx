@@ -7,7 +7,7 @@ import { useSession } from "../../hooks/useSession";
 import { useToast } from "../../hooks/useToast";
 import { Field, Form, TextInput, type FormError } from "../../ui/Form";
 import { Page } from "../../ui/Page";
-import { Footnote, Panel } from "../../ui/primitives";
+import { Footnote } from "../../ui/primitives";
 
 const GENERIC: FormError = {
   title: "Sign-in failed",
@@ -59,7 +59,7 @@ export function LoginPage() {
   }
 
   return (
-    <Page kicker="GraphRec" title="Sign in" subtitle="Tenant users sign in here. Platform operators use the separate platform realm.">
+    <Page kicker="GraphRec" title="Sign in" subtitle="Access your GraphRec tenant.">
       <Form onSubmit={submit} error={error} submitLabel="Sign in" busy={busy} width={420} secondary={{ label: "Recover access", to: "/recover" }}>
         <Field id="email" label="Email" wide>
           <TextInput id="email" type="email" value={email} onChange={setEmail} placeholder="you@company.example" autoComplete="username" required />
@@ -68,16 +68,8 @@ export function LoginPage() {
           <TextInput id="password" type="password" value={password} onChange={setPassword} autoComplete="current-password" required />
         </Field>
       </Form>
-      <Panel
-        title="Realms"
-        body="This form resolves a tenant from the session. Platform administrators authenticate at /admin/login and resolve no tenant scope."
-        dl={[
-          { label: "Platform sign-in", value: <Link to="/admin/login">/admin/login</Link>, mono: true },
-          { label: "Register a tenant", value: <Link to="/register">/register</Link>, mono: true },
-          { label: "Finish account setup", value: <Link to="/setup">/setup</Link>, mono: true },
-        ]}
-      />
-      <Footnote>Invalid, inactive and rate-limited attempts return the same message and never reveal whether an account exists.</Footnote>
+      <div className="auth-links"><Link to="/register">Create a tenant</Link><Link to="/setup">Finish account setup</Link><Link to="/admin/login">Platform sign-in</Link></div>
+      <Footnote>Use the email and password for your tenant account.</Footnote>
     </Page>
   );
 }

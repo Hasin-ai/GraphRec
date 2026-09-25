@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, Union, cast
+from typing import Any, AsyncIterator, Dict, Iterable, Iterator, List, Mapping, Optional, Sequence, Tuple, Union, cast
 
 from .._base_client import OMIT
 from .._batching import chunk_items
@@ -79,6 +79,21 @@ def _changes(**fields: Any) -> Dict[str, Any]:
     return {key: value for key, value in fields.items() if value is not OMIT}
 
 
+
+def _list_query(
+    limit: Optional[int], offset: Optional[int], external_ids: Optional[Sequence[str]]
+) -> Dict[str, object]:
+    if limit is not None and not 1 <= limit <= 1000:
+        raise InputValidationError("limit must be between 1 and 1000")
+    if offset is not None and offset < 0:
+        raise InputValidationError("offset must not be negative")
+    ids = None
+    if external_ids is not None:
+        ids = [str(value) for value in external_ids]
+        if not ids or len(ids) > 200:
+            raise InputValidationError("external_ids must hold between 1 and 200 ids")
+    return {"limit": limit, "offset": offset, "ids": ",".join(ids) if ids else None}
+
 class Products(SyncResource):
     """Tenant catalog. Scopes: ``catalog:read`` / ``catalog:write``."""
 
@@ -112,10 +127,36 @@ class Products(SyncResource):
             results.append(cast(ProductBulkUpsertResult, result))
         return _combine(results, duplicates)
 
-    def list(self) -> ProductList:
-        """All products, newest first (``GET /v1/products``)."""
+    def list(
+        self,
+        *,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        external_ids: Optional[Sequence[str]] = None,
+    ) -> ProductList:
+        """One page of products, newest first (``GET /v1/products``).
 
-        return cast(ProductList, self._client.request("products.list", cast_to=ProductList))
+        The server pages at ``limit`` (default 500, at most 1000); ``total`` counts
+        every match. ``external_ids`` (at most 200) fetches specific products.
+        """
+
+        return cast(
+            ProductList,
+            self._client.request(
+                "products.list", query=_list_query(limit, offset, external_ids), cast_to=ProductList
+            ),
+        )
+
+    def iterate(self, *, page_size: int = 1000) -> Iterator[Product]:
+        """Every product, newest first, fetched page by page."""
+
+        offset = 0
+        while True:
+            page = self.list(limit=page_size, offset=offset)
+            yield from page.items
+            offset += len(page.items)
+            if not page.items or offset >= page.total:
+                return
 
     def get(self, external_id: str) -> Product:
         """``GET /v1/products/{external_id}``. Raises :class:`~graphrec_sdk.NotFoundError`."""
@@ -215,10 +256,33 @@ class AsyncProducts(AsyncResource):
             results.append(cast(ProductBulkUpsertResult, result))
         return _combine(results, duplicates)
 
-    async def list(self) -> ProductList:
+    async def list(
+        self,
+        *,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        external_ids: Optional[Sequence[str]] = None,
+    ) -> ProductList:
         """Async variant of :meth:`Products.list`."""
 
-        return cast(ProductList, await self._client.request("products.list", cast_to=ProductList))
+        return cast(
+            ProductList,
+            await self._client.request(
+                "products.list", query=_list_query(limit, offset, external_ids), cast_to=ProductList
+            ),
+        )
+
+    async def iterate(self, *, page_size: int = 1000) -> AsyncIterator[Product]:
+        """Async variant of :meth:`Products.iterate`."""
+
+        offset = 0
+        while True:
+            page = await self.list(limit=page_size, offset=offset)
+            for product in page.items:
+                yield product
+            offset += len(page.items)
+            if not page.items or offset >= page.total:
+                return
 
     async def get(self, external_id: str) -> Product:
         """Async variant of :meth:`Products.get`."""

@@ -104,3 +104,12 @@ export function hasScope(session: TenantSession | null, scope: string): boolean 
 export function roleLabel(role: TenantUserRole): string {
   return role === "tenant_administrator" ? "tenant administrator" : "tenant developer";
 }
+
+/** Display-only identity from the issued token. The API still verifies every request. */
+export function sessionTenantId(session: TenantSession): string | null {
+  try {
+    const payload = session.accessToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const claims = JSON.parse(atob(payload)) as { tid?: unknown };
+    return typeof claims.tid === "string" ? claims.tid : null;
+  } catch { return null; }
+}

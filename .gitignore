@@ -122,3 +122,15 @@ diagrams/
 # Playwright
 frontend_02/e2e-results/
 frontend_02/e2e-screens/
+
+# Pretrained model artifacts mounted into the API (MODEL_ARTIFACT_DIR)
+/model_artifacts/
+
+# Generated end-to-end reports
+/tests/e2e/results/
+
+# Local datasets, notebooks & IDE/AI assistant workspace files
+movielens/
+.claude/
+Claude outputs/
+

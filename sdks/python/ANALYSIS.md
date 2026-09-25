@@ -45,7 +45,7 @@ GraphRec is a multi-tenant recommendation platform for independent e-commerce bu
 | Events | `POST /v1/events`, `POST/GET /v1/events/batches`, `GET …/batches/{id}` | any | ✔ `events:read`, `events:write` |
 | Datasets | `POST /v1/datasets/upload` (multipart), `POST/GET /v1/datasets/snapshots`, `GET …/{id}` | any | ✔ upload `catalog:write` + `events:write`; snapshots `training:read`/`training:write` |
 | Models | `POST/GET /v1/model-versions`, `GET …/{id}`, `POST …/{id}:activate`, `POST …/{id}:archive`, `POST /v1/models/{id}:rollback`, `POST/GET /v1/training-jobs` | any | ✔ `models:read`/`models:write`/`models:deploy`, `training:read`/`training:write` |
-| Serving | `GET /v1/deployment`, `…/replicas`, `…/autoscaling`, `GET /v1/metrics/summary` | any | ✔ `deployments:read`, `metrics:read` |
+| Serving | `GET /v1/deployment`, `GET /v1/metrics/summary` | any | ✔ `deployments:read`, `metrics:read` |
 | Recommendations | `POST /v1/recommendations`, `POST /v1/recommendations/session`, `POST /v1/feedback/{impressions,clicks,conversions}` | any | ✔ `recommendations:read`; feedback `events:write` |
 | Platform | `GET /v1/platform/{tenants,plans,failures,audit,status}`, `GET /v1/platform/tenants/{id}`, `POST …/{id}/status`, `POST …/{id}/quotas` | `PLATFORM_ADMIN_TOKEN` bearer | ✔ shared secret |
 
@@ -55,8 +55,8 @@ The registration, login, subscription, usage, API-key and platform paths are pro
 
 - **Training** runs synchronously inside the request, indexes random embeddings into Qdrant and records **no** offline metrics (`metrics: {}`).
 - **Recommendations** query Qdrant with a fixed placeholder vector, so every user gets the same ranking even though `strategy` reads `personalized`. Exclusions are honoured and an empty catalog returns an empty list.
-- **Feedback** endpoints return `accepted=True` but store nothing. `recommendation_requests` usage is never metered.
-- **Deployment, autoscaling and metrics** return constants.
+- **Feedback** endpoints return `accepted=True` but store nothing.
+- **Deployment and metrics** are measured: the status is the tenant's active model version, and the summary aggregates the `serving_requests` ledger the recommendations route appends to (which also meters `recommendation_requests`). There is no replica or autoscaling state to report, so neither is exposed.
 
 The SDK models all of these responses faithfully, so client code keeps working as the server implementations mature.
 

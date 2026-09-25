@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { auth } from "../../api";
 import { isApiError } from "../../api/client";
@@ -21,7 +21,7 @@ export function RegisterPage() {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<TenantRegistrationResult | null>(null);
   // One key per form fill: a retry after a network failure replays instead of registering twice.
-  const idempotencyKey = useMemo(() => newIdempotencyKey(), []);
+  const attempt = useRef<{ payload: string; key: string } | null>(null);
 
   async function submit() {
     const errors: Record<string, string> = {};
@@ -35,7 +35,10 @@ export function RegisterPage() {
     setBusy(true);
     setError(null);
     try {
-      setResult(await auth.registerTenant({ name: name.trim(), admin_email: email.trim().toLowerCase() }, idempotencyKey));
+      const input = { name: name.trim(), admin_email: email.trim().toLowerCase() };
+      const payload = JSON.stringify(input);
+      if (attempt.current?.payload !== payload) attempt.current = { payload, key: newIdempotencyKey() };
+      setResult(await auth.registerTenant(input, attempt.current.key));
     } catch (caught) {
       if (isApiError(caught) && caught.status === 409) {
         setError({
@@ -106,7 +109,7 @@ export function RegisterPage() {
   }
 
   return (
-    <Page kicker="GraphRec" title="Register a tenant" subtitle="Creates the tenant account and its initial administrator. The registrant becomes that administrator and chooses a password on the setup page.">
+    <Page kicker="GraphRec" title="Register a tenant" subtitle="Create your tenant and its first administrator account.">
       <Form onSubmit={submit} error={error} submitLabel="Create tenant" busy={busy} width={520} secondary={{ label: "Sign in instead", to: "/login" }}>
         <Field id="name" label="Business name" wide error={fieldErrors.name}>
           <TextInput id="name" value={name} onChange={setName} placeholder="Northgate Supply" autoComplete="organization" required />
@@ -115,7 +118,7 @@ export function RegisterPage() {
           <TextInput id="email" type="email" value={email} onChange={setEmail} placeholder="admin@company.example" autoComplete="email" required />
         </Field>
       </Form>
-      <Footnote>Registering the same business and administrator email twice is reported as a conflict with the form still filled. The request carries an idempotency key, so a retry never creates a second tenant.</Footnote>
+      <Footnote>A setup link is shown after registration. Use it to activate your administrator account.</Footnote>
     </Page>
   );
 }

@@ -37,13 +37,16 @@ class Scope(str, Enum):
     METRICS_READ = "metrics:read"
     #: Bearer-token only - API keys can never manage API keys.
     KEYS_WRITE = "keys:write"
+    #: Bearer-token only, administrators only - inviting and listing tenant users.
+    USERS_WRITE = "users:write"
 
     def __str__(self) -> str:
         return str(self.value)
 
 
 #: Every scope an API key may carry.
-API_KEY_SCOPES: FrozenSet[str] = frozenset(s.value for s in Scope if s is not Scope.KEYS_WRITE)
+BEARER_ONLY_SCOPES: FrozenSet[Scope] = frozenset({Scope.KEYS_WRITE, Scope.USERS_WRITE})
+API_KEY_SCOPES: FrozenSet[str] = frozenset(s.value for s in Scope if s not in BEARER_ONLY_SCOPES)
 
 #: Scopes a console user's access token carries. Tokens keep the scopes granted
 #: at login, so sign in again after the server changes them.
@@ -64,11 +67,13 @@ ROLE_SCOPES: Dict[str, FrozenSet[str]] = {
 #: Scopes each role may grant to the API keys it creates.
 DELEGATABLE_SCOPES: Dict[str, FrozenSet[str]] = {
     "tenant_administrator": API_KEY_SCOPES,
-    "tenant_developer": frozenset({"catalog:read", "catalog:write", "events:read", "events:write"}),
+    "tenant_developer": frozenset(
+        {"catalog:read", "catalog:write", "events:read", "events:write", "recommendations:read"}
+    ),
 }
 
 #: A storefront backend: sync catalog, send events/feedback, fetch recommendations.
-#: ``recommendations:read`` can only be delegated by a tenant administrator.
+#: Both roles can delegate every scope in it.
 STOREFRONT_KEY_SCOPES: Tuple[Scope, ...] = (
     Scope.CATALOG_READ,
     Scope.CATALOG_WRITE,

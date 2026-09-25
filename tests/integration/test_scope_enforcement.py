@@ -52,8 +52,6 @@ DOMAIN_ROUTES: list[tuple[str, str, object, set[str]]] = [
     ("POST", "/v1/training-jobs", {"model_type": "simplified_dgsr"}, {"training:write"}),
     ("GET", "/v1/training-jobs", None, {"training:read"}),
     ("GET", "/v1/deployment", None, {"deployments:read"}),
-    ("GET", "/v1/deployment/replicas", None, {"deployments:read"}),
-    ("GET", "/v1/deployment/autoscaling", None, {"deployments:read"}),
     ("GET", "/v1/metrics/summary", None, {"metrics:read"}),
     ("POST", "/v1/recommendations", {"user_id": "u-1"}, {"recommendations:read"}),
     ("POST", "/v1/recommendations/session", {"user_id": "u-1"}, {"recommendations:read"}),

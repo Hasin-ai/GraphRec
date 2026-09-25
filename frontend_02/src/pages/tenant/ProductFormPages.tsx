@@ -87,7 +87,7 @@ function ProductFields({ draft, set, errors, idEditable }: { draft: Draft; set: 
         <TextInput id="price" value={draft.price} onChange={(v) => set({ price: v })} mono placeholder="8.40" />
       </Field>
       <Field id="availability" label="Availability">
-        <Select id="availability" value={draft.availability} onChange={(v) => set({ availability: v })} options={AVAILABILITY} />
+        <Select id="availability" value={draft.availability} onChange={(v) => set({ availability: v })} options={AVAILABILITY.includes(draft.availability) ? AVAILABILITY : [draft.availability, ...AVAILABILITY]} />
       </Field>
       <Field id="is_active" label="Active">
         <Select id="is_active" value={draft.is_active ? "active" : "inactive"} onChange={(v) => set({ is_active: v === "active" })} options={["active", "inactive"]} />
@@ -145,7 +145,7 @@ export function ProductNewPage() {
   }
 
   return (
-    <Page crumbs={[{ label: "Home", to: "/home" }, { label: "Products", to: "/products" }, { label: "New" }]} kicker="Catalog" title="Add product" subtitle="Creates or updates the product with this external identifier. PUT is idempotent: repeating it applies the same state again.">
+    <Page crumbs={[{ label: "Home", to: "/home" }, { label: "Products", to: "/products" }, { label: "New" }]} kicker="Catalog" title="Add product" subtitle="Save a product by external ID. An existing ID updates that product.">
       <Form onSubmit={submit} error={error} submitLabel="Save product" busy={busy} width={760} secondary={{ label: "Cancel", to: "/products" }}>
         <ProductFields draft={draft} set={set} errors={fieldErrors} idEditable />
       </Form>
@@ -155,6 +155,11 @@ export function ProductNewPage() {
 }
 
 export function ProductDetailPage() {
+  const { productId = "" } = useParams();
+  return <ProductDetail key={productId} />;
+}
+
+function ProductDetail() {
   const { productId = "" } = useParams();
   const navigate = useNavigate();
   const { can } = useSession();
@@ -172,10 +177,10 @@ export function ProductDetailPage() {
   }, [product.data]);
 
   if (product.error && isApiError(product.error) && product.error.status === 404) return <NotFoundPage />;
-  if (!product.data || !draft) {
+  if (!product.data || !draft || draft.external_id !== product.data.external_id) {
     return (
       <Page crumbs={[{ label: "Home", to: "/home" }, { label: "Products", to: "/products" }, { label: productId, mono: true }]} kicker="Catalog" title={productId}>
-        {product.error ? <ErrorBanner error={product.error} /> : <Skeleton />}
+        {product.error ? <ErrorBanner error={product.error} onRetry={product.reload} /> : <Skeleton />}
       </Page>
     );
   }
@@ -209,10 +214,11 @@ export function ProductDetailPage() {
       crumbs={[{ label: "Home", to: "/home" }, { label: "Products", to: "/products" }, { label: p.external_id, mono: true }]}
       kicker="Catalog"
       title={p.title}
-      badge={<Tag tone={e.served ? "ok" : "warn"}>{e.served ? "served" : "ineligible"}</Tag>}
+      badge={<Tag tone={e.served ? "ok" : "warn"}>{e.served ? "Eligible" : "Excluded"}</Tag>}
       subtitle={e.served ? undefined : e.why}
       actions={[{ label: "Disable product", disabled: !p.is_active || !writable, reason: !writable ? "Requires catalog:write." : p.is_active ? undefined : "This product is already disabled.", onClick: () => setDisabling(true) }]}
     >
+      {product.error ? <ErrorBanner error={product.error} onRetry={product.reload} /> : null}
       <DefinitionList
         items={[
           { label: "External product id", value: p.external_id, mono: true, copy: p.external_id },

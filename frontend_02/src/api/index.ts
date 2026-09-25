@@ -5,7 +5,6 @@ import type {
   ApiKeyRotateInput,
   ApiKeySecretResource,
   AuthTokenPair,
-  AutoscalingStatus,
   DatasetSnapshotResource,
   DatasetUploadResponse,
   DeploymentStatus,
@@ -26,7 +25,6 @@ import type {
   ProductListResponse,
   ProductResource,
   ProductUpsert,
-  ReplicaStatusResponse,
   SetupPasswordInput,
   SubscriptionResult,
   TenantRegistrationInput,
@@ -34,9 +32,18 @@ import type {
   TrainingJobCreate,
   TrainingJobResource,
   UsageSummaryResult,
+  TenantUserResource,
+  TenantUserInvitation,
+  TenantUserRole,
 } from "./types";
 
 const enc = encodeURIComponent;
+
+export const tenantUsers = {
+  list: () => request<{ items: TenantUserResource[]; total: number }>("/v1/tenant/users"),
+  invite: (input: { email: string; display_name?: string; role: TenantUserRole }) =>
+    request<TenantUserInvitation>("/v1/tenant/users", { method: "POST", json: input }),
+};
 
 // ── public ─────────────────────────────────────────────────────
 export const auth = {
@@ -70,7 +77,15 @@ export const billing = {
 };
 
 export const products = {
-  list: () => request<ProductListResponse>("/v1/products"),
+  /** One page (server default 500, max 1000) or specific ids (at most 200). `total` counts every match. */
+  list: (params: { limit?: number; offset?: number; ids?: string[] } = {}) => {
+    const query = new URLSearchParams();
+    if (params.limit !== undefined) query.set("limit", String(params.limit));
+    if (params.offset !== undefined) query.set("offset", String(params.offset));
+    if (params.ids?.length) query.set("ids", params.ids.join(","));
+    const suffix = query.toString();
+    return request<ProductListResponse>(`/v1/products${suffix ? `?${suffix}` : ""}`);
+  },
   get: (externalId: string) => request<ProductResource>(`/v1/products/${enc(externalId)}`),
   put: (externalId: string, input: ProductUpsert) =>
     request<ProductResource>(`/v1/products/${enc(externalId)}`, { method: "PUT", json: input }),
@@ -96,7 +111,7 @@ export const datasets = {
   },
   listSnapshots: () => request<{ items: DatasetSnapshotResource[] }>("/v1/datasets/snapshots"),
   getSnapshot: (id: string) => request<DatasetSnapshotResource>(`/v1/datasets/snapshots/${enc(id)}`),
-  createSnapshot: (input: { cutoff_at?: string | null; description?: string | null }) =>
+  createSnapshot: (input: { cutoff_at?: string | null }) =>
     request<DatasetSnapshotResource>("/v1/datasets/snapshots", { method: "POST", json: input }),
 };
 
@@ -112,6 +127,7 @@ export const models = {
 };
 
 export const training = {
+  cancel: (id: string) => request<TrainingJobResource>(`/v1/training-jobs/${encodeURIComponent(id)}:cancel`, { method: "POST" }),
   list: () => request<{ items: TrainingJobResource[] }>("/v1/training-jobs"),
   create: (input: TrainingJobCreate) =>
     request<TrainingJobResource>("/v1/training-jobs", { method: "POST", json: input }),
@@ -119,15 +135,19 @@ export const training = {
 
 export const serving = {
   deployment: () => request<DeploymentStatus>("/v1/deployment"),
-  replicas: () => request<ReplicaStatusResponse>("/v1/deployment/replicas"),
-  autoscaling: () => request<AutoscalingStatus>("/v1/deployment/autoscaling"),
-  metrics: () => request<MetricsSummary>("/v1/metrics/summary"),
+  /** Measured over the last `windowMinutes` (the API defaults to 60). */
+  metrics: (windowMinutes?: number) =>
+    request<MetricsSummary>(
+      windowMinutes === undefined ? "/v1/metrics/summary" : `/v1/metrics/summary?window_minutes=${windowMinutes}`,
+    ),
 };
 
 // ── platform ───────────────────────────────────────────────────
 const platformRealm = { realm: "platform" as const };
 
 export const platform = {
+  getTenantQuota: (id: string) => request<PlatformQuotaOverride & { plan_id: string; plan_code: string }>(`/v1/platform/tenants/${enc(id)}/quotas`, platformRealm),
+  assignTenantPlan: (id: string, planId: string) => request<PlatformQuotaOverride & { plan_id: string; plan_code: string }>(`/v1/platform/tenants/${enc(id)}/plan`, { ...platformRealm, method: 'POST', json: { plan_id: planId } }),
   status: (token?: string) =>
     request<PlatformStatus>("/v1/platform/status", {
       realm: token ? "public" : "platform",

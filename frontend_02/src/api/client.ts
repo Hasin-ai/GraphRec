@@ -7,6 +7,20 @@ import {
 import { GraphRecApiError, type ErrorBody } from "./types";
 
 export type Realm = "public" | "tenant" | "platform";
+export const RESOURCE_CHANGED = "graphrec:resource-changed";
+const pendingReads = new Map<string, Promise<unknown>>();
+
+/**
+ * Where the API lives. Empty by default: the console is served by nginx, which
+ * proxies /v1 to the API, so relative paths keep the browser on one origin.
+ * Set VITE_API_BASE_URL at build time to point a dev server at another host.
+ */
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+
+/** Absolute URL for an API path ("/v1/products" -> base + path). */
+export function apiUrl(path: string): string {
+  return path.startsWith("/") ? BASE_URL + path : path;
+}
 
 export interface RequestOptions {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -40,8 +54,25 @@ function authorization(realm: Realm): string | null {
  */
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const realm = options.realm ?? "tenant";
+  const identity = authorization(realm);
+  const key = JSON.stringify([realm, identity, path, options.headers]);
+  if ((options.method ?? "GET") === "GET") {
+    const pending = pendingReads.get(key);
+    if (pending) return pending as Promise<T>;
+    const promise = performRequest<T>(path, options, identity);
+    pendingReads.set(key, promise);
+    try { return await promise; }
+    finally { if (pendingReads.get(key) === promise) pendingReads.delete(key); }
+  }
+  const result = await performRequest<T>(path, options, identity);
+  pendingReads.clear();
+  window.dispatchEvent(new CustomEvent(RESOURCE_CHANGED, { detail: path }));
+  return result;
+}
+
+async function performRequest<T>(path: string, options: RequestOptions, auth: string | null): Promise<T> {
+  const realm = options.realm ?? "tenant";
   const headers: Record<string, string> = { Accept: "application/json", ...(options.headers ?? {}) };
-  const auth = authorization(realm);
   if (auth) headers.Authorization = auth;
 
   let body: BodyInit | undefined;
@@ -54,7 +85,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 
   let response: Response;
   try {
-    response = await fetch(path, { method: options.method ?? "GET", headers, body });
+    response = await fetch(apiUrl(path), { method: options.method ?? "GET", headers, body });
   } catch {
     throw new GraphRecApiError(0, { error: { code: "network_error", message: "GraphRec could not be reached" } });
   }
@@ -72,10 +103,13 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 
   if (!response.ok) {
     const error = new GraphRecApiError(response.status, parsed as ErrorBody | null, correlationId);
-    if (response.status === 401 && realm === "tenant" && error.code !== "no_session") clearTenantSession();
-    if (response.status === 401 && realm === "platform" && error.code !== "no_session") clearPlatformSession();
+    if (response.status === 401 && realm === "tenant" && auth === `Bearer ${getTenantSession()?.accessToken}`) clearTenantSession();
+    if (response.status === 401 && realm === "platform" && auth === `Bearer ${getPlatformSession()?.token}`) clearPlatformSession();
     throw error;
   }
+  const currentAuth = realm === "tenant" ? `Bearer ${getTenantSession()?.accessToken}` : realm === "platform" ? `Bearer ${getPlatformSession()?.token}` : null;
+  if (auth !== currentAuth) throw new GraphRecApiError(409, { error: { code: "session_changed", message: "The signed-in account changed while this request was pending. Reload to check its outcome." } });
+  if (parsed === null && response.status !== 204) throw new GraphRecApiError(response.status, { error: { code: "invalid_response", message: "The API returned an unreadable response. Try again." } }, correlationId);
   return parsed as T;
 }
 
