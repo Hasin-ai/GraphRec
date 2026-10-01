@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { events } from "../../api";
 import { isApiError } from "../../api/client";
+import { EVENT_TYPES } from "../../api/eventTypes";
 import type { EventBatchResponse, EventSubmit, EventSubmitResponse } from "../../api/types";
 import { useQueryState } from "../../hooks/useQueryState";
 import { useResource } from "../../hooks/useResource";
@@ -11,7 +12,6 @@ import { Field, Form, Select, TextArea, TextInput, type FormError } from "../../
 import { Page } from "../../ui/Page";
 import { ActionsCell, Badge, Cell, DataTable, DefinitionList, ErrorBanner, FilterBar, Footnote, Skeleton } from "../../ui/primitives";
 
-const EVENT_TYPES = ["view", "add_to_cart", "purchase", "remove_from_cart", "search", "click"];
 
 const BATCH_EXAMPLE = `{
   "request_id": "events-2026-09-25-1",
@@ -206,7 +206,7 @@ export function EventsPage() {
             <TextInput id="event_id" value={single.event_id} onChange={(v) => set({ event_id: v })} mono placeholder="ev-33810" />
           </Field>
           <Field id="event_type" label="Event type">
-            <Select id="event_type" value={single.event_type} onChange={(v) => set({ event_type: v })} options={EVENT_TYPES} />
+            <Select id="event_type" value={single.event_type} onChange={(v) => set({ event_type: v })} options={[...EVENT_TYPES]} />
           </Field>
           <Field id="user_id" label="Customer identifier">
             <TextInput id="user_id" value={single.user_id} onChange={(v) => set({ user_id: v })} mono placeholder="cus-9931" />

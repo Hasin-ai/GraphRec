@@ -7,13 +7,16 @@ from uuid import UUID
 from pydantic import BaseModel, Field, field_validator
 
 
+#: Single source of the accepted interaction types. The console's list
+#: (frontend_02/src/api/eventTypes.ts) is checked against this by tests.
+EVENT_TYPES = ("view", "click", "add_to_cart", "remove_from_cart", "purchase", "rating", "search", "add_to_wishlist")
+EventType = Literal["view", "click", "add_to_cart", "remove_from_cart", "purchase", "rating", "search", "add_to_wishlist"]
+
+
 class EventSubmit(BaseModel):
     event_id: str = Field(..., max_length=100)
     # UC-09: unsupported interaction types are rejected (matches the SDK EventType enum).
-    event_type: Literal[
-        "view", "click", "add_to_cart", "remove_from_cart",
-        "purchase", "rating", "search", "add_to_wishlist",
-    ]
+    event_type: EventType
     user_id: str | None = Field(default=None, max_length=256)
     external_product_id: str | None = None
     context: dict[str, Any] = Field(default_factory=dict)
