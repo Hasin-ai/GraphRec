@@ -18,6 +18,12 @@ Redis errors or timeouts (``REDIS_TIMEOUT_MS``) never fail a request: the check
 falls back to a per-process limiter with the same limits (ER-F-09 still holds
 per process), the error is logged and counted, and status endpoints report the
 limiter as degraded until Redis answers again.
+
+Circuit breaker: the first failure opens the circuit, after which requests skip
+Redis entirely (no connect or DNS wait on the request path) and a background
+thread probes Redis every ``PROBE_INTERVAL_SECONDS``; the first successful
+probe closes the circuit. A stopped Redis container can make even name
+resolution take seconds, which the socket timeout does not bound.
 """
 from __future__ import annotations
 
@@ -35,6 +41,7 @@ from graphrec_core.errors import ApiError
 log = logging.getLogger("graphrec.admission")
 
 RATE_WINDOW_MS = 60_000
+PROBE_INTERVAL_SECONDS = 1.0
 
 _RATE_LUA = """
 local key = KEYS[1]
@@ -95,9 +102,12 @@ class LimiterHealth:
     _last_log: float = 0.0
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
-    def record_failure(self, operation: str, exc: Exception) -> None:
+    def count_fail_open(self) -> None:
         with self._lock:
             self.fail_open_total += 1
+
+    def record_failure(self, operation: str, exc: Exception) -> None:
+        with self._lock:
             self.last_error_at = datetime.now(timezone.utc)
             self.last_error = f"{operation}: {type(exc).__name__}"
             should_log = time.monotonic() - self._last_log > 10
@@ -197,21 +207,48 @@ class AdmissionController:
             timeout = timeout_ms / 1000
             self._client = redis.Redis.from_url(redis_url, socket_timeout=timeout, socket_connect_timeout=timeout,
                                                 retry_on_timeout=False, health_check_interval=0)
+        self._circuit_open = False
+        self._probe_lock = threading.Lock()
+        self._probe_thread: threading.Thread | None = None
         if self._client is not None:
             self._rate_script = self._client.register_script(_RATE_LUA)
             self._acquire_script = self._client.register_script(_SLOT_ACQUIRE_LUA)
             self._quota_script = self._client.register_script(_QUOTA_LUA)
+
+    # -- circuit breaker --------------------------------------------------
+    def _redis_available(self) -> bool:
+        return self._client is not None and not self._circuit_open
+
+    def _fail(self, operation: str, exc: Exception) -> None:
+        self.health.record_failure(operation, exc)
+        self._circuit_open = True
+        with self._probe_lock:
+            if self._probe_thread is None or not self._probe_thread.is_alive():
+                self._probe_thread = threading.Thread(target=self._probe, name="admission-redis-probe", daemon=True)
+                self._probe_thread.start()
+
+    def _probe(self) -> None:
+        while self._circuit_open:
+            time.sleep(PROBE_INTERVAL_SECONDS)
+            try:
+                self._client.ping()
+            except Exception:  # noqa: BLE001 - still down
+                continue
+            self._circuit_open = False
+            log.warning("admission control: Redis reachable again; shared limits resumed")
 
     # -- status -----------------------------------------------------------
     def status(self) -> dict:
         state = "ok"
         if self._client is None:
             state = "disabled"
+        elif self._circuit_open:
+            state = "degraded"
         else:
             try:
                 self._client.ping()
             except Exception as exc:  # noqa: BLE001 - any Redis failure is "degraded"
-                self.health.record_failure("ping", exc)
+                self._fail("ping", exc)
                 state = "degraded"
         return {"backend": self.health.backend, "status": state, "fail_open_total": self.health.fail_open_total,
                 "last_error_at": self.health.last_error_at.isoformat() if self.health.last_error_at else None}
@@ -224,7 +261,7 @@ class AdmissionController:
     def acquire_slot(self, tenant_id: UUID, limit: int) -> Lease:
         lease_id = uuid4().hex
         deadline = time.monotonic() + self.slot_wait_ms / 1000
-        if self._client is not None:
+        if self._redis_available():
             try:
                 while True:
                     if int(self._acquire_script(keys=[f"gr:slots:{tenant_id}"],
@@ -235,7 +272,9 @@ class AdmissionController:
                         raise _slots_full(limit)
                     time.sleep(min(0.01, remaining))
             except self._redis_errors() as exc:
-                self.health.record_failure("slot acquire", exc)
+                self._fail("slot acquire", exc)
+        if self._client is not None:
+            self.health.count_fail_open()   # admitted without the shared store
         if self.local.acquire(tenant_id, limit, max(0.0, deadline - time.monotonic())):
             return Lease(tenant_id, lease_id, local=True)
         raise _slots_full(limit)
@@ -244,14 +283,16 @@ class AdmissionController:
         if lease.local:
             self.local.release(lease.tenant_id)
             return
+        if not self._redis_available():
+            return  # the lease expires on its own after SLOT_LEASE_SECONDS
         try:
             self._client.zrem(f"gr:slots:{lease.tenant_id}", lease.lease_id)
         except self._redis_errors() as exc:  # the lease expires on its own
-            self.health.record_failure("slot release", exc)
+            self._fail("slot release", exc)
 
     # -- requests per minute ---------------------------------------------
     def check_rate(self, tenant_id: UUID, limit: int) -> RateResult:
-        if self._client is not None:
+        if self._redis_available():
             try:
                 allowed, remaining, reset_ms = (int(v) for v in self._rate_script(
                     keys=[f"gr:rl:{tenant_id}:recs"], args=[limit, RATE_WINDOW_MS, uuid4().hex]))
@@ -260,7 +301,7 @@ class AdmissionController:
                     raise _rate_limited(limit, result)
                 return result
             except self._redis_errors() as exc:
-                self.health.record_failure("rate check", exc)
+                self._fail("rate check", exc)
         allowed, remaining, reset = self.local.rate(tenant_id, limit)
         result = RateResult(limit, remaining, reset)
         if not allowed:
@@ -271,7 +312,7 @@ class AdmissionController:
     def consume_quota(self, tenant_id: UUID, dimension: str, limit: int, period_start: datetime,
                       period_end: datetime, seed: Callable[[], int], quantity: int = 1) -> None:
         period = period_start.strftime("%Y%m")
-        if self._client is not None:
+        if self._redis_available():
             key = f"gr:q:{tenant_id}:{dimension}:{period}"
             try:
                 status, used = (int(v) for v in self._quota_script(keys=[key], args=[limit, quantity]))
@@ -282,19 +323,19 @@ class AdmissionController:
                     return
                 raise _quota_exhausted(dimension, limit, used, quantity, period_end)
             except self._redis_errors() as exc:
-                self.health.record_failure("quota check", exc)
+                self._fail("quota check", exc)
         allowed, used = self.local.quota(tenant_id, period, limit, quantity, int(seed()))
         if not allowed:
             raise _quota_exhausted(dimension, limit, used, quantity, period_end)
 
     def refund_quota(self, tenant_id: UUID, dimension: str, period_start: datetime, quantity: int = 1) -> None:
         period = period_start.strftime("%Y%m")
-        if self._client is not None:
+        if self._redis_available():
             try:
                 self._client.decrby(f"gr:q:{tenant_id}:{dimension}:{period}", quantity)
                 return
             except self._redis_errors() as exc:
-                self.health.record_failure("quota refund", exc)
+                self._fail("quota refund", exc)
         self.local.refund(tenant_id, period, quantity)
 
 

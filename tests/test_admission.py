@@ -152,14 +152,46 @@ def test_redis_outage_fails_open_reports_degraded_and_recovers():
     assert lease.local
     admission.check_rate(tenant, 100)
     assert admission.status()["status"] == "degraded"
-    assert admission.health.fail_open_total >= 2
+    assert admission.health.fail_open_total >= 1
     admission.release(lease)
     flaky.down = False
+    deadline = time.monotonic() + 3                     # background probe closes the circuit
+    while admission.status()["status"] != "ok" and time.monotonic() < deadline:
+        time.sleep(0.1)
     assert admission.status()["status"] == "ok"
     for _ in range(2):
         admission.check_rate(tenant, 2)                 # shared limits apply again
     with pytest.raises(ApiError):
         admission.check_rate(tenant, 2)
+
+
+class SlowDownClient(FlakyClient):
+    """An outage where every Redis call stalls (e.g. DNS for a stopped container)."""
+
+    def _guard(self):
+        if self.down:
+            time.sleep(0.5)
+            raise redis.ConnectionError("stalled")
+
+
+def test_open_circuit_keeps_stalled_redis_off_the_request_path():
+    stalled = SlowDownClient(redis.Redis.from_url(URL))
+    admission, tenant = AdmissionController(None, client=stalled, slot_wait_ms=0), uuid4()
+    stalled.down = True
+    admission.release(admission.acquire_slot(tenant, 5))   # first request pays one stall and opens the circuit
+    started = time.monotonic()
+    for _ in range(10):
+        admission.release(admission.acquire_slot(tenant, 5))
+        admission.check_rate(tenant, 100)
+    assert time.monotonic() - started < 0.2               # later requests never wait on Redis
+    assert admission.status()["status"] == "degraded"
+    stalled.down = False
+    deadline = time.monotonic() + 3
+    while admission.status()["status"] != "ok" and time.monotonic() < deadline:
+        time.sleep(0.1)
+    lease = admission.acquire_slot(tenant, 5)
+    assert not lease.local                                 # shared store in use again
+    admission.release(lease)
 
 
 def test_unreachable_redis_answers_within_the_client_timeout():
