@@ -321,6 +321,11 @@ class AuthenticationService:
             record = self._resolve_setup_token(setup_token_hash(payload.setup_token))
             now = datetime.now(timezone.utc)
             reason = self._setup_denial_reason(record, payload, now)
+            if reason is None and record is not None and self._email_signable_elsewhere(record):
+                # D12 defense in depth: an invitation created before the
+                # cross-tenant check must not activate a second sign-in identity
+                # for an email another tenant's user already signs in with.
+                reason = "email_in_use_elsewhere"
             if record is None or reason is not None:
                 self._record_setup_failure(
                     correlation_id=correlation_id,
@@ -432,6 +437,10 @@ class AuthenticationService:
             self.session.commit()
         except SQLAlchemyError:
             self.session.rollback()
+
+    def _email_signable_elsewhere(self, record: SetupTokenRecord) -> bool:
+        return any(i.user_id != record.user_id and i.credential_digest and i.user_status == "active"
+                   and i.tenant_status == "active" for i in self._resolve_identities(record.normalized_email))
 
     def _resolve_setup_token(self, token_hash: str) -> SetupTokenRecord | None:
         row = (

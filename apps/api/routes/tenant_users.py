@@ -1,6 +1,8 @@
 """Tenant user administration (``/v1/tenant/users``)."""
 from __future__ import annotations
 
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
 
@@ -11,6 +13,7 @@ from graphrec_core.schemas.tenant_users import (
     TenantUserInvite,
     TenantUserInviteResponse,
     TenantUserListResponse,
+    TenantUserResource,
 )
 from graphrec_core.settings import get_settings
 
@@ -38,4 +41,19 @@ def invite_tenant_user(
     principal.require_scope("users:write")
     return TenantUserService(db, get_settings()).invite_user(
         principal, body, correlation_id=request.state.correlation_id
+    )
+
+
+@router.delete("/{user_id}/invitation", response_model=TenantUserResource)
+def revoke_tenant_user_invitation(
+    user_id: UUID,
+    request: Request,
+    principal: AuthenticatedPrincipal = Depends(authenticated_principal),
+    db: Session = Depends(get_db),
+) -> TenantUserResource:
+    """Withdraw a pending invitation; its one-time setup link stops working."""
+    principal.require_bearer()
+    principal.require_scope("users:write")
+    return TenantUserService(db, get_settings()).revoke_invitation(
+        principal, user_id, correlation_id=request.state.correlation_id
     )

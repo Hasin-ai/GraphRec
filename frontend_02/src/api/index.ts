@@ -52,6 +52,7 @@ export const tenantUsers = {
   list: () => request<{ items: TenantUserResource[]; total: number }>("/v1/tenant/users"),
   invite: (input: { email: string; display_name?: string; role: TenantUserRole }) =>
     request<TenantUserInvitation>("/v1/tenant/users", { method: "POST", json: input }),
+  revokeInvitation: (id: string) => request<TenantUserResource>(`/v1/tenant/users/${enc(id)}/invitation`, { method: "DELETE" }),
 };
 
 // ── public ─────────────────────────────────────────────────────

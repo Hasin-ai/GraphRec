@@ -10,12 +10,12 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import Session
 
 from graphrec_core.auth.audit import protected_auth_hash
 from graphrec_core.auth.principal import AuthenticatedPrincipal
-from graphrec_core.auth.setup_tokens import issue_setup_token
+from graphrec_core.auth.setup_tokens import issue_setup_token, revoke_open_setup_tokens
 from graphrec_core.database.models import AuditLog, TenantUser
 from graphrec_core.database.tenancy import set_local_tenant
 from graphrec_core.errors import ApiError
@@ -36,6 +36,13 @@ def require_tenant_administrator(principal: AuthenticatedPrincipal) -> None:
     principal.require_scope("users:write")
     if principal.role != "tenant_administrator":
         raise ApiError(403, "insufficient_role", "Only a tenant administrator can manage users")
+
+
+def email_in_use(session: Session, email: str) -> bool:
+    """True when any tenant has a user (other than a revoked invitation) with this email."""
+    rows = session.execute(text(
+        "SELECT user_status FROM resolve_login_identities(:email)"), {"email": email}).all()
+    return any(row.user_status != "disabled" for row in rows)
 
 
 class TenantUserService:
@@ -73,6 +80,12 @@ class TenantUserService:
         )
         if existing is not None:
             raise ApiError(409, "duplicate_resource", "A user with this email already exists in the tenant")
+        # D12: sign-in resolves users by email across tenants, so an email that
+        # already belongs to a user anywhere cannot be invited again (same rule
+        # as tenant registration). The message does not say where it exists.
+        if email_in_use(self.session, payload.email):
+            raise ApiError(409, "duplicate_resource",
+                           "This email address cannot be invited. Ask the person for a different address.")
         count = self.session.scalar(
             select(func.count(TenantUser.id)).where(TenantUser.tenant_id == principal.tenant_id)
         )
@@ -123,3 +136,30 @@ class TenantUserService:
             setup_token=token,
             setup_token_expires_at=expires_at,
         )
+
+    def revoke_invitation(
+        self, principal: AuthenticatedPrincipal, user_id: UUID, *, correlation_id: UUID
+    ) -> TenantUserResource:
+        """Withdraw a pending invitation: the user is disabled and its setup links stop working."""
+        require_tenant_administrator(principal)
+        now = datetime.now(timezone.utc)
+        set_local_tenant(self.session, principal.tenant_id)
+        user = self.session.scalar(select(TenantUser).where(
+            TenantUser.tenant_id == principal.tenant_id, TenantUser.id == user_id).with_for_update())
+        if user is None:
+            raise ApiError(404, "resource_not_found", "User not found.")
+        if user.status != "invited":
+            raise ApiError(409, "invalid_state", "Only a pending invitation can be revoked.")
+        revoke_open_setup_tokens(self.session, tenant_id=principal.tenant_id, user_id=user.id, now=now)
+        self.session.execute(update(TenantUser).where(
+            TenantUser.tenant_id == principal.tenant_id, TenantUser.id == user.id,
+            TenantUser.status == "invited").values(status="disabled"))
+        self.session.add(AuditLog(
+            id=uuid4(), tenant_id=principal.tenant_id, actor_type=principal.actor_type,
+            actor_reference=principal.actor_reference, action_type="tenant_user_invitation_revoked",
+            resource_type="tenant_user", resource_reference=user.id, outcome="succeeded",
+            correlation_reference=correlation_id, redacted_details={}, occurred_at=now))
+        self.session.commit()
+        set_local_tenant(self.session, principal.tenant_id)
+        self.session.refresh(user)
+        return TenantUserResource.model_validate(user)
