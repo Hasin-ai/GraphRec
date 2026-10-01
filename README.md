@@ -191,6 +191,19 @@ return tenant ids only.
   so serving stays in-process. An orchestrator adapter would consume
   `desired_capacity`.
 
+Configuration (environment variables, also listed in `.env.example`):
+
+| Variable | Default | Range | Purpose |
+|---|---|---|---|
+| `TRAINING_COOLDOWN_SECONDS` | 60 | 0–86400 | Minimum gap between training requests per tenant (409 `training_cooldown`) |
+| `RETRAINING_MIN_INTERVAL_MINUTES` | 60 | 1–43200 | Lower bound for a scheduled retraining interval |
+| `SCHEDULER_TICK_SECONDS` | 15 | 1–3600 | How often the scheduler evaluates retraining policies and capacity |
+| `CAPACITY_TARGET_RPM_PER_REPLICA` | 120 | ≥1 | Requests per minute one serving replica is sized for |
+| `CAPACITY_SCALE_DOWN_STABILIZATION_SECONDS` | 120 | 0–86400 | Quiet period before capacity scales down |
+
+Lower values (for example 2 / 10 / 30 / 60) are useful for local testing only;
+do not commit them.
+
 ## Run locally
 
 ```bash
