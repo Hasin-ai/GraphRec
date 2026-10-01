@@ -8,6 +8,7 @@ never add products. Relevance stays dominant and explainable:
   item can therefore gain at most w / (1 - w) (~43% at the cap) of the
   relevance range, so it can pass only candidates in that band, never the top
   of the list from the bottom on age alone;
+  Candidates tied on the upstream score share one relevance value;
 * the diversity cap is greedy over the relevance order, and if the cap would
   leave the list short it is relaxed in relevance order instead of returning
   fewer items than requested.
@@ -47,16 +48,30 @@ MAX_FRESHNESS_WEIGHT = 0.3
 
 
 def rerank(candidates: Sequence[str], meta: Mapping[str, tuple[str | None, datetime]], rules: RuleSet,
-           *, top_n: int, now: datetime) -> list[str]:
+           *, top_n: int, now: datetime, scores: Mapping[str, float] | None = None) -> list[str]:
+    """Re-rank ``candidates`` (best first).
+
+    ``scores`` optionally carries the upstream relevance signal (e.g. popularity
+    counts). Candidates with equal scores share the relevance of the first of
+    their tie group, so an arbitrary tie-break (external id) is never mistaken
+    for a relevance difference that freshness cannot overcome.
+    """
     ids = [c for c in dict.fromkeys(candidates) if c in meta]
     if not ids:
         return []
     n = len(ids)
+    rank_of: dict[str, int] = {}
+    group_start, previous = 0, object()
+    for index, item in enumerate(ids):
+        current = scores.get(item) if scores is not None else object()
+        if scores is None or current != previous:
+            group_start, previous = index, current
+        rank_of[item] = group_start
     weight = min(max(rules.freshness_weight, 0.0), MAX_FRESHNESS_WEIGHT) if rules.freshness_enabled else 0.0
     half_life = max(rules.freshness_half_life_days, 1)
     scored = []
     for index, item in enumerate(ids):
-        relevance = 1.0 - index / n
+        relevance = 1.0 - rank_of[item] / n
         score = relevance
         if weight:
             age_days = max((now - meta[item][1]).total_seconds() / 86_400, 0.0)

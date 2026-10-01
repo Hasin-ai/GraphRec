@@ -390,7 +390,7 @@ def _serve(
         strategy = "popular_fallback"
         popularity = select(CustomerEvent.external_product_id.label("product_id"), func.count().label("events")).where(CustomerEvent.tenant_id == tenant_id).group_by(CustomerEvent.external_product_id).subquery()
         fallback_query = (
-            select(Product.external_id)
+            select(Product.external_id, func.coalesce(popularity.c.events, 0))
             .outerjoin(popularity, popularity.c.product_id == Product.external_id)
             .where(Product.tenant_id == tenant_id, *_servable())
             .order_by(func.coalesce(popularity.c.events, 0).desc(), Product.external_id.asc())
@@ -401,10 +401,13 @@ def _serve(
             fallback_query = fallback_query.where(
                 Product.external_id.not_in(payload.exclude_product_ids)
             )
-        top_ids = list(db.execute(fallback_query).scalars())
+        rows = db.execute(fallback_query).all()
+        top_ids = [row[0] for row in rows]
         if rules and top_ids:
+            popularity_scores = {row[0]: float(row[1]) for row in rows}
             top_ids = rerank(top_ids, _rule_meta(db, tenant_id, top_ids), rules,
-                             top_n=payload.top_n, now=datetime.now(timezone.utc))
+                             top_n=payload.top_n, now=datetime.now(timezone.utc),
+                             scores=popularity_scores)
 
     items = [
         RecommendationItem(external_product_id=eid, position=idx + 1)

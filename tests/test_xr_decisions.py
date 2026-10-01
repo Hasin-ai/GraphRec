@@ -81,6 +81,26 @@ def test_freshness_boost_is_bounded():
     assert capped == fresh                              # weight is clamped to 0.3
 
 
+def test_freshness_reorders_items_tied_on_upstream_score():
+    # Fallback pool: equal popularity, tie broken by external id (oldest first).
+    aged = {f"f{i:02d}": (None, NOW - timedelta(days=58 - 2 * i)) for i in range(30)}
+    pool = sorted(aged)
+    tied = {item: 0.0 for item in pool}
+    off = rerank(pool, aged, rules(), top_n=10, now=NOW, scores=tied)
+    on = rerank(pool, aged, rules(freshness_enabled=True, freshness_weight=0.3), top_n=10, now=NOW, scores=tied)
+    age = lambda items: sum((NOW - aged[i][1]).days for i in items) / len(items)
+    assert off == pool[:10]
+    assert age(on) < age(off)          # freshness must measurably lower average age
+    assert on[0] == "f29"              # newest item wins a pure tie
+
+
+def test_freshness_does_not_override_real_score_gaps():
+    aged = {"pop": (None, NOW - timedelta(days=400)), "new": (None, NOW)}
+    out = rerank(["pop", "new"], aged, rules(freshness_enabled=True, freshness_weight=0.3), top_n=2, now=NOW,
+                 scores={"pop": 50.0, "new": 0.0})
+    assert out == ["pop", "new"]
+
+
 def test_rerank_never_adds_unknown_items():
     assert rerank(["x", "a1"], META, rules(diversity_enabled=True), top_n=5, now=NOW) == ["a1"]
 
