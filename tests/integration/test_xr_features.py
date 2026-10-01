@@ -151,7 +151,11 @@ def test_recommendation_rules_change_output_respect_exclusions_and_isolation(cli
     assert on['applied_rules'] == ['diversity'] and on['rules_version'] == 1
     cats = {f'p{i}': ('shoes', 'shoes', 'shoes', 'hats')[i % 4] for i in range(9)}
     spread = lambda r: len({cats[i['external_product_id']] for i in r['items']})
-    assert spread(on) > spread(off)
+    # Only two categories exist, and the cap relaxes rather than shortening the
+    # list, so the measurable effect is the head of the list: with a cap of 1
+    # the first two items must come from different categories.
+    head = lambda r: [cats[i['external_product_id']] for i in r['items'][:2]]
+    assert len(set(head(on))) == 2 and spread(on) >= spread(off)
     excluded = client.post('/v1/recommendations', json={**request, 'exclude_product_ids': ['p0', 'p3']}, headers=admin).json()
     assert not {'p0', 'p3'} & {i['external_product_id'] for i in excluded['items']}
     assert client.put('/v1/recommendation-policy', json={**rules, 'freshness_weight': 0.4}, headers=admin).status_code == 422
@@ -166,8 +170,8 @@ def test_usage_trends_match_ledger_and_are_isolated(client):
     tenant, admin = provision(client)
     _, other = provision(client)
     seed_trainable(client, admin)
-    trend = client.get('/v1/usage/trends?granularity=hour&types=accepted_events',
-                       params={'start': (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()}, headers=admin)
+    trend = client.get('/v1/usage/trends', params={'granularity': 'hour', 'types': 'accepted_events',
+                       'start': (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()}, headers=admin)
     assert trend.status_code == 200, trend.text
     data = trend.json()
     with SessionLocal() as db, db.begin():
@@ -177,7 +181,7 @@ def test_usage_trends_match_ledger_and_are_isolated(client):
     assert data['totals']['accepted_events'] == int(ledger) > 0
     assert sum(b['values']['accepted_events'] for b in data['buckets']) == int(ledger)
     assert 48 <= len(data['buckets']) <= 49
-    assert client.get('/v1/usage/trends?granularity=hour', params={
+    assert client.get('/v1/usage/trends', params={'granularity': 'hour',
         'start': (datetime.now(timezone.utc) - timedelta(days=40)).isoformat()}, headers=admin).status_code == 422
     assert client.get('/v1/usage/trends?types=bogus', headers=admin).status_code == 422
     assert client.get('/v1/usage/trends?granularity=month', headers=admin).status_code == 422
