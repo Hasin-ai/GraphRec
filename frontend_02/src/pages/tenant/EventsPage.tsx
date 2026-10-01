@@ -38,11 +38,14 @@ export function parseEventCollection(text: string): { items?: EventSubmit[]; req
   return { items: items as EventSubmit[], requestId: requestId as string | undefined };
 }
 
-function mapError(caught: unknown): FormError {
+export function mapError(caught: unknown): FormError {
   if (isApiError(caught) && caught.status === 413) return { title: "Batch rejected: too large", body: "The request body exceeds the limit the API is configured with. Split the collection or use a dataset upload.", tone: "warn" };
   if (isApiError(caught) && caught.code === "validation_failed") return { title: "The submission cannot be accepted", body: caught.fields.map((f) => `${f.field}: ${f.message}`).join("; ") || caught.message };
   if (isApiError(caught) && caught.status === 403) return { title: "Not permitted", body: "Your credential does not grant events:write." };
   if (isApiError(caught) && caught.status === 429) return { title: "Quota or rate limit reached", body: caught.message, tone: "warn" };
+  // D14: any other 4xx is a definite rejection (e.g. invalid_product_reference),
+  // not a transient failure; show the API's own non-disclosing message.
+  if (isApiError(caught) && caught.status >= 400 && caught.status < 500) return { title: "The submission cannot be accepted", body: caught.message };
   return { title: "Submission failed", body: "Try again shortly." };
 }
 
