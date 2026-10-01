@@ -103,3 +103,12 @@ def test_duplicate_email_reason_names_only_the_email_field_and_does_not_echo_it(
     assert dup.status_code == 409
     assert {f['field'] for f in dup.json()['error']['details']['fields']} == {'admin_email'}
     assert email not in dup.text
+
+
+# ---- D11: API key "last used" on read-only endpoints ---------------------
+def test_last_used_is_recorded_for_read_only_catalog_calls(client):
+    _, _, _, admin = provision(client)
+    key = client.post('/v1/api-keys', json={'name': f'k-{uuid4().hex[:6]}', 'scopes': ['catalog:read']}, headers=admin).json()
+    assert client.get('/v1/products?limit=1', headers={**JSON, 'Authorization': f"ApiKey {key['secret']}"}).status_code == 200
+    listed = client.get(f"/v1/api-keys/{key['id']}", headers=admin).json()
+    assert listed['last_used_at'] is not None
