@@ -14,13 +14,14 @@ import { ActionsCell, Badge, Cell, DataTable, DefinitionList, ErrorBanner, Filte
 const EVENT_TYPES = ["view", "add_to_cart", "purchase", "remove_from_cart", "search", "click"];
 
 const BATCH_EXAMPLE = `{
+  "request_id": "events-2026-09-25-1",
   "events": [
     { "event_id": "ev-1", "event_type": "view", "user_id": "cus-1", "external_product_id": "SKU-4471", "occurred_at": "2026-08-14T09:41:02Z" },
     { "event_id": "ev-2", "event_type": "purchase", "user_id": "cus-1", "external_product_id": "SKU-4471" }
   ]
 }`;
 
-export function parseEventCollection(text: string): { items?: EventSubmit[]; error?: string } {
+export function parseEventCollection(text: string): { items?: EventSubmit[]; requestId?: string; error?: string } {
   if (!text.trim()) return { error: "Paste an event collection." };
   let parsed: unknown;
   try {
@@ -30,8 +31,11 @@ export function parseEventCollection(text: string): { items?: EventSubmit[]; err
   }
   const items = Array.isArray(parsed) ? parsed : (parsed as { events?: unknown })?.events;
   if (!Array.isArray(items) || !items.length) return { error: 'Provide a non-empty "events" array.' };
+  if (items.length > 1000) return { error: "A batch accepts at most 1,000 events." };
   if (!items.every((i) => i && typeof i === "object" && typeof (i as EventSubmit).event_id === "string" && typeof (i as EventSubmit).event_type === "string")) return { error: "Every event needs an event_id and an event_type." };
-  return { items: items as EventSubmit[] };
+  const requestId = Array.isArray(parsed) ? undefined : (parsed as { request_id?: unknown }).request_id;
+  if (requestId !== undefined && (typeof requestId !== "string" || !requestId || requestId.length > 128)) return { error: "request_id must contain 1–128 characters." };
+  return { items: items as EventSubmit[], requestId: requestId as string | undefined };
 }
 
 function mapError(caught: unknown): FormError {
@@ -138,7 +142,7 @@ export function EventsPage() {
   }
 
   async function submitBatch() {
-    const { items, error: parseError } = parseEventCollection(batch);
+    const { items, requestId, error: parseError } = parseEventCollection(batch);
     setFieldErrors(parseError ? { batch: parseError } : {});
     if (!items) {
       setError({ title: "Correct the highlighted field", body: parseError ?? "" });
@@ -147,7 +151,7 @@ export function EventsPage() {
     setBusy(true);
     setError(null);
     try {
-      setResult({ kind: "batch", batch: await events.submitBatch(items), received: items.length });
+      setResult({ kind: "batch", batch: await events.submitBatch(items, requestId), received: items.length });
     } catch (caught) {
       setError(mapError(caught));
     } finally {

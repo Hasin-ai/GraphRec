@@ -31,6 +31,9 @@ from graphrec_core.dgsr.serving import DGSRArtifact
 from graphrec_core.models_reg.service import ModelRegistryService
 from graphrec_core.settings import get_settings
 from graphrec_core.usage.limits import require_capacity
+from graphrec_core.vector_store.client import get_qdrant_client
+from graphrec_core.vector_store.collections import collection_name, delete_collection
+from graphrec_core.vector_store.indexer import index_item_embeddings
 
 logger = logging.getLogger(__name__)
 
@@ -169,7 +172,25 @@ def train_job(tenant_id, job_id):
             raise Cancelled()
         now, version_id = datetime.now(timezone.utc), uuid4()
         require_capacity(db, tenant_id, 'artifact_storage_bytes', size)
-        source = {**artifact.describe(), 'tenant_id': str(tenant_id), 'snapshot_checksum': snapshot_checksum, 'artifact_bytes': size}
+        table = artifact.item_embeddings()
+        norms = np.linalg.norm(table, axis=1, keepdims=True)
+        if not np.isfinite(table).all() or np.any(norms <= 0):
+            raise ValueError('The trained item table cannot be indexed.')
+        try:
+            indexed = index_item_embeddings(
+                client=get_qdrant_client(), tenant_id=tenant_id, version_id=version_id,
+                external_ids=artifact.item_ids, embedding_matrix=table / norms,
+            )
+            if indexed != len(artifact.item_ids):
+                raise ValueError('The item index is incomplete.')
+        except Exception:
+            try:
+                delete_collection(get_qdrant_client(), collection_name(tenant_id, version_id))
+            except Exception:
+                logger.warning('Could not clean up an incomplete item index for %s', version_id)
+            raise
+        source = {**artifact.describe(), 'tenant_id': str(tenant_id), 'snapshot_checksum': snapshot_checksum,
+                  'artifact_bytes': size, 'indexed_items': indexed}
         version = ModelVersion(id=version_id, tenant_id=tenant_id, version_tag=f'trained-{job_id.hex[:12]}',
             model_type='dgsr', status='eligible', metrics={**metrics, 'source': source},
             artifact_uri=f'file://{directory.resolve().as_posix()}', created_at=now)

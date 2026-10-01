@@ -4,10 +4,10 @@ import { isApiError } from "../../api/client";
 import { useResource } from "../../hooks/useResource";
 import { fmtDateTime, fmtNumber } from "../../lib/format";
 import { Page } from "../../ui/Page";
-import { Badge, DefinitionList, ErrorBanner, Footnote, Skeleton, Stats } from "../../ui/primitives";
+import { Badge, Cell, DefinitionList, ErrorBanner, Panel, PanelTable, Skeleton, Stats } from "../../ui/primitives";
 import { NotFoundPage } from "../errors/ErrorPages";
 
-/** Event-batch result. Product synchronization is synchronous and has no submission record. */
+/** Durable event-batch result and item outcomes. */
 export function SubmissionPage() {
   const { submissionId = "" } = useParams();
   const batch = useResource(() => events.getBatch(submissionId), [submissionId]);
@@ -38,12 +38,17 @@ export function SubmissionPage() {
       <DefinitionList
         items={[
           { label: "Submission id", value: b.id, mono: true, copy: b.id },
+          ...(b.request_id ? [{ label: "Request id", value: b.request_id, mono: true }] : []),
           { label: "Kind", value: "event batch" },
           { label: "Submitted at", value: fmtDateTime(b.created_at), mono: true },
           { label: "Status", badge: <Badge group="batch" value={b.status} /> },
         ]}
       />
-      <Footnote>Per-item rejection reasons are not retained by the API; rejected items are counted only. Raw payloads are never echoed back.</Footnote>
+      <Panel title="Item outcomes" note={`${b.outcomes?.length ?? 0} retained`} body="Each event identifier has a safe processing result. Raw event context is not returned.">
+        {b.outcomes?.length ? <PanelTable columns={["Event id", "Outcome", "Reason"]} rows={b.outcomes.map((o, i) => <tr key={`${o.event_id}-${i}`}>
+          <Cell mono>{o.event_id}</Cell><Cell>{o.status}</Cell><Cell muted>{o.reason ?? "—"}</Cell>
+        </tr>)} /> : <p className="p-body">This older submission has no retained item outcomes.</p>}
+      </Panel>
     </Page>
   );
 }

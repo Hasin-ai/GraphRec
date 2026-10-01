@@ -7,7 +7,9 @@ import type {
   PlatformTenantList,
   PricingPlan,
   QuotaOverride,
+  TenantQuota,
   TenantStatus,
+  UsageSummary,
 } from "../types.js";
 import { Resource } from "./base.js";
 
@@ -27,6 +29,26 @@ export class Platform extends Resource {
     return this.client.request<PlatformTenant>("platform.get_tenant", { params: { tenant_id: tenantId } });
   }
 
+  async getTenantQuota(tenantId: string): Promise<TenantQuota> {
+    return this.client.request<TenantQuota>("platform.get_tenant_quota", { params: { tenant_id: tenantId } });
+  }
+
+  async getTenantUsage(tenantId: string): Promise<UsageSummary> {
+    return this.client.request<UsageSummary>("platform.get_tenant_usage", { params: { tenant_id: tenantId } });
+  }
+
+  async issueRecovery(tenantId: string, email: string): Promise<{ recovery_token: string; expires_at: string }> {
+    if (!email.includes("@")) throw new InputValidationError("email is required");
+    return this.client.request<{ recovery_token: string; expires_at: string }>("platform.issue_recovery", {
+      params: { tenant_id: tenantId }, json: { email: email.trim().toLowerCase() },
+    });
+  }
+
+  async assignTenantPlan(tenantId: string, planId: string): Promise<TenantQuota> {
+    if (!planId.trim()) throw new InputValidationError("planId is required");
+    return this.client.request<TenantQuota>("platform.assign_tenant_plan", { params: { tenant_id: tenantId }, json: { plan_id: planId } });
+  }
+
   /** Change a tenant's lifecycle status. A non-active tenant cannot sign in and its credentials stop verifying. */
   async setTenantStatus(tenantId: string, status: TenantStatus): Promise<PlatformTenant> {
     if (!STATUSES.includes(status)) throw new InputValidationError(`status must be one of ${STATUSES.join(", ")}`);
@@ -35,6 +57,12 @@ export class Platform extends Resource {
 
   async listPlans(): Promise<PricingPlan[]> {
     return this.client.request<PricingPlan[]>("platform.list_plans");
+  }
+
+  async updatePlan(planId: string, value: Pick<PricingPlan, "name" | "limits" | "is_active">): Promise<PricingPlan> {
+    if (!value.name.trim() || !Object.keys(value.limits).length || Object.values(value.limits).some(limit => !Number.isSafeInteger(limit) || limit < 0))
+      throw new InputValidationError("name and non-negative integer plan limits are required");
+    return this.client.request<PricingPlan>("platform.update_plan", { params: { plan_id: planId }, json: value });
   }
 
   /** Replace the plan limit for the given usage types. Returns the effective limits with overrides in force. */

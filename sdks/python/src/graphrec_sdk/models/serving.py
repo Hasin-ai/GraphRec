@@ -16,9 +16,12 @@ __all__ = [
 
 
 class DeploymentStatus(GraphRecModel):
-    #: ``available`` when a model is active, otherwise ``stopped``.
+    id: Optional[UUID] = None
+    desired_model_version_id: Optional[UUID] = None
     status: str
     active_model_version_id: Optional[UUID] = None
+    desired_capacity: int = 1
+    ready_capacity: int = 0
     #: When the active version was activated; ``None`` when nothing is active.
     last_transition_at: Optional[datetime] = None
     failure_reason: Optional[str] = None

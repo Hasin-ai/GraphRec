@@ -35,10 +35,13 @@ class Settings(BaseSettings):
     registration_rate_window_seconds: int = Field(default=60, ge=1)
     max_request_body_bytes: int = Field(default=16_384, ge=1_024)
     max_upload_body_bytes: int = Field(default=10_485_760, ge=1_024)
+    # Batch endpoints accept up to 1,000 items; 16 KiB fits only ~100 events.
+    max_bulk_body_bytes: int = Field(default=1_048_576, ge=1_024)
     max_tenant_name_length: int = Field(default=200, ge=1)
     max_idempotency_key_length: int = Field(default=255, ge=16)
     max_password_length: int = Field(default=1_024, ge=64)
     account_setup_token_ttl_seconds: int = Field(default=86_400, ge=300, le=604_800)
+    training_cooldown_seconds: int = Field(default=60, ge=0, le=86_400)
     # Shared secret for /v1/platform routes; unset disables platform administration.
     platform_admin_token: str | None = None
 
@@ -63,6 +66,16 @@ class Settings(BaseSettings):
                 return None
             if len(value) < 32:
                 raise ValueError("PLATFORM_ADMIN_TOKEN must be at least 32 characters")
+        return value
+
+    @field_validator("jwt_signing_secret", "platform_admin_token")
+    @classmethod
+    def _reject_example_placeholders(cls, value: object) -> object:
+        # Values copied verbatim from .env.example are public; refuse to start with them.
+        if isinstance(value, str) and "replace-with" in value.lower():
+            raise ValueError(
+                "secret still uses the .env.example placeholder; generate a random value"
+            )
         return value
 
 

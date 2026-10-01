@@ -139,7 +139,8 @@ function ModelVersionDetail() {
   const canWrite = can("models:write");
   const canActivate = v.status === "eligible" && canDeploy && !!all.data && !all.error;
   const canRollback = v.status === "active" && retired.length > 0 && canDeploy && !all.error;
-  const canArchive = v.status !== "active" && v.status !== "archived" && canWrite;
+  const protectedRollback = retired.slice().sort((a, b) => (b.activated_at ?? b.created_at).localeCompare(a.activated_at ?? a.created_at))[0]?.id;
+  const canArchive = v.status !== "active" && v.status !== "archived" && !(active && v.id === protectedRollback) && canWrite;
   const metricEntries = flattenMetrics(v.metrics).filter(([key, value]) => typeof value === 'number' && !key.startsWith('source.') && !key.startsWith('training.'));
   const activeMetrics = active && active.id !== v.id ? Object.fromEntries(flattenMetrics(active.metrics)) : null;
 
@@ -153,7 +154,7 @@ function ModelVersionDetail() {
       actions={([
         { label: "Activate", variant: "primary", disabled: !canActivate, reason: canActivate ? undefined : !canDeploy ? "Requires models:deploy." : v.status === "active" ? "This version is already active." : !all.data || all.error ? "Load the model registry before activating." : "Only an eligible version can be activated.", onClick: () => setDialog("activate") },
         { label: "Roll back", disabled: !canRollback, reason: canRollback ? undefined : !canDeploy ? "Requires models:deploy." : "Roll back applies to the active version, and requires a retired target.", onClick: () => { setTarget(retired[0]?.id ?? ""); setDialog("rollback"); } },
-        { label: "Archive", disabled: !canArchive, reason: canArchive ? undefined : !canWrite ? "Requires models:write." : v.status === "active" ? "An active version cannot be archived." : "Already archived.", onClick: () => setDialog("archive") },
+        { label: "Archive", disabled: !canArchive, reason: canArchive ? undefined : !canWrite ? "Requires models:write." : v.status === "active" ? "An active version cannot be archived." : active && v.id === protectedRollback ? "This version is retained as the rollback target." : "Already archived.", onClick: () => setDialog("archive") },
       ] as HeaderAction[]).filter(action => action.label === 'Activate' ? v.status === 'eligible' : action.label === 'Archive' ? v.status !== 'active' && v.status !== 'archived' : v.status === 'active')}
     >
       {version.error ? <ErrorBanner error={version.error} onRetry={version.reload} /> : null}

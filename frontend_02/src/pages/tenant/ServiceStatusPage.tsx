@@ -25,9 +25,11 @@ export function ServiceStatusPage() {
       <DefinitionList items={[
         { label: 'API-reported state', badge: <Badge group="deploy" value={d.status} /> },
         { label: 'Selected model', value: d.active_model_version_id ? can('models:read') ? <Link to={`/models/${d.active_model_version_id}`}>{active?.version_tag ?? d.active_model_version_id}</Link> : d.active_model_version_id : 'No active model', mono: true, copy: d.active_model_version_id ?? undefined },
+        { label: 'Desired model', value: d.desired_model_version_id ?? 'None', mono: true },
+        { label: 'Local serving capacity', value: `${d.ready_capacity ?? 0} of ${d.desired_capacity ?? 1}`, mono: true },
         { label: 'Last activation', value: fmtDateTime(d.last_transition_at) },
       ]} />
-      <p className="footnote">This state reports model activation, not a live dependency health check. {d.failure_reason ?? ''}</p>
+      <p className="footnote">Capacity describes this single local API process after the last activation check. {d.failure_reason ?? ''}</p>
     </Panel> : null}
     {canMetrics ? <Panel title="Recommendation traffic">
       <FilterBar filters={[{ id: 'window', label: 'Measurement window', value: span, onChange: setSpan, options: Object.keys(WINDOWS) }]} onClear={() => setSpan('last hour')} />

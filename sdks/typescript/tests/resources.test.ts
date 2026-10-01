@@ -59,6 +59,15 @@ describe("tenants & auth", () => {
     await expect(client(mock).auth.setupPassword({ setupToken: "t".repeat(43), password: "short" })).rejects.toBeInstanceOf(InputValidationError);
     expect(mock.calls).toHaveLength(0);
   });
+
+  it("submits an operator-issued recovery proof without tenant credentials", async () => {
+    const mock = mockFetch({ body: { status: "completed" } });
+    const result = await client(mock).auth.recoverPassword({ recoveryToken: "t".repeat(43), password: "new-password", email: "A@B.C" });
+    expect(result.status).toBe("completed");
+    expect(mock.calls[0].url).toBe("http://api.test/v1/auth/recover-password");
+    expect(mock.calls[0].body).toEqual({ recovery_token: "t".repeat(43), password: "new-password", email: "a@b.c" });
+    expect(mock.calls[0].headers.authorization).toBeUndefined();
+  });
 });
 
 describe("api keys", () => {
@@ -286,7 +295,7 @@ describe("model versions & training", () => {
     });
     const c = client(mock, { apiKey: "gr_live_x" });
     const created = await c.trainingJobs.create();
-    expect(mock.calls[0].body).toEqual({ model_type: "simplified_dgsr", dataset_snapshot_id: null });
+    expect(mock.calls[0].body).toEqual({ model_type: "dgsr", dataset_snapshot_id: null });
     const done = await c.trainingJobs.wait(created.id, { pollIntervalMs: 1, timeoutMs: 5_000 });
     expect(done.status).toBe("succeeded");
     expect(done.model_version_id).toBe(UUID);
@@ -330,8 +339,8 @@ describe("recommendations & feedback", () => {
     const c = client(mock, { apiKey: "gr_live_x" });
     await c.recommendations.get();
     expect(mock.calls[0].body).toEqual({ top_n: 10, context: {} });
-    await c.recommendations.get({ userId: "u1", topN: 5, context: { page: "home" }, excludeProductIds: ["a", "a", "b"] });
-    expect(mock.calls[1].body).toEqual({ user_id: "u1", top_n: 5, context: { page: "home" }, exclude_product_ids: ["a", "b"] });
+    await c.recommendations.get({ userId: "u1", requestId: "rec-once", topN: 5, fallbackAllowed: false, context: { page: "home" }, excludeProductIds: ["a", "a", "b"] });
+    expect(mock.calls[1].body).toEqual({ user_id: "u1", request_id: "rec-once", top_n: 5, fallback_allowed: false, context: { page: "home" }, exclude_product_ids: ["a", "b"] });
   });
 
   it("session recommendations carry the session in context", async () => {
@@ -395,6 +404,14 @@ describe("platform", () => {
   const tenant = { id: UUID, slug: "acme", name: "Acme", status: "active", created_at: "" };
   const opts = { platformToken: "platform-secret" };
 
+  it("issues recovery proof through the operator route", async () => {
+    const mock = mockFetch({ body: { recovery_token: "secret", expires_at: "2026-01-01T00:00:00Z" } });
+    const value = await client(mock, opts).platform.issueRecovery(UUID, "A@B.C");
+    expect(value.recovery_token).toBe("secret");
+    expect(mock.calls[0].body).toEqual({ email: "a@b.c" });
+    expect(mock.calls[0].headers.authorization).toBe("Bearer platform-secret");
+  });
+
   it("reads status, tenants, plans, failures and audit logs", async () => {
     const mock = mockFetch((call) => ({ body: call.url.includes("/tenants/") ? tenant : call.url.endsWith("/plans") ? [{ code: "starter" }] : { items: [tenant], status: "ok" } }));
     const c = client(mock, opts);
@@ -417,6 +434,14 @@ describe("platform", () => {
     expect(mock.calls[1].body).toEqual({ overrides: { accepted_events: 50_000 } });
     await expect(c.platform.setTenantStatus(UUID, "frozen" as never)).rejects.toBeInstanceOf(InputValidationError);
     await expect(c.platform.setQuotaOverride(UUID, { accepted_events: -1 })).rejects.toBeInstanceOf(InputValidationError);
+  });
+
+  it("updates a plan through the operator route", async () => {
+    const mock = mockFetch({ body: { id: UUID, code: "free", name: "Free", limits: { accepted_events: 100 }, is_active: true } });
+    const c = client(mock, opts);
+    await c.platform.updatePlan(UUID, { name: "Free", limits: { accepted_events: 100 }, is_active: true });
+    expect(mock.calls[0].url).toBe(`http://api.test/v1/platform/plans/${UUID}`);
+    expect(mock.calls[0].body).toEqual({ name: "Free", limits: { accepted_events: 100 }, is_active: true });
   });
 });
 

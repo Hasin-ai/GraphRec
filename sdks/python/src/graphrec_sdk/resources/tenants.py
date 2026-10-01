@@ -90,6 +90,14 @@ class Authentication(SyncResource):
             ),
         )
 
+    def recover_password(self, *, recovery_token: str, password: str,
+                         email: Optional[str] = None) -> Dict[str, str]:
+        """Consume an operator-issued proof and invalidate existing sessions."""
+        return cast(Dict[str, str], self._client.request(
+            "auth.recover_password", json=_setup_body(recovery_token, password, email, key="recovery_token"),
+            cast_to=Dict[str, str],
+        ))
+
 
 class AsyncAuthentication(AsyncResource):
     async def login(self, *, email: str, password: str) -> AuthTokenPair:
@@ -116,9 +124,16 @@ class AsyncAuthentication(AsyncResource):
             ),
         )
 
+    async def recover_password(self, *, recovery_token: str, password: str,
+                               email: Optional[str] = None) -> Dict[str, str]:
+        return cast(Dict[str, str], await self._client.request(
+            "auth.recover_password", json=_setup_body(recovery_token, password, email, key="recovery_token"),
+            cast_to=Dict[str, str],
+        ))
 
-def _setup_body(setup_token: str, password: str, email: Optional[str]) -> Dict[str, str]:
-    body = {"setup_token": setup_token, "password": password}
+
+def _setup_body(setup_token: str, password: str, email: Optional[str], *, key: str = "setup_token") -> Dict[str, str]:
+    body = {key: setup_token, "password": password}
     if email is not None:
         body["email"] = email
     return body

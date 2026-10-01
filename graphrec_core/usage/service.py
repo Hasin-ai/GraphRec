@@ -18,10 +18,11 @@ from graphrec_core.database.models import (
     Product,
     ModelVersion,
 )
+from graphrec_core.database.tenancy import set_local_tenant
 from graphrec_core.errors import ApiError
 from graphrec_core.schemas.usage import UsageDimension, UsageSummaryResponse
 from graphrec_core.subscription.service import SubscriptionService
-from graphrec_core.usage.limits import artifact_storage_used
+from graphrec_core.usage.limits import artifact_storage_used, unstarted_cancelled_training_jobs
 
 DIMENSIONS: tuple[tuple[str, str | None, str], ...] = (
     ("accepted_events", "accepted_events", "count"),
@@ -46,6 +47,31 @@ class UsageService:
         *,
         correlation_id: UUID,
     ) -> UsageSummaryResponse:
+        return self._get_current(
+            principal.tenant_id,
+            actor_type=principal.actor_type,
+            actor_reference=principal.actor_reference,
+            correlation_id=correlation_id,
+        )
+
+    def get_for_platform(self, tenant_id: UUID, *, correlation_id: UUID) -> UsageSummaryResponse:
+        """Read one tenant's aggregate after the platform route has authorized its operator."""
+        set_local_tenant(self.session, tenant_id)
+        return self._get_current(
+            tenant_id,
+            actor_type="platform_administrator",
+            actor_reference=None,
+            correlation_id=correlation_id,
+        )
+
+    def _get_current(
+        self,
+        tenant_id: UUID,
+        *,
+        actor_type: str,
+        actor_reference: UUID | None,
+        correlation_id: UUID,
+    ) -> UsageSummaryResponse:
         now = datetime.now(timezone.utc)
         period_start, period_end = self._period(now)
         try:
@@ -56,7 +82,7 @@ class UsageService:
                     TenantResourceQuota,
                     TenantResourceQuota.tenant_id == TenantSubscription.tenant_id,
                 )
-                .where(TenantSubscription.tenant_id == principal.tenant_id)
+                .where(TenantSubscription.tenant_id == tenant_id)
             ).one_or_none()
             if quota_row is None:
                 raise self._unavailable()
@@ -70,17 +96,19 @@ class UsageService:
                 for usage_type, quantity in self.session.execute(
                     select(UsageEvent.usage_type, func.sum(UsageEvent.quantity))
                     .where(
-                        UsageEvent.tenant_id == principal.tenant_id,
+                        UsageEvent.tenant_id == tenant_id,
                         UsageEvent.occurred_at >= period_start,
                         UsageEvent.occurred_at < period_end,
                     )
                     .group_by(UsageEvent.usage_type)
                 )
             }
+            if "training_jobs" in totals:
+                totals["training_jobs"] = max(Decimal(0), totals["training_jobs"] - unstarted_cancelled_training_jobs(self.session, tenant_id, period_start, period_end))
             # Stored inventory does not reset at the monthly metering boundary.
-            totals["stored_products"] = Decimal(self.session.scalar(select(func.count(Product.id)).where(Product.tenant_id == principal.tenant_id)) or 0)
-            totals["active_model_versions"] = Decimal(self.session.scalar(select(func.count(ModelVersion.id)).where(ModelVersion.tenant_id == principal.tenant_id, ModelVersion.status == "active")) or 0)
-            totals["artifact_storage_bytes"] = Decimal(artifact_storage_used(self.session, principal.tenant_id))
+            totals["stored_products"] = Decimal(self.session.scalar(select(func.count(Product.id)).where(Product.tenant_id == tenant_id)) or 0)
+            totals["active_model_versions"] = Decimal(self.session.scalar(select(func.count(ModelVersion.id)).where(ModelVersion.tenant_id == tenant_id, ModelVersion.status == "active")) or 0)
+            totals["artifact_storage_bytes"] = Decimal(artifact_storage_used(self.session, tenant_id))
             reconciled_at = datetime.now(timezone.utc)
             dimensions = [
                 self._dimension(
@@ -103,9 +131,9 @@ class UsageService:
             self.session.add(
                 AuditLog(
                     id=uuid4(),
-                    tenant_id=principal.tenant_id,
-                    actor_type=principal.actor_type,
-                    actor_reference=principal.actor_reference,
+                    tenant_id=tenant_id,
+                    actor_type=actor_type,
+                    actor_reference=actor_reference,
                     action_type="usage_read",
                     resource_type="usage_summary",
                     resource_reference=None,

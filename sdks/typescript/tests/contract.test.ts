@@ -357,7 +357,7 @@ const RESPONSE_TYPES: [string, string][] = [
 ];
 
 /** Fields the SDK computes itself and never expects from the server. */
-const SDK_ONLY_FIELDS = new Set(["request_count", "replayed"]);
+const SDK_ONLY_FIELDS = new Set(["request_count", "sync_ids", "replayed"]);
 
 suite("response types", () => {
   const classes = schemaClasses();

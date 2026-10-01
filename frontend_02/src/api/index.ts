@@ -22,10 +22,12 @@ import type {
   PlatformTenant,
   PlatformTenantStatus,
   ProductBulkUpsertResponse,
+  CatalogSyncResource,
   ProductListResponse,
   ProductResource,
   ProductUpsert,
   SetupPasswordInput,
+  RecoverPasswordInput,
   SubscriptionResult,
   TenantRegistrationInput,
   TenantRegistrationResult,
@@ -51,6 +53,8 @@ export const auth = {
     request<AuthTokenPair>("/v1/auth/login", { method: "POST", json: input, realm: "public" }),
   setupPassword: (input: SetupPasswordInput) =>
     request<AuthTokenPair>("/v1/auth/setup-password", { method: "POST", json: input, realm: "public" }),
+  recoverPassword: (input: RecoverPasswordInput) =>
+    request<{ status: string }>("/v1/auth/recover-password", { method: "POST", json: input, realm: "public" }),
   registerTenant: (input: TenantRegistrationInput, idempotencyKey: string) =>
     request<TenantRegistrationResult>("/v1/tenants", {
       method: "POST",
@@ -91,14 +95,16 @@ export const products = {
     request<ProductResource>(`/v1/products/${enc(externalId)}`, { method: "PUT", json: input }),
   disable: (externalId: string) =>
     request<ProductResource>(`/v1/products/${enc(externalId)}:disable`, { method: "POST" }),
-  bulkUpsert: (items: ProductUpsert[]) =>
-    request<ProductBulkUpsertResponse>("/v1/products:bulk-upsert", { method: "POST", json: { products: items } }),
+  bulkUpsert: (items: ProductUpsert[], requestId?: string) =>
+    request<ProductBulkUpsertResponse>("/v1/products:bulk-upsert", { method: "POST", json: { products: items, ...(requestId ? { request_id: requestId } : {}) } }),
+  listSyncs: () => request<CatalogSyncResource[]>("/v1/catalog-syncs"),
+  getSync: (id: string) => request<CatalogSyncResource>(`/v1/catalog-syncs/${enc(id)}`),
 };
 
 export const events = {
   submit: (input: EventSubmit) => request<EventSubmitResponse>("/v1/events", { method: "POST", json: input }),
-  submitBatch: (items: EventSubmit[]) =>
-    request<EventBatchResponse>("/v1/events/batches", { method: "POST", json: { events: items } }),
+  submitBatch: (items: EventSubmit[], requestId?: string) =>
+    request<EventBatchResponse>("/v1/events/batches", { method: "POST", json: { events: items, ...(requestId ? { request_id: requestId } : {}) } }),
   listBatches: () => request<EventBatchResponse[]>("/v1/events/batches"),
   getBatch: (id: string) => request<EventBatchResponse>(`/v1/events/batches/${enc(id)}`),
 };
@@ -128,6 +134,7 @@ export const models = {
 
 export const training = {
   cancel: (id: string) => request<TrainingJobResource>(`/v1/training-jobs/${encodeURIComponent(id)}:cancel`, { method: "POST" }),
+  get: (id: string) => request<TrainingJobResource>(`/v1/training-jobs/${enc(id)}`),
   list: () => request<{ items: TrainingJobResource[] }>("/v1/training-jobs"),
   create: (input: TrainingJobCreate) =>
     request<TrainingJobResource>("/v1/training-jobs", { method: "POST", json: input }),
@@ -147,6 +154,8 @@ const platformRealm = { realm: "platform" as const };
 
 export const platform = {
   getTenantQuota: (id: string) => request<PlatformQuotaOverride & { plan_id: string; plan_code: string }>(`/v1/platform/tenants/${enc(id)}/quotas`, platformRealm),
+  getTenantUsage: (id: string) => request<UsageSummaryResult>(`/v1/platform/tenants/${enc(id)}/usage`, platformRealm),
+  issueRecovery: (id: string, email: string) => request<{ recovery_token: string; expires_at: string }>(`/v1/platform/tenants/${enc(id)}/recovery`, { ...platformRealm, method: "POST", json: { email } }),
   assignTenantPlan: (id: string, planId: string) => request<PlatformQuotaOverride & { plan_id: string; plan_code: string }>(`/v1/platform/tenants/${enc(id)}/plan`, { ...platformRealm, method: 'POST', json: { plan_id: planId } }),
   status: (token?: string) =>
     request<PlatformStatus>("/v1/platform/status", {
@@ -168,6 +177,8 @@ export const platform = {
       json: { overrides },
     }),
   listPlans: () => request<PlatformPlan[]>("/v1/platform/plans", platformRealm),
+  updatePlan: (id: string, value: Pick<PlatformPlan, "name" | "limits" | "is_active">) =>
+    request<PlatformPlan>(`/v1/platform/plans/${enc(id)}`, { ...platformRealm, method: "PUT", json: value }),
   listFailures: () => request<{ items: PlatformFailure[] }>("/v1/platform/failures", platformRealm),
   listAudit: () => request<{ items: PlatformAudit[] }>("/v1/platform/audit", platformRealm),
 };

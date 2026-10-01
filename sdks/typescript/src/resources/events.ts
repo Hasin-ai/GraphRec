@@ -49,14 +49,15 @@ export class Events extends Resource {
    * body limit. Counts are summed across requests; on failure the thrown
    * `APIError` carries `partialResult` with the batches applied so far.
    */
-  async createBatch(events: Iterable<EventInput>): Promise<EventBatchResult> {
+  async createBatch(events: Iterable<EventInput>, options: { requestId?: string } = {}): Promise<EventBatchResult> {
     const prepared = Array.from(events, prepareEvent);
     if (!prepared.length) throw new InputValidationError("createBatch() needs at least one event");
     const chunks = chunkItems(prepared, { envelopeKey: "events", maxBytes: this.client.maxBodyBytes, maxItems: this.client.maxBatchItems, describe: "Event" });
     const batches: EventBatch[] = [];
-    for (const chunk of chunks) {
+    for (const [index, chunk] of chunks.entries()) {
       try {
-        batches.push(await this.client.request<EventBatch>("events.create_batch", { json: { events: chunk } }));
+        const requestId = options.requestId && (chunks.length === 1 ? options.requestId : `${options.requestId}:${index + 1}/${chunks.length}`);
+        batches.push(await this.client.request<EventBatch>("events.create_batch", { json: { events: chunk, ...(requestId ? { request_id: requestId } : {}) } }));
       } catch (error) {
         if (error instanceof APIError) error.partialResult = mergeBatchResults(batches);
         throw error;

@@ -3,20 +3,26 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 test('model replacement, rollback and archive follow confirmed backend state', async ({ page, request }) => {
+  test.setTimeout(150_000);
   const tag = Date.now().toString(36);
   const email = `lifecycle-${tag}@example.org`;
   const password = `Lifecycle-${tag}-password`;
   const admin = readFileSync(resolve('..', '.env'), 'utf8').split(/\r?\n/).find(line => line.startsWith('PLATFORM_ADMIN_TOKEN='))?.slice(21).trim();
   expect(admin).toBeTruthy();
   const api = async (path: string, data?: unknown, token?: string, method = data ? 'POST' : 'GET') => {
-    const response = await request.fetch(`/v1${path}`, { method, data, headers: { Accept: 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(path === '/tenants' ? { 'Idempotency-Key': tag } : {}) } });
+    const options = { method, data, headers: { Accept: 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(path === '/tenants' ? { 'Idempotency-Key': tag } : {}) } };
+    let response = await request.fetch(`/v1${path}`, options);
+    if (path === '/tenants' && response.status() === 429 && response.headers()['retry-after']) {
+      await page.waitForTimeout(Math.min(60, Number(response.headers()['retry-after'])) * 1000 + 250);
+      response = await request.fetch(`/v1${path}`, options);
+    }
     expect(response.ok(), `${method} ${path}: ${response.status()}`).toBeTruthy();
     return response.json();
   };
   const tenant = await api('/tenants', { name: `Lifecycle test ${tag}`, admin_email: email });
   const auth = await api('/auth/setup-password', { setup_token: tenant.setup_token, password, email });
   const token = auth.access_token;
-  await api(`/platform/tenants/${tenant.id}/quotas`, { overrides: { training_jobs: 2 } }, admin);
+  await api(`/platform/tenants/${tenant.id}/quotas`, { overrides: { training_jobs: 3 } }, admin);
   await api('/products/LIFECYCLE-1', { external_id: 'LIFECYCLE-1', title: 'Lifecycle test product', price: '10.00' }, token, 'PUT');
   await api('/events', { event_id: `event-${tag}`, event_type: 'purchase', user_id: 'test-user', external_product_id: 'LIFECYCLE-1' }, token);
   const first = await api('/training-jobs', { configuration: { mode: 'placeholder' } }, token);
@@ -39,6 +45,11 @@ test('model replacement, rollback and archive follow confirmed backend state', a
   await expect(page).toHaveURL(/\/models$/);
   expect((await api('/deployment', undefined, token)).active_model_version_id).toBe(first.model_version_id);
   await page.goto(`/models/${second.model_version_id}`);
+  await expect(page.getByRole('button', { name: 'Archive', exact: true })).toBeDisabled();
+  const third = await api('/training-jobs', { configuration: { mode: 'placeholder' } }, token);
+  await api(`/model-versions/${third.model_version_id}:activate`, {}, token);
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Archive', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Archive', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Archive', exact: true }).click();
   await expect(page).toHaveURL(/\/models$/);

@@ -3,14 +3,18 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 test('new administrators and developers have working role-scoped consoles and isolated tenants', async ({ page, browser, request }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   const tag = Date.now().toString(36);
   const password = `GraphRec-demo-${tag}!`;
   const adminEmail = `srs-admin-${tag}@example.org`;
   const developerEmail = `srs-dev-${tag}@example.org`;
   const secondAdminEmail = `srs-manager-${tag}@example.org`;
   const register = async (name: string, email: string) => {
-    const response = await request.post('/v1/tenants', { headers: { 'Idempotency-Key': `${tag}-${name}` }, data: { name: `SRS ${name} ${tag}`, admin_email: email } });
+    let response = await request.post('/v1/tenants', { headers: { 'Idempotency-Key': `${tag}-${name}` }, data: { name: `SRS ${name} ${tag}`, admin_email: email } });
+    if (response.status() === 429 && response.headers()['retry-after']) {
+      await page.waitForTimeout(Math.min(60, Number(response.headers()['retry-after'])) * 1000 + 250);
+      response = await request.post('/v1/tenants', { headers: { 'Idempotency-Key': `${tag}-${name}` }, data: { name: `SRS ${name} ${tag}`, admin_email: email } });
+    }
     expect(response.status()).toBe(201);
     const tenant = await response.json();
     const setup = await request.post('/v1/auth/setup-password', { data: { setup_token: tenant.setup_token, password } });

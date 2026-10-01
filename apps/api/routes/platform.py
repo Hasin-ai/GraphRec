@@ -2,20 +2,25 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
+from pydantic import EmailStr
 from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from graphrec_core.auth.platform import platform_administrator
+from graphrec_core.auth.service import AuthenticationService
 from graphrec_core.database.models import PricingPlan
 from graphrec_core.database.session import get_db
 from graphrec_core.errors import ApiError
 from graphrec_core.subscription.service import SubscriptionService
+from graphrec_core.usage.service import UsageService
+from graphrec_core.schemas.usage import UsageSummaryResponse
+from graphrec_core.settings import Settings, get_settings
 from graphrec_core.schemas.platform import (
     PlatformAuditItem,
     PlatformAuditListResponse,
@@ -49,6 +54,16 @@ class PlanAssignment(BaseModel):
     plan_id: UUID
 
 
+class PlanUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    limits: dict[str, Annotated[int, Field(strict=True, ge=0, le=9_000_000_000_000_000)]]
+    is_active: bool
+
+
+class RecoveryIssue(BaseModel):
+    email: EmailStr
+
+
 @router.get("/tenants/{tenant_id}/quotas")
 def get_tenant_quota(tenant_id: UUID, db: Session = Depends(get_db)) -> dict[str, Any]:
     config = db.scalar(text("SELECT public.platform_tenant_plan(:tenant_id)"), {"tenant_id": tenant_id})
@@ -56,6 +71,27 @@ def get_tenant_quota(tenant_id: UUID, db: Session = Depends(get_db)) -> dict[str
         raise _tenant_not_found(tenant_id)
     return {"plan_id": config['plan_id'], "plan_code": config['plan_code'], "overrides": config['overrides'],
         "limits": SubscriptionService._effective_limits(config['plan_limits'], config['quota_limits'], config['overrides'])}
+
+
+@router.get("/tenants/{tenant_id}/usage", response_model=UsageSummaryResponse)
+def get_tenant_usage(tenant_id: UUID, request: Request, db: Session = Depends(get_db)) -> UsageSummaryResponse:
+    # Existence check uses the platform-only SQL function before selecting a
+    # tenant RLS context. No customer or event payload leaves this endpoint.
+    get_tenant_quota(tenant_id, db)
+    return UsageService(db).get_for_platform(tenant_id, correlation_id=request.state.correlation_id)
+
+
+@router.post("/tenants/{tenant_id}/recovery")
+def issue_account_recovery(tenant_id: UUID, payload: RecoveryIssue, request: Request,
+                           db: Session = Depends(get_db),
+                           app_settings: Settings = Depends(get_settings)) -> dict[str, Any]:
+    tenant = get_platform_tenant(tenant_id, db)
+    if tenant.status != "active":
+        raise ApiError(409, "tenant_inactive", "Tenant is not active.")
+    token, expires_at = AuthenticationService(db, app_settings).issue_recovery_token(
+        tenant_id=tenant_id, email=str(payload.email).lower(), correlation_id=request.state.correlation_id,
+    )
+    return {"recovery_token": token, "expires_at": expires_at}
 
 
 @router.post("/tenants/{tenant_id}/plan")
@@ -138,6 +174,26 @@ def list_platform_plans(db: Session = Depends(get_db)) -> list[PlatformPlanResou
     ]
 
 
+@router.put("/plans/{plan_id}", response_model=PlatformPlanResource)
+def update_platform_plan(plan_id: UUID, payload: PlanUpdate, request: Request,
+                         db: Session = Depends(get_db)) -> PlatformPlanResource:
+    plan = db.scalar(select(PricingPlan).where(PricingPlan.id == plan_id))
+    if plan is None:
+        raise ApiError(404, "resource_not_found", "Plan not found.")
+    if not payload.name.strip() or set(payload.limits) != set(plan.limits):
+        raise ApiError(422, "validation_failed", "Provide a name and every supported plan limit exactly once.")
+    row = db.execute(text("SELECT * FROM public.platform_update_plan"
+        "(:plan_id, :name, CAST(:limits AS jsonb), :active, :correlation_id)"), {
+        "plan_id": plan_id, "name": payload.name.strip(), "limits": json.dumps(payload.limits),
+        "active": payload.is_active, "correlation_id": request.state.correlation_id,
+    }).mappings().one_or_none()
+    if row is None:
+        db.rollback()
+        raise ApiError(404, "resource_not_found", "Plan not found.")
+    db.commit()
+    return PlatformPlanResource(**row)
+
+
 @router.post("/tenants/{tenant_id}/quotas", response_model=PlatformQuotaOverride)
 def set_tenant_quota_override(
     tenant_id: UUID,
@@ -200,10 +256,12 @@ def list_platform_audit_logs(db: Session = Depends(get_db)) -> PlatformAuditList
 @router.get("/status")
 def get_platform_status(db: Session = Depends(get_db)) -> dict[str, Any]:
     worker = "unavailable"
+    deployments = None
     try:
         db.execute(text("SELECT 1"))
         database = "connected"
         worker = "online" if db.scalar(text("SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND classid = 0 AND objid = 714629381 AND granted)")) else "unavailable"
+        deployments = db.scalar(text("SELECT public.platform_deployment_capacity()"))
     except SQLAlchemyError:
         db.rollback()
         database = "unavailable"
@@ -212,5 +270,6 @@ def get_platform_status(db: Session = Depends(get_db)) -> dict[str, Any]:
         "api_cluster": "online",
         "database": database,
         "worker_pool": worker,
+        "deployments": deployments,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }

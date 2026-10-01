@@ -25,6 +25,8 @@ def _recommendation_body(
     top_n: int,
     context: Optional[Mapping[str, Any]],
     exclude_product_ids: Optional[Sequence[str]],
+    request_id: Optional[str] = None,
+    fallback_allowed: Optional[bool] = None,
     session: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     if isinstance(top_n, bool) or not isinstance(top_n, int) or not 1 <= top_n <= MAX_TOP_N:
@@ -35,6 +37,10 @@ def _recommendation_body(
     body: Dict[str, Any] = {"top_n": top_n, "context": merged}
     if user_id is not None:
         body["user_id"] = user_id
+    if request_id is not None:
+        body["request_id"] = request_id
+    if fallback_allowed is not None:
+        body["fallback_allowed"] = fallback_allowed
     if exclude_product_ids:
         unique = list(dict.fromkeys(str(pid) for pid in exclude_product_ids))
         if len(unique) > MAX_EXCLUSIONS:
@@ -135,6 +141,8 @@ class RecommendationsResource(SyncResource):
         top_n: int = 10,
         context: Optional[Mapping[str, Any]] = None,
         exclude_product_ids: Optional[Sequence[str]] = None,
+        request_id: Optional[str] = None,
+        fallback_allowed: Optional[bool] = None,
     ) -> Recommendations:
         """Recommendations for an identified customer (``POST /v1/recommendations``).
 
@@ -152,6 +160,8 @@ class RecommendationsResource(SyncResource):
                     top_n=top_n,
                     context=context,
                     exclude_product_ids=exclude_product_ids,
+                    request_id=request_id,
+                    fallback_allowed=fallback_allowed,
                 ),
                 cast_to=Recommendations,
             ),
@@ -166,6 +176,8 @@ class RecommendationsResource(SyncResource):
         top_n: int = 10,
         context: Optional[Mapping[str, Any]] = None,
         exclude_product_ids: Optional[Sequence[str]] = None,
+        request_id: Optional[str] = None,
+        fallback_allowed: Optional[bool] = None,
     ) -> Recommendations:
         """Session-aware recommendations for anonymous shoppers.
 
@@ -183,6 +195,8 @@ class RecommendationsResource(SyncResource):
                     top_n=top_n,
                     context=context,
                     exclude_product_ids=exclude_product_ids,
+                    request_id=request_id,
+                    fallback_allowed=fallback_allowed,
                     session=_session_context(session_id, recent_product_ids),
                 ),
                 cast_to=Recommendations,
@@ -198,6 +212,8 @@ class AsyncRecommendationsResource(AsyncResource):
         top_n: int = 10,
         context: Optional[Mapping[str, Any]] = None,
         exclude_product_ids: Optional[Sequence[str]] = None,
+        request_id: Optional[str] = None,
+        fallback_allowed: Optional[bool] = None,
     ) -> Recommendations:
         """Async variant of :meth:`RecommendationsResource.get`."""
 
@@ -210,6 +226,8 @@ class AsyncRecommendationsResource(AsyncResource):
                     top_n=top_n,
                     context=context,
                     exclude_product_ids=exclude_product_ids,
+                    request_id=request_id,
+                    fallback_allowed=fallback_allowed,
                 ),
                 cast_to=Recommendations,
             ),
@@ -224,6 +242,8 @@ class AsyncRecommendationsResource(AsyncResource):
         top_n: int = 10,
         context: Optional[Mapping[str, Any]] = None,
         exclude_product_ids: Optional[Sequence[str]] = None,
+        request_id: Optional[str] = None,
+        fallback_allowed: Optional[bool] = None,
     ) -> Recommendations:
         """Async variant of :meth:`RecommendationsResource.for_session`."""
 
@@ -236,6 +256,8 @@ class AsyncRecommendationsResource(AsyncResource):
                     top_n=top_n,
                     context=context,
                     exclude_product_ids=exclude_product_ids,
+                    request_id=request_id,
+                    fallback_allowed=fallback_allowed,
                     session=_session_context(session_id, recent_product_ids),
                 ),
                 cast_to=Recommendations,

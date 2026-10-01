@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { billing, datasets, models, training } from "../../api";
+import { isApiError } from "../../api/client";
 import type { TrainingJobResource } from "../../api/types";
 import { useResource } from "../../hooks/useResource";
 import { useSession } from "../../hooks/useSession";
@@ -16,7 +17,7 @@ import { QualitySummary } from "../../ui/QualitySummary";
 import { ActionsCell, Badge, Cell, DataTable, DefinitionList, ErrorBanner, FilterBar, Footnote, Panel, Skeleton, Banner } from "../../ui/primitives";
 import { NotFoundPage } from "../errors/ErrorPages";
 
-/** The only non-terminal state the API records. */
+/** The worker records detailed stages while status remains queued or running. */
 const ACTIVE_STATES = ["queued", "running"];
 
 interface Eligibility {
@@ -80,7 +81,7 @@ function StartTrainingDialog({ el, onClose, onStarted }: { el: Eligibility; onCl
         />
       </Field>
       <Field id="d-config" label="Configuration (optional JSON)" hint="Optional backend configuration. Checkpoint selection above takes precedence.">
-        <TextArea id="d-config" rows={3} value={config} onChange={setConfig} mono placeholder='{ "epochs": 20 }' />
+        <TextArea id="d-config" rows={3} value={config} onChange={setConfig} mono placeholder='{ "epochs": 3 }' />
       </Field>
     </Dialog>
   );
@@ -170,23 +171,22 @@ export function TrainingJobPage() {
   const [cancelling, setCancelling] = useState(false);
   const { jobId = "" } = useParams();
   const navigate = useNavigate();
-  // The API lists jobs but has no single-job read; find it in the tenant's list (gate 4 for free).
-  const jobs = useResource(() => training.list(), []);
-  const job = jobs.data?.items.find((j) => j.id === jobId);
+  const jobResource = useResource(() => training.get(jobId), [jobId]);
+  const job = jobResource.data;
   const { can } = useSession();
   const version = useResource(async () => (job?.model_version_id && can("models:read") ? models.get(job.model_version_id) : null), [job?.model_version_id, can("models:read")]);
   useEffect(() => {
     if (!job || !ACTIVE_STATES.includes(job.status)) return;
-    const timer = window.setInterval(() => { if (!document.hidden) void jobs.reload(); }, 5000);
+    const timer = window.setInterval(() => { if (!document.hidden) void jobResource.reload(); }, 5000);
     return () => window.clearInterval(timer);
-  }, [job?.status, jobs.reload]);
+  }, [job?.status, jobResource.reload]);
   const crumbs = [{ label: "Home", to: "/home" }, { label: "Training", to: "/training" }, { label: shortId(jobId, 13), mono: true }];
 
-  if (jobs.data && !job) return <NotFoundPage />;
+  if (jobResource.error && isApiError(jobResource.error) && jobResource.error.status === 404) return <NotFoundPage />;
   if (!job) {
     return (
       <Page crumbs={crumbs} kicker="Training job" title={shortId(jobId, 13)}>
-        {jobs.error ? <ErrorBanner error={jobs.error} onRetry={jobs.reload} /> : <Skeleton />}
+        {jobResource.error ? <ErrorBanner error={jobResource.error} onRetry={jobResource.reload} /> : <Skeleton />}
       </Page>
     );
   }
@@ -205,10 +205,10 @@ export function TrainingJobPage() {
       subtitle={active ? "The job is running. Status updates automatically while this page is visible." : done ? "The job completed and registered a model version. Activation is a separate, deliberate action." : failed ? "The job stopped before producing a version." : undefined}
       actions={[
         ...(active && can('training:write') ? [{ label: job.cancel_requested ? 'Cancellation requested' : 'Cancel job', disabled: job.cancel_requested, onClick: () => setCancelling(true) }] : []),
-        { label: "Refresh", onClick: () => void jobs.reload() },
+        { label: "Refresh", onClick: () => void jobResource.reload() },
       ]}
     >
-      {jobs.error ? <ErrorBanner error={jobs.error} onRetry={jobs.reload} /> : null}
+      {jobResource.error ? <ErrorBanner error={jobResource.error} onRetry={jobResource.reload} /> : null}
       {version.error ? <ErrorBanner error={version.error} title="Model details unavailable" onRetry={version.reload} /> : null}
       {!job.configuration?.pretrained_artifact && job.configuration?.mode !== 'train' ? <Banner tone="warn" title="Development placeholder">This job uses synthetic embeddings. A succeeded status confirms the backend operation, not a trained recommendation model.</Banner> : null}
       <DefinitionList
@@ -240,7 +240,7 @@ export function TrainingJobPage() {
           ) : null}
         </Panel>
       </div>
-      {cancelling ? <Dialog title="Cancel training job" body="The worker stops at its next processing boundary. No model version is activated." confirmLabel="Cancel job" onClose={() => setCancelling(false)} onConfirm={async () => { await training.cancel(job.id); setCancelling(false); await jobs.reload(); }} /> : null}
+      {cancelling ? <Dialog title="Cancel training job" body="The worker stops at its next processing boundary. No model version is activated." confirmLabel="Cancel job" onClose={() => setCancelling(false)} onConfirm={async () => { await training.cancel(job.id); setCancelling(false); await jobResource.reload(); }} /> : null}
       <Footnote>Training uses the captured tenant snapshot. Validation selects the checkpoint; test metrics use held-out next-item targets. Local worker capacity is bounded and queued work survives restarts.</Footnote>
     </Page>
   );

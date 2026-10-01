@@ -336,7 +336,7 @@ test("training and models: request a job, activate the version, see it serving",
   await expect(page.locator(".stat").filter({ hasText: /^Latency p95/ })).toContainText("Not available");
   await expect(page.locator(".stat").filter({ hasText: /^Error rate/ })).toContainText("Not available");
   await expect(page.locator(".stat").filter({ hasText: /^Fallback rate/ })).toContainText("Not available");
-  await expect(page.getByText("not a live dependency health check", { exact: false })).toBeVisible();
+  await expect(page.getByText("Capacity describes this single local API process", { exact: false })).toBeVisible();
   await shot(page, "service-status");
 });
 

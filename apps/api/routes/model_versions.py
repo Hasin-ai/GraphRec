@@ -116,6 +116,13 @@ def list_training_jobs(
     return TrainingJobListResponse(items=items)
 
 
+@router.get("/v1/training-jobs/{job_id}", response_model=TrainingJobResource)
+def get_training_job(job_id: UUID, request: Request,
+    principal: AuthenticatedPrincipal = Depends(authenticated_principal), db: Session = Depends(get_db)) -> TrainingJobResource:
+    principal.require_scope("training:read")
+    return ModelRegistryService(db, principal, request.state.correlation_id).get_training_job(principal.tenant_id, job_id)
+
+
 @router.post("/v1/training-jobs/{job_id}:cancel", response_model=TrainingJobResource)
 def cancel_training_job(job_id: UUID, request: Request,
     principal: AuthenticatedPrincipal = Depends(authenticated_principal), db: Session = Depends(get_db)):

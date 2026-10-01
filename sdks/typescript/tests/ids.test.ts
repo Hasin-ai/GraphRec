@@ -35,10 +35,10 @@ describe("identifiers", () => {
 });
 
 describe("route table", () => {
-  it("holds 50 routes with unique method+path pairs", () => {
-    expect(ROUTES.size).toBe(50);
+  it("holds 60 routes with unique method+path pairs", () => {
+    expect(ROUTES.size).toBe(60);
     const pairs = new Set([...ROUTES.values()].map((r) => `${r.method} ${r.path}`));
-    expect(pairs.size).toBe(50);
+    expect(pairs.size).toBe(60);
   });
 
   it("builds and encodes paths, and reports missing or empty parameters", () => {

@@ -37,6 +37,10 @@ export function PlatformStatusPage() {
               { label: "API cluster", badge: <Badge group="platform" value={s.api_cluster} /> },
               { label: "Database", badge: <Badge group="platform" value={s.database} /> },
               { label: "Worker pool", badge: <Badge group="platform" value={s.worker_pool} /> },
+              ...(s.deployments ? [
+                { label: "Ready local capacity", value: `${s.deployments.ready_capacity} of ${s.deployments.desired_capacity}` },
+                { label: "Degraded tenants", value: String(s.deployments.degraded_tenants) },
+              ] : []),
             ]}
           />
         </>
@@ -47,7 +51,7 @@ export function PlatformStatusPage() {
         { label: "Active tenants", value: tenants.data ? String(activeTenants) : tenants.loading ? "Loading…" : "Unavailable", note: tenants.data ? `of ${tenants.data.items.length} accounts` : undefined },
         { label: "Recent failures", value: recentFailures === undefined ? failures.loading ? "Loading…" : "Unavailable" : String(recentFailures), note: "Last 24 hours within the 50 latest records" },
       ]} />
-      <Footnote>Training runs in the API process. A worker pool marked not deployed is not a health failure.</Footnote>
+      <Footnote>Training runs in a separate worker. Capacity counts reflect the most recent local activation checks, not continuous health probing.</Footnote>
     </Page>
   );
 }

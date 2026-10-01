@@ -53,9 +53,10 @@ describe('operational state', () => {
   });
   it('reads only permitted resources on a job detail and shows the actual failure', async () => {
     setTenantSession('reader@example.org', tokenPair({ scopes: ['training:read'] }));
-    const { calls } = mockFetch([{ path: '/v1/training-jobs', body: { items: [{ id: 'job-1', status: 'failed', configuration: { pretrained_artifact: 'checkpoint' }, model_version_id: 'model-1', failure_reason: 'Checkpoint has no compatible catalog items', created_at: '2026-09-18T00:00:00Z' }] } }]);
+    const { calls } = mockFetch([{ path: '/v1/training-jobs/job-1', body: { id: 'job-1', status: 'failed', configuration: { pretrained_artifact: 'checkpoint' }, model_version_id: 'model-1', failure_reason: 'Checkpoint has no compatible catalog items', created_at: '2026-09-18T00:00:00Z' } }]);
     renderAt('/training/job-1');
     expect(await screen.findByText('Checkpoint has no compatible catalog items')).toBeInTheDocument();
+    expect(calls.some(call => call.url.includes('/v1/training-jobs/job-1'))).toBe(true);
     expect(calls.some(call => call.url.includes('model-versions'))).toBe(false);
     expect(screen.queryByRole('button', { name: 'Cancel job' })).not.toBeInTheDocument();
   });

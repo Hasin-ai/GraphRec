@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
@@ -10,6 +12,7 @@ from graphrec_core.errors import ApiError
 from graphrec_core.schemas.products import (
     ProductBulkUpsertRequest,
     ProductBulkUpsertResponse,
+    CatalogSyncResource,
     ProductListResponse,
     ProductResource,
     ProductUpsert,
@@ -27,6 +30,25 @@ def bulk_upsert_products(
     principal.require_scope("catalog:write")
     service = CatalogService(db)
     return service.bulk_upsert(principal.tenant_id, payload)
+
+
+@router.get("/v1/catalog-syncs", response_model=list[CatalogSyncResource])
+def list_catalog_syncs(
+    principal: AuthenticatedPrincipal = Depends(authenticated_principal),
+    db: Session = Depends(get_db),
+) -> list[CatalogSyncResource]:
+    principal.require_scope("catalog:read")
+    return CatalogService(db).list_syncs(principal.tenant_id)
+
+
+@router.get("/v1/catalog-syncs/{sync_id}", response_model=CatalogSyncResource)
+def get_catalog_sync(
+    sync_id: UUID,
+    principal: AuthenticatedPrincipal = Depends(authenticated_principal),
+    db: Session = Depends(get_db),
+) -> CatalogSyncResource:
+    principal.require_scope("catalog:read")
+    return CatalogService(db).get_sync(principal.tenant_id, sync_id)
 
 
 @router.get("/v1/products", response_model=ProductListResponse)
@@ -88,6 +110,9 @@ def patch_product(
 ) -> ProductResource:
     principal.require_scope("catalog:write")
     service = CatalogService(db)
+    # UC-06: updating a product that does not exist must be reported (404),
+    # not silently created. PUT (create-or-replace) and bulk-upsert add products.
+    service.get_product(principal.tenant_id, external_id)
     return service.update_product(principal.tenant_id, external_id, payload)
 
 

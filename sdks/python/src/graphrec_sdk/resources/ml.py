@@ -11,7 +11,7 @@ from ._base import AsyncResource, SyncResource
 
 __all__ = ["AsyncModelVersions", "AsyncTrainingJobs", "ModelVersions", "TrainingJobs"]
 
-DEFAULT_MODEL_TYPE = "simplified_dgsr"
+DEFAULT_MODEL_TYPE = "dgsr"
 
 
 def _version_body(
@@ -36,10 +36,13 @@ def _job_body(
     model_type: str,
     dataset_snapshot_id: Optional[Union[str, UUID]],
     configuration: Optional[Mapping[str, Any]],
+    request_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     if not model_type or len(model_type) > 64:
         raise InputValidationError("model_type must be 1-64 characters")
     body: Dict[str, Any] = {"model_type": model_type}
+    if request_id is not None:
+        body["request_id"] = request_id
     if dataset_snapshot_id is not None:
         body["dataset_snapshot_id"] = str(dataset_snapshot_id)
     if configuration:
@@ -232,11 +235,13 @@ class TrainingJobs(SyncResource):
         model_type: str = DEFAULT_MODEL_TYPE,
         dataset_snapshot_id: Optional[Union[str, UUID]] = None,
         configuration: Optional[Mapping[str, Any]] = None,
+        request_id: Optional[str] = None,
     ) -> TrainingJob:
         """Request training (``POST /v1/training-jobs``).
 
-        Not retried after ambiguous failures (a retry could start a second job).
-        The produced version is ``job.model_version_id``; activate it with
+        Pass ``request_id`` to retry an ambiguous response without creating
+        another job. The accepted job runs in the background. Poll it until
+        terminal; then activate its ``model_version_id`` with
         ``client.model_versions.activate(...)`` after reviewing its metrics.
         """
 
@@ -244,7 +249,7 @@ class TrainingJobs(SyncResource):
             TrainingJob,
             self._client.request(
                 "training_jobs.create",
-                json=_job_body(model_type, dataset_snapshot_id, configuration),
+                json=_job_body(model_type, dataset_snapshot_id, configuration, request_id),
                 cast_to=TrainingJob,
             ),
         )
@@ -255,6 +260,16 @@ class TrainingJobs(SyncResource):
         return cast(
             TrainingJobList, self._client.request("training_jobs.list", cast_to=TrainingJobList)
         )
+
+    def get(self, job_id: Union[str, UUID]) -> TrainingJob:
+        return cast(TrainingJob, self._client.request(
+            "training_jobs.get", path_params={"job_id": job_id}, cast_to=TrainingJob,
+        ))
+
+    def cancel(self, job_id: Union[str, UUID]) -> TrainingJob:
+        return cast(TrainingJob, self._client.request(
+            "training_jobs.cancel", path_params={"job_id": job_id}, cast_to=TrainingJob,
+        ))
 
     def find(self, job_id: Union[str, UUID]) -> Optional[TrainingJob]:
         """Look a job up by ID (the API has no single-job endpoint, so this lists jobs)."""
@@ -292,6 +307,7 @@ class AsyncTrainingJobs(AsyncResource):
         model_type: str = DEFAULT_MODEL_TYPE,
         dataset_snapshot_id: Optional[Union[str, UUID]] = None,
         configuration: Optional[Mapping[str, Any]] = None,
+        request_id: Optional[str] = None,
     ) -> TrainingJob:
         """Async variant of :meth:`TrainingJobs.create`."""
 
@@ -299,7 +315,7 @@ class AsyncTrainingJobs(AsyncResource):
             TrainingJob,
             await self._client.request(
                 "training_jobs.create",
-                json=_job_body(model_type, dataset_snapshot_id, configuration),
+                json=_job_body(model_type, dataset_snapshot_id, configuration, request_id),
                 cast_to=TrainingJob,
             ),
         )
@@ -311,6 +327,16 @@ class AsyncTrainingJobs(AsyncResource):
             TrainingJobList,
             await self._client.request("training_jobs.list", cast_to=TrainingJobList),
         )
+
+    async def get(self, job_id: Union[str, UUID]) -> TrainingJob:
+        return cast(TrainingJob, await self._client.request(
+            "training_jobs.get", path_params={"job_id": job_id}, cast_to=TrainingJob,
+        ))
+
+    async def cancel(self, job_id: Union[str, UUID]) -> TrainingJob:
+        return cast(TrainingJob, await self._client.request(
+            "training_jobs.cancel", path_params={"job_id": job_id}, cast_to=TrainingJob,
+        ))
 
     async def find(self, job_id: Union[str, UUID]) -> Optional[TrainingJob]:
         """Async variant of :meth:`TrainingJobs.find`."""

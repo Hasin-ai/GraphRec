@@ -50,17 +50,25 @@ export interface WaitOptions {
 
 export class TrainingJobs extends Resource {
   /**
-   * Request training (`POST /v1/training-jobs`). In this release the job runs
-   * synchronously and returns as `succeeded` with its `model_version_id`.
+   * Request durable training (`POST /v1/training-jobs`). Poll the returned job
+   * until it reaches a terminal state before inspecting its model version.
    */
   async create(input: TrainingJobInput = {}): Promise<TrainingJob> {
     return this.client.request<TrainingJob>("training_jobs.create", {
-      json: compact({ model_type: input.model_type ?? "simplified_dgsr", dataset_snapshot_id: input.dataset_snapshot_id ?? null, configuration: input.configuration }),
+      json: compact({ request_id: input.request_id, model_type: input.model_type ?? "dgsr", dataset_snapshot_id: input.dataset_snapshot_id ?? null, configuration: input.configuration }),
     });
   }
 
   async list(): Promise<TrainingJobList> {
     return this.client.request<TrainingJobList>("training_jobs.list");
+  }
+
+  async get(jobId: string): Promise<TrainingJob> {
+    return this.client.request<TrainingJob>("training_jobs.get", { params: { job_id: jobId } });
+  }
+
+  async cancel(jobId: string): Promise<TrainingJob> {
+    return this.client.request<TrainingJob>("training_jobs.cancel", { params: { job_id: jobId } });
   }
 
   /** The API has no single-job read; find it in the tenant's list. */

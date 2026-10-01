@@ -60,3 +60,23 @@ class AuthTokenPair(BaseModel):
     refresh_token: str
     user_role: Literal["tenant_administrator", "tenant_developer", "platform_administrator"]
     scopes: list[str]
+
+
+class RecoverPasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    recovery_token: str = Field(min_length=16, max_length=256)
+    password: str
+    email: EmailStr | None = None
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: EmailStr | None) -> str | None:
+        return str(value).lower() if value is not None else None
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        if len(value) < 8 or len(value) > get_settings().max_password_length:
+            raise ValueError("Password length is invalid")
+        return value

@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from graphrec_core.database.models import ModelVersion, PricingPlan, Product, ServingRequest, TenantResourceQuota, TenantSubscription, UsageEvent
+from graphrec_core.database.models import ModelVersion, PricingPlan, Product, ServingRequest, TenantResourceQuota, TenantSubscription, TrainingJob, UsageEvent
 from graphrec_core.errors import ApiError
 from graphrec_core.subscription.service import SubscriptionService
 
@@ -58,10 +58,21 @@ def require_capacity(db: Session, tenant_id: UUID, dimension: str, quantity: int
         used = db.scalar(select(func.coalesce(func.sum(UsageEvent.quantity), 0)).where(
             UsageEvent.tenant_id == tenant_id, UsageEvent.usage_type == dimension,
             UsageEvent.occurred_at >= start, UsageEvent.occurred_at < reset)) or 0
+        if dimension == "training_jobs":
+            used = max(0, used - unstarted_cancelled_training_jobs(db, tenant_id, start, reset))
     if used + quantity > limit:
         raise ApiError(429, "quota_exceeded", f"The {dimension} limit has been reached.",
             details={"limit_name": dimension, "limit": limit, "used": int(used),
                      "requested": quantity, "reset_at": reset.isoformat() if dimension != "stored_products" else None})
+
+
+def unstarted_cancelled_training_jobs(db: Session, tenant_id: UUID, start: datetime, end: datetime) -> int:
+    """Jobs cancelled while still queued never used capacity. The usage ledger is
+    append-only, so they are credited back when quota is evaluated."""
+    return db.scalar(select(func.count(TrainingJob.id)).where(
+        TrainingJob.tenant_id == tenant_id, TrainingJob.status == "cancelled",
+        TrainingJob.progress == 0, TrainingJob.attempts == 0,
+        TrainingJob.created_at >= start, TrainingJob.created_at < end)) or 0
 
 
 def artifact_storage_used(db: Session, tenant_id: UUID) -> int:

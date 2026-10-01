@@ -8,7 +8,7 @@
 export type EventType = "view" | "click" | "add_to_cart" | "remove_from_cart" | "purchase" | "rating" | "search" | "add_to_wishlist" | (string & {});
 export type AvailabilityStatus = "available" | "unavailable" | "out_of_stock" | "discontinued" | (string & {});
 export type ModelStatus = "eligible" | "active" | "retired" | "archived" | (string & {});
-export type TrainingStatus = "queued" | "preparing_data" | "training" | "succeeded" | "failed" | "cancelled" | (string & {});
+export type TrainingStatus = "queued" | "running" | "cancelling" | "preparing_data" | "training" | "succeeded" | "failed" | "cancelled" | (string & {});
 export type TenantStatus = "active" | "suspended" | "deleting" | "deleted";
 export type ApiKeyStatus = "active" | "expired" | "revoked";
 export type TenantUserRole = "tenant_administrator" | "tenant_developer";
@@ -164,14 +164,25 @@ export interface BulkUpsertFailure {
 }
 
 export interface ProductBulkUpsertResult {
+  sync_id?: string | null;
+  sync_ids?: string[];
+  status?: string;
+  request_id?: string | null;
   accepted_count: number;
   created_count: number;
   updated_count: number;
   skipped_count: number;
   rejected_count: number;
   failures: BulkUpsertFailure[];
+  outcomes?: { external_id: string; status: string; reason?: string }[];
   /** Number of HTTP requests the SDK made to apply the input. */
   request_count: number;
+}
+
+export interface CatalogSyncRecord extends ProductBulkUpsertResult {
+  sync_id: string;
+  status: string;
+  created_at: string;
 }
 
 // ── events ─────────────────────────────────────────────────────
@@ -204,9 +215,11 @@ export interface EventReceipt {
 export interface EventBatch {
   id: string;
   status: string;
+  request_id?: string | null;
   accepted_count: number;
   duplicate_count: number;
   rejected_count: number;
+  outcomes?: { event_id: string; status: string; reason?: string }[];
   created_at: string;
 }
 
@@ -268,12 +281,16 @@ export interface ModelVersionList {
 }
 
 export interface TrainingJobInput {
+  request_id?: string;
   model_type?: string;
   dataset_snapshot_id?: string | null;
   configuration?: JsonObject;
 }
 
 export interface TrainingJob {
+  progress: number;
+  stage: string;
+  cancel_requested: boolean;
   id: string;
   model_type: string;
   status: TrainingStatus;
@@ -292,8 +309,12 @@ export interface TrainingJobList {
 
 // ── serving ────────────────────────────────────────────────────
 export interface DeploymentStatus {
+  id?: string | null;
+  desired_model_version_id?: string | null;
   status: string;
   active_model_version_id: string | null;
+  desired_capacity?: number;
+  ready_capacity?: number;
   /** When the active version was activated; null when nothing is active. */
   last_transition_at: string | null;
   failure_reason: string | null;
@@ -362,13 +383,18 @@ export interface PricingPlan {
   id: string;
   code: string;
   name: string;
-  limits: Record<string, unknown>;
+  limits: Record<string, number>;
   is_active: boolean;
 }
 
 export interface QuotaOverride {
   limits: Record<string, unknown>;
   overrides: Record<string, unknown>;
+}
+
+export interface TenantQuota extends QuotaOverride {
+  plan_id: string;
+  plan_code: string;
 }
 
 export interface PlatformFailure {
@@ -403,6 +429,7 @@ export interface PlatformStatus {
   api_cluster: string;
   database: string;
   worker_pool: string;
+  deployments?: { available_tenants: number; degraded_tenants: number; desired_capacity: number; ready_capacity: number } | null;
   timestamp: string;
 }
 

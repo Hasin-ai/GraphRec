@@ -40,4 +40,13 @@ export class Auth extends Resource {
     if (input.email) body.email = input.email.trim().toLowerCase();
     return this.client.request<TokenPair>("auth.setup_password", { json: body });
   }
+
+  async recoverPassword(input: { recoveryToken: string; password: string; email?: string }): Promise<{ status: string }> {
+    if (!input.recoveryToken || input.recoveryToken.length < 16) throw new InputValidationError("recoveryToken is required");
+    if (!input.password || input.password.length < 8) throw new InputValidationError("password must be at least 8 characters");
+    return this.client.request<{ status: string }>("auth.recover_password", {
+      json: { recovery_token: input.recoveryToken, password: input.password,
+        ...(input.email ? { email: input.email.trim().toLowerCase() } : {}) },
+    });
+  }
 }

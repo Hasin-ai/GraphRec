@@ -61,6 +61,7 @@ export const ROUTES: ReadonlyMap<string, Route> = new Map<string, Route>([
   r("tenants.register", "POST", "/v1/tenants", { auth: "none", idempotent: true, body: "json" }),
   r("auth.login", "POST", "/v1/auth/login", { auth: "none", idempotent: true, body: "json" }),
   r("auth.setup_password", "POST", "/v1/auth/setup-password", { auth: "none", idempotent: true, body: "json" }),
+  r("auth.recover_password", "POST", "/v1/auth/recover-password", { auth: "none", body: "json" }),
   // -- API keys (bearer tokens only) ---------------------------------------------------
   r("api_keys.list", "GET", "/v1/api-keys", { auth: "bearer", scope: "keys:write", idempotent: true }),
   r("api_keys.get", "GET", "/v1/api-keys/{key_id}", { auth: "bearer", scope: "keys:write", idempotent: true }),
@@ -74,6 +75,8 @@ export const ROUTES: ReadonlyMap<string, Route> = new Map<string, Route>([
   r("usage.get", "GET", "/v1/usage", { scope: "usage:read", idempotent: true }),
   // -- catalog -------------------------------------------------------------------------
   r("products.bulk_upsert", "POST", "/v1/products:bulk-upsert", { scope: "catalog:write", idempotent: true, body: "json" }),
+  r("products.list_syncs", "GET", "/v1/catalog-syncs", { scope: "catalog:read", idempotent: true }),
+  r("products.get_sync", "GET", "/v1/catalog-syncs/{sync_id}", { scope: "catalog:read", idempotent: true }),
   r("products.list", "GET", "/v1/products", { scope: "catalog:read", idempotent: true }),
   r("products.get", "GET", "/v1/products/{external_id}", { scope: "catalog:read", idempotent: true }),
   r("products.upsert", "PUT", "/v1/products/{external_id}", { scope: "catalog:write", idempotent: true, body: "json" }),
@@ -98,6 +101,8 @@ export const ROUTES: ReadonlyMap<string, Route> = new Map<string, Route>([
   r("model_versions.rollback", "POST", "/v1/models/{model_id}:rollback", { scope: "models:deploy", idempotent: true }),
   r("training_jobs.create", "POST", "/v1/training-jobs", { scope: "training:write", body: "json" }),
   r("training_jobs.list", "GET", "/v1/training-jobs", { scope: "training:read", idempotent: true }),
+  r("training_jobs.get", "GET", "/v1/training-jobs/{job_id}", { scope: "training:read", idempotent: true }),
+  r("training_jobs.cancel", "POST", "/v1/training-jobs/{job_id}:cancel", { scope: "training:write", idempotent: true }),
   // -- serving status ------------------------------------------------------------------
   r("deployment.get", "GET", "/v1/deployment", { scope: "deployments:read", idempotent: true }),
   r("metrics.summary", "GET", "/v1/metrics/summary", { scope: "metrics:read", idempotent: true }),
@@ -110,8 +115,13 @@ export const ROUTES: ReadonlyMap<string, Route> = new Map<string, Route>([
   // -- platform administration (PLATFORM_ADMIN_TOKEN bearer) ---------------------------
   r("platform.list_tenants", "GET", "/v1/platform/tenants", { auth: "bearer", scope: "platform:admin", idempotent: true }),
   r("platform.get_tenant", "GET", "/v1/platform/tenants/{tenant_id}", { auth: "bearer", scope: "platform:admin", idempotent: true }),
+  r("platform.get_tenant_quota", "GET", "/v1/platform/tenants/{tenant_id}/quotas", { auth: "bearer", scope: "platform:admin", idempotent: true }),
+  r("platform.get_tenant_usage", "GET", "/v1/platform/tenants/{tenant_id}/usage", { auth: "bearer", scope: "platform:admin", idempotent: true }),
+  r("platform.assign_tenant_plan", "POST", "/v1/platform/tenants/{tenant_id}/plan", { auth: "bearer", scope: "platform:admin", body: "json" }),
   r("platform.set_tenant_status", "POST", "/v1/platform/tenants/{tenant_id}/status", { auth: "bearer", scope: "platform:admin", idempotent: true, body: "json" }),
   r("platform.list_plans", "GET", "/v1/platform/plans", { auth: "bearer", scope: "platform:admin", idempotent: true }),
+  r("platform.update_plan", "PUT", "/v1/platform/plans/{plan_id}", { auth: "bearer", scope: "platform:admin", idempotent: true, body: "json" }),
+  r("platform.issue_recovery", "POST", "/v1/platform/tenants/{tenant_id}/recovery", { auth: "bearer", scope: "platform:admin", body: "json" }),
   r("platform.set_quota_override", "POST", "/v1/platform/tenants/{tenant_id}/quotas", { auth: "bearer", scope: "platform:admin", idempotent: true, body: "json" }),
   r("platform.list_failures", "GET", "/v1/platform/failures", { auth: "bearer", scope: "platform:admin", idempotent: true }),
   r("platform.list_audit_logs", "GET", "/v1/platform/audit", { auth: "bearer", scope: "platform:admin", idempotent: true }),

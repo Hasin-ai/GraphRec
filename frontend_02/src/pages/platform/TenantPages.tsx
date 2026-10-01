@@ -2,11 +2,11 @@ import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { platform } from "../../api";
 import { isApiError } from "../../api/client";
-import type { PlatformQuotaOverride, PlatformTenant, PlatformTenantStatus } from "../../api/types";
+import type { PlatformPlan, PlatformQuotaOverride, PlatformTenant, PlatformTenantStatus } from "../../api/types";
 import { useClearQuery, useQueryState } from "../../hooks/useQueryState";
 import { useResource } from "../../hooks/useResource";
 import { useToast } from "../../hooks/useToast";
-import { fmtDateTime, fmtNumber, shortId } from "../../lib/format";
+import { fmtDateTime, fmtNumber, fmtQuantity, humanize, shortId } from "../../lib/format";
 import { Dialog } from "../../ui/Dialog";
 import { Field, Select, TextInput } from "../../ui/Form";
 import { Page } from "../../ui/Page";
@@ -122,6 +122,21 @@ function OverrideDialog({ tenant, onClose, onDone }: { tenant: PlatformTenant; o
   );
 }
 
+function RecoveryDialog({ tenant, onClose, onDone }: { tenant: PlatformTenant; onClose: () => void; onDone: (token: string, expires: string) => void }) {
+  const [email, setEmail] = useState("");
+  return <Dialog title={`Issue recovery token for ${tenant.slug}`} width={640}
+    body="Issue a one-time token for an active account. Deliver it to the account owner through a trusted channel. A new token revokes earlier unused tokens."
+    confirmLabel="Issue token" onClose={onClose} onConfirm={async () => {
+      if (!email.trim()) return "Enter the account email.";
+      const issued = await platform.issueRecovery(tenant.id, email.trim());
+      onDone(issued.recovery_token, issued.expires_at);
+    }}>
+    <Field id="recovery-account" label="Account email">
+      <TextInput id="recovery-account" type="email" value={email} onChange={setEmail} autoComplete="off" required />
+    </Field>
+  </Dialog>;
+}
+
 export function PlatformTenantPage() {
   const { tenantId = "" } = useParams();
   return <PlatformTenantDetail key={tenantId} />;
@@ -132,8 +147,10 @@ function PlatformTenantDetail() {
   const { flash } = useToast();
   const tenant = useResource(() => platform.getTenant(tenantId), [tenantId]);
   const plans = useResource(() => platform.listPlans(), []);
-  const [dialog, setDialog] = useState<"status" | "override" | "plan" | null>(null);
+  const [dialog, setDialog] = useState<"status" | "override" | "plan" | "recovery" | null>(null);
+  const [recovery, setRecovery] = useState<{ token: string; expires: string } | null>(null);
   const quotaResource = useResource(() => platform.getTenantQuota(tenantId), [tenantId]);
+  const tenantUsage = useResource(() => platform.getTenantUsage(tenantId), [tenantId]);
   const quota = quotaResource.data;
   const [selectedPlan, setSelectedPlan] = useState('');
   const crumbs = [{ label: "Platform", to: "/admin/status" }, { label: "Tenants", to: "/admin/tenants" }, { label: shortId(tenantId), mono: true }];
@@ -160,6 +177,15 @@ function PlatformTenantDetail() {
           ]}
           actions={[{ label: "Change status", variant: "primary", onClick: () => setDialog("status") }]}
         />
+        <Panel title="Account recovery" body="Issue a one-time reset token for an active tenant account. The secret appears only here after issue."
+          actions={[{ label: "Issue recovery token", onClick: () => { setRecovery(null); setDialog("recovery"); }, disabled: t.status !== "active" }]}>
+          {recovery ? <div>
+            <p className="footnote">Copy this token now and deliver it securely. Expires {fmtDateTime(recovery.expires)}.</p>
+            <code style={{ overflowWrap: "anywhere" }}>{recovery.token}</code>
+            <p className="footnote">Recovery page: /recover</p>
+            <button type="button" className="btn btn-secondary" onClick={() => setRecovery(null)}>Hide token</button>
+          </div> : null}
+        </Panel>
         <Panel
           title="Quota overrides"
           body="Current effective limits and approved tenant overrides."
@@ -182,6 +208,20 @@ function PlatformTenantDetail() {
               ))}
             />
           ) : null}
+        </Panel>
+        <Panel title="Current usage" body="Measured tenant totals and effective limits for the current period; no customer event payloads are shown." actions={[{ label: 'Refresh usage', onClick: () => void tenantUsage.reload(), disabled: tenantUsage.loading }]}>
+          {tenantUsage.error ? <ErrorBanner error={tenantUsage.error} onRetry={tenantUsage.reload} /> : null}
+          {!tenantUsage.data && tenantUsage.loading ? <Skeleton rows={3} /> : null}
+          {tenantUsage.data ? <>
+            <PanelTable columns={['Usage type', { label: 'Used', align: 'right' }, { label: 'Limit', align: 'right' }, { label: 'Remaining', align: 'right' }]}
+              rows={tenantUsage.data.dimensions.map(d => <tr key={d.type}>
+                <Cell>{humanize(d.type)}</Cell>
+                <Cell mono align="right">{fmtQuantity(d.used, d.unit)}</Cell>
+                <Cell mono align="right">{d.limit === null ? 'No limit' : fmtQuantity(d.limit, d.unit)}</Cell>
+                <Cell mono align="right">{d.remaining === null ? '—' : fmtQuantity(d.remaining, d.unit)}</Cell>
+              </tr>)} />
+            <p className="footnote">Period {fmtDateTime(tenantUsage.data.period_start)} – {fmtDateTime(tenantUsage.data.period_end)}. Reconciled {fmtDateTime(tenantUsage.data.last_reconciled_at)}.</p>
+          </> : null}
         </Panel>
         <Panel title="Plans" note={quota ? `Current: ${quota.plan_code}` : undefined} body="Assign an active plan. Existing usage and approved overrides are preserved." actions={[{ label: 'Assign plan', onClick: () => { setSelectedPlan(quota?.plan_id ?? ''); setDialog('plan'); }, disabled: !quota || !plans.data }]}>
           {plans.error ? <ErrorBanner error={plans.error} onRetry={plans.reload} /> : null}
@@ -224,6 +264,7 @@ function PlatformTenantDetail() {
           onDone={() => {
             setDialog(null);
             void quotaResource.reload();
+            void tenantUsage.reload();
             flash(`Quota override approved for ${t.slug}.`);
           }}
         />
@@ -231,8 +272,12 @@ function PlatformTenantDetail() {
       {dialog === 'plan' ? <Dialog title={`Assign plan for ${t.slug}`} body="The new base limits apply immediately. This does not reset usage or remove existing overrides." confirmLabel="Assign plan" onClose={() => setDialog(null)} onConfirm={async () => {
         if (!selectedPlan) return 'Select an active plan.';
         quotaResource.setData(await platform.assignTenantPlan(t.id, selectedPlan));
+        void tenantUsage.reload();
         setDialog(null); flash('Tenant plan updated.');
       }}><Field id="tenant-plan" label="Plan"><Select id="tenant-plan" value={selectedPlan} onChange={setSelectedPlan} options={[{ value: '', label: 'Choose a plan' }, ...(plans.data ?? []).filter(p => p.is_active).map(p => ({ value: p.id, label: p.name }))]} /></Field></Dialog> : null}
+      {dialog === "recovery" ? <RecoveryDialog tenant={t} onClose={() => setDialog(null)} onDone={(token, expires) => {
+        setDialog(null); setRecovery({ token, expires }); flash("One-time recovery token issued.");
+      }} /> : null}
     </Page>
   );
 }
@@ -266,6 +311,11 @@ export function PlatformPlansPage() {
 export function PlatformPlanPage() {
   const { planId = "" } = useParams();
   const plans = useResource(() => platform.listPlans(), []);
+  const { flash } = useToast();
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState("");
+  const [active, setActive] = useState("true");
+  const [limits, setLimits] = useState<Record<string, string>>({});
   const plan = plans.data?.find((p) => p.id === planId);
   const crumbs = [{ label: "Platform", to: "/admin/status" }, { label: "Plans & Quotas", to: "/admin/plans" }, { label: plan?.code ?? shortId(planId), mono: true }];
   if (plans.data && !plan) return <NotFoundPage />;
@@ -277,9 +327,31 @@ export function PlatformPlanPage() {
     );
   }
   return (
-    <Page crumbs={crumbs} kicker="Plan" title={plan.name} badge={<Tag tone={plan.is_active ? "ok" : "warn"}>{plan.is_active ? "open" : "closed"}</Tag>} subtitle={plan.is_active ? "Open to assignments." : "Closed: tenants already on this plan keep it."}>
+    <Page crumbs={crumbs} kicker="Plan" title={plan.name} badge={<Tag tone={plan.is_active ? "ok" : "warn"}>{plan.is_active ? "open" : "closed"}</Tag>} subtitle={plan.is_active ? "Open to assignments." : "Closed: tenants already on this plan keep it."} actions={[{ label: "Edit plan", variant: "primary", onClick: () => {
+      setName(plan.name);
+      setActive(String(plan.is_active));
+      setLimits(Object.fromEntries(Object.entries(plan.limits).map(([key, value]) => [key, String(value)])));
+      setEditing(true);
+    } }]}>
       <DefinitionList items={[{ label: "Plan code", value: plan.code, mono: true, copy: plan.code }, { label: "Plan identifier", value: plan.id, mono: true, copy: plan.id }, ...Object.entries(plan.limits).map(([k, v]) => ({ label: k, value: typeof v === "number" ? fmtNumber(v) : String(v), mono: true }))]} />
-      <Footnote>Limits are read-only here. Changing a plan is a migration; a tenant-specific exception is a quota override.</Footnote>
+      <Footnote>Editing a plan updates base limits for every assigned tenant without resetting usage or removing approved overrides. Changes are audited.</Footnote>
+      {editing ? <Dialog title={`Edit ${plan.code} plan`} width={680} body="Review base limits carefully; changes apply to all tenants assigned to this plan." confirmLabel="Apply plan changes" onClose={() => setEditing(false)} onConfirm={async () => {
+        const parsed: Record<string, number> = {};
+        for (const [key, value] of Object.entries(limits)) {
+          const number = Number(value);
+          if (value.trim() === "" || !Number.isSafeInteger(number) || number < 0 || number > 9_000_000_000_000_000) return `${key} must be an integer from 0 to 9,000,000,000,000,000.`;
+          parsed[key] = number;
+        }
+        if (!name.trim()) return "Enter a plan name.";
+        const updated: PlatformPlan = await platform.updatePlan(plan.id, { name: name.trim(), is_active: active === "true", limits: parsed });
+        plans.setData(previous => previous ? previous.map(item => item.id === updated.id ? updated : item) : null);
+        setEditing(false);
+        flash(`${updated.code} plan updated.`);
+      }}>
+        <Field id="plan-name" label="Plan name"><TextInput id="plan-name" value={name} onChange={setName} /></Field>
+        <Field id="plan-active" label="Open to new assignments"><Select id="plan-active" value={active} onChange={setActive} options={[{ value: "true", label: "Open" }, { value: "false", label: "Closed" }]} /></Field>
+        {Object.keys(plan.limits).map(key => <Field key={key} id={`limit-${key}`} label={humanize(key)}><TextInput id={`limit-${key}`} value={limits[key] ?? ""} onChange={value => setLimits(current => ({ ...current, [key]: value }))} type="number" min={0} max={9_000_000_000_000_000} /></Field>)}
+      </Dialog> : null}
     </Page>
   );
 }

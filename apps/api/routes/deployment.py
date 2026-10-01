@@ -1,11 +1,4 @@
-"""Serving status and measured serving metrics.
-
-The status of a tenant's service is its active model version: GraphRec
-activates one version per tenant and serves from the API process itself, so
-there is no replica set, autoscaler or capacity pool to report. The metrics
-summary is computed from ``serving_requests``, the row-per-request ledger the
-recommendations route appends to.
-"""
+"""Last verified serving transition and measured request traffic."""
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -15,7 +8,7 @@ from sqlalchemy import Float, case, cast, func, select
 from sqlalchemy.orm import Session
 
 from graphrec_core.auth.principal import AuthenticatedPrincipal, authenticated_principal
-from graphrec_core.database.models import ModelVersion, ServingRequest
+from graphrec_core.database.models import ModelDeployment, ModelVersion, ServingRequest
 from graphrec_core.database.session import get_db
 from graphrec_core.schemas.deployment import (
     DeploymentStatus,
@@ -43,13 +36,18 @@ def get_deployment_status(
     db: Session = Depends(get_db),
 ) -> DeploymentStatus:
     principal.require_scope("deployments:read")
-    active_model = _active_model(db, principal.tenant_id)
-    if active_model is None:
+    deployment = db.scalar(select(ModelDeployment).where(ModelDeployment.tenant_id == principal.tenant_id))
+    if deployment is None:
         return DeploymentStatus(status="stopped")
     return DeploymentStatus(
-        status="available",
-        active_model_version_id=active_model.id,
-        last_transition_at=active_model.activated_at,
+        id=deployment.id,
+        desired_model_version_id=deployment.desired_model_version_id,
+        active_model_version_id=deployment.active_model_version_id,
+        status=deployment.status,
+        desired_capacity=deployment.desired_capacity,
+        ready_capacity=deployment.ready_capacity,
+        last_transition_at=deployment.last_transition_at,
+        failure_reason=deployment.failure_reason,
     )
 
 

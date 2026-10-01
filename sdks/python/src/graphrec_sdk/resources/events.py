@@ -81,7 +81,7 @@ class Events(SyncResource):
             ),
         )
 
-    def create_batch(self, events: Iterable[EventLike]) -> EventBatchResult:
+    def create_batch(self, events: Iterable[EventLike], *, request_id: Optional[str] = None) -> EventBatchResult:
         """Record many interactions (``POST /v1/events/batches``), split to fit the body limit.
 
         On failure the raised :class:`~graphrec_sdk.APIError` carries
@@ -89,12 +89,13 @@ class Events(SyncResource):
         """
 
         batches: List[EventBatch] = []
-        for chunk in _plan_batch(
+        chunks = _plan_batch(
             events, max_bytes=self._client.max_body_bytes, max_items=self._client.max_batch_items
-        ):
+        )
+        for index, chunk in enumerate(chunks):
             try:
                 batch = self._client.request(
-                    "events.create_batch", json={"events": chunk}, cast_to=EventBatch
+                    "events.create_batch", json={"events": chunk, **({"request_id": f"{request_id}:{index + 1}/{len(chunks)}" if len(chunks) > 1 else request_id} if request_id else {})}, cast_to=EventBatch
                 )
             except APIError as exc:
                 exc.partial_result = EventBatchResult.from_batches(batches)  # type: ignore[attr-defined]
@@ -141,16 +142,17 @@ class AsyncEvents(AsyncResource):
             ),
         )
 
-    async def create_batch(self, events: Iterable[EventLike]) -> EventBatchResult:
+    async def create_batch(self, events: Iterable[EventLike], *, request_id: Optional[str] = None) -> EventBatchResult:
         """Async variant of :meth:`Events.create_batch`."""
 
         batches: List[EventBatch] = []
-        for chunk in _plan_batch(
+        chunks = _plan_batch(
             events, max_bytes=self._client.max_body_bytes, max_items=self._client.max_batch_items
-        ):
+        )
+        for index, chunk in enumerate(chunks):
             try:
                 batch = await self._client.request(
-                    "events.create_batch", json={"events": chunk}, cast_to=EventBatch
+                    "events.create_batch", json={"events": chunk, **({"request_id": f"{request_id}:{index + 1}/{len(chunks)}" if len(chunks) > 1 else request_id} if request_id else {})}, cast_to=EventBatch
                 )
             except APIError as exc:
                 exc.partial_result = EventBatchResult.from_batches(batches)  # type: ignore[attr-defined]

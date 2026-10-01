@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -15,12 +15,15 @@ class ProductUpsert(BaseModel):
     price: Decimal = Field(default=Decimal("0.00"), ge=0)
     category: str | None = Field(default=None, max_length=100)
     is_active: bool = True
-    availability_status: str = Field(default="available", max_length=32)
+    # Only "available" products are servable; reject unknown values instead of
+    # silently storing them (e.g. "in_stock" made products invisible to recommendations).
+    availability_status: Literal["available", "unavailable", "out_of_stock", "discontinued"] = "available"
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class ProductBulkUpsertRequest(BaseModel):
-    products: list[ProductUpsert] = Field(..., min_items=1)
+    request_id: str | None = Field(default=None, min_length=1, max_length=128)
+    products: list[ProductUpsert] = Field(..., min_length=1, max_length=1000)
 
 
 class ProductBulkFailure(BaseModel):
@@ -29,12 +32,20 @@ class ProductBulkFailure(BaseModel):
 
 
 class ProductBulkUpsertResponse(BaseModel):
+    sync_id: UUID | None = None
+    status: str = "completed"
+    request_id: str | None = None
     accepted_count: int
     created_count: int
     updated_count: int
     skipped_count: int
     rejected_count: int
     failures: list[ProductBulkFailure] = Field(default_factory=list)
+    outcomes: list[dict[str, str]] = Field(default_factory=list)
+
+
+class CatalogSyncResource(ProductBulkUpsertResponse):
+    created_at: datetime
 
 
 class ProductResource(BaseModel):

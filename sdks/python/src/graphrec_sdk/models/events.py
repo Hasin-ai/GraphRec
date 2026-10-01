@@ -56,9 +56,11 @@ class EventReceipt(GraphRecModel):
 class EventBatch(GraphRecModel):
     id: UUID
     status: str
+    request_id: Optional[str] = None
     accepted_count: int
     duplicate_count: int
     rejected_count: int
+    outcomes: List[Dict[str, str]] = Field(default_factory=list)
     created_at: datetime
 
 

@@ -1,7 +1,7 @@
 import { chunkItems } from "../batching.js";
 import { APIError, InputValidationError } from "../errors.js";
 import { newIdempotencyKey } from "../ids.js";
-import type { BulkUpsertFailure, Product, ProductBulkUpsertResult, ProductInput, ProductList } from "../types.js";
+import type { BulkUpsertFailure, CatalogSyncRecord, Product, ProductBulkUpsertResult, ProductInput, ProductList } from "../types.js";
 import { Resource, compact } from "./base.js";
 
 const DUPLICATE_REASON = "Duplicate item external_id within batch";
@@ -34,21 +34,26 @@ export function prepareProduct(input: ProductInput): Record<string, unknown> {
 }
 
 function emptyResult(): ProductBulkUpsertResult {
-  return { accepted_count: 0, created_count: 0, updated_count: 0, skipped_count: 0, rejected_count: 0, failures: [], request_count: 0 };
+  return { accepted_count: 0, created_count: 0, updated_count: 0, skipped_count: 0, rejected_count: 0, failures: [], outcomes: [], request_count: 0, sync_ids: [] };
 }
 
 export function mergeBulkResults(results: readonly ProductBulkUpsertResult[], duplicates: readonly BulkUpsertFailure[] = []): ProductBulkUpsertResult {
   const merged = emptyResult();
   for (const r of results) {
+    merged.sync_ids!.push(...(r.sync_ids ?? (r.sync_id ? [r.sync_id] : [])));
     merged.accepted_count += r.accepted_count;
     merged.created_count += r.created_count;
     merged.updated_count += r.updated_count;
     merged.skipped_count += r.skipped_count;
     merged.rejected_count += r.rejected_count;
     merged.failures.push(...(r.failures ?? []));
+    merged.outcomes!.push(...(r.outcomes ?? []));
     merged.request_count += 1;
   }
   merged.rejected_count += duplicates.length;
+  merged.outcomes!.push(...duplicates.map((failure) => ({ external_id: failure.external_id, status: "rejected", reason: failure.reason })));
+  if (merged.sync_ids!.length === 1) merged.sync_id = merged.sync_ids![0];
+  if (results.length === 1) merged.request_id = results[0].request_id;
   merged.failures.push(...duplicates);
   return merged;
 }
@@ -68,7 +73,7 @@ export class Products extends Resource {
    * requests. If a request fails, the thrown `APIError` carries `partialResult`
    * with the totals applied so far.
    */
-  async bulkUpsert(products: Iterable<ProductInput>, options: { idempotencyKey?: string } = {}): Promise<ProductBulkUpsertResult> {
+  async bulkUpsert(products: Iterable<ProductInput>, options: { idempotencyKey?: string; requestId?: string } = {}): Promise<ProductBulkUpsertResult> {
     const seen = new Set<string>();
     const unique: Record<string, unknown>[] = [];
     const duplicates: BulkUpsertFailure[] = [];
@@ -89,7 +94,7 @@ export class Products extends Resource {
       try {
         results.push(
           await this.client.request<ProductBulkUpsertResult>("products.bulk_upsert", {
-            json: { products: chunk },
+            json: { products: chunk, ...(options.requestId ? { request_id: chunkKey(options.requestId, index, chunks.length) } : {}) },
             idempotencyKey: chunkKey(options.idempotencyKey, index, chunks.length),
           }),
         );
@@ -99,6 +104,14 @@ export class Products extends Resource {
       }
     }
     return mergeBulkResults(results, duplicates);
+  }
+
+  async listSyncs(): Promise<CatalogSyncRecord[]> {
+    return this.client.request<CatalogSyncRecord[]>("products.list_syncs");
+  }
+
+  async getSync(syncId: string): Promise<CatalogSyncRecord> {
+    return this.client.request<CatalogSyncRecord>("products.get_sync", { params: { sync_id: syncId } });
   }
 
   async list(): Promise<ProductList> {

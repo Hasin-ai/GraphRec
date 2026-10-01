@@ -11,6 +11,7 @@ const SNIPPETS = {
   bulk: `POST /v1/products:bulk-upsert
 Authorization: ApiKey <credential secret>
 {
+  "request_id": "sync-2026-09-25-1",
   "products": [
     {
       "external_id": "SKU-4471",
@@ -25,8 +26,10 @@ Authorization: ApiKey <credential secret>
 }`,
   bulkResponse: `200 OK
 {
+  "sync_id": "...", "status": "completed", "request_id": "sync-2026-09-25-1",
   "accepted_count": 1, "created_count": 1, "updated_count": 0,
-  "skipped_count": 0, "rejected_count": 0, "failures": []
+  "skipped_count": 0, "rejected_count": 0, "failures": [],
+  "outcomes": [{ "external_id": "SKU-4471", "status": "created" }]
 }`,
   event: `POST /v1/events
 {
@@ -38,19 +41,21 @@ Authorization: ApiKey <credential secret>
   "context": { "surface": "product_page" }
 }`,
   batch: `POST /v1/events/batches
-{ "events": [ /* bounded by MAX_REQUEST_BODY_BYTES */ ] }`,
+{ "request_id": "events-1", "events": [ /* at most 1,000 items */ ] }`,
   duplicate: `200 OK · duplicate confirmed
 { "event_id": "ev-33810", "accepted": true, "duplicate": true, "received_at": "..." }`,
   batchResult: `GET /v1/events/batches/{batch_id}
 {
-  "id": "…", "status": "completed",
-  "accepted_count": 4870, "duplicate_count": 118, "rejected_count": 12,
+  "id": "…", "status": "completed", "request_id": "events-1",
+  "accepted_count": 870, "duplicate_count": 118, "rejected_count": 12,
+  "outcomes": [ { "event_id": "ev-1", "status": "accepted" } ],
   "created_at": "..."
 }`,
   recommend: `POST /v1/recommendations
 {
   "user_id": "cus-9931",
   "top_n": 10,
+  "fallback_allowed": true,
   "exclude_product_ids": ["SKU-1000"],
   "context": { "surface": "cart" }
 }`,
@@ -80,6 +85,7 @@ const ERRORS: [string, string, string, string][] = [
   ["payload_too_large", "413", "Body exceeds the configured limit", "JSON bodies and dataset uploads have separate limits"],
   ["rate_limit_exceeded", "429", "A per-source or per-principal limit is exhausted", "Retry-After header is set"],
   ["service_unavailable", "503", "A dependency is unavailable; retry later", "retryable: true"],
+  ["recommendation_unavailable", "503", "No personalized result and fallback was disallowed", "Allow fallback or provide usable history"],
 ];
 
 export function IntegrationPage() {
@@ -125,13 +131,13 @@ export function IntegrationPage() {
           )}
         </Panel> : null}
         <p className="footnote">The examples below use illustrative identifiers and values. Replace them with your own data and keep credential secrets on your server.</p>
-        <Panel title="Catalog synchronization" body="Bulk upsert is bounded by the request body limit. Individual invalid items are reported as failures without discarding the accepted remainder.">
+        <Panel title="Catalog synchronization" body="Bulk upsert accepts at most 1,000 items and is bounded by the request body limit. Results remain available under GET /v1/catalog-syncs/{sync_id}. A repeated request_id returns the original result.">
           <div className="snippets">
             <Snippet label="POST /v1/products:bulk-upsert" code={SNIPPETS.bulk} />
             <Snippet label="Response" code={SNIPPETS.bulkResponse} />
           </div>
         </Panel>
-        <Panel title="Event submission" body="Single and batch share one event shape. A repeated event identifier is confirmed as a duplicate, which is a success outcome, not an error.">
+        <Panel title="Event submission" body="Single and batch share one event shape. A repeated event identifier is confirmed as a duplicate. Batch item outcomes and safe rejection reasons are retained.">
           <div className="snippets">
             <Snippet label="POST /v1/events" code={SNIPPETS.event} />
             <Snippet label="POST /v1/events/batches" code={SNIPPETS.batch} />

@@ -87,13 +87,21 @@ def test_real_tenant_training_and_cancel(client, tmp_path, monkeypatch):
         'artifact_uri': version['artifact_uri'], 'metrics': version['metrics']}, headers=foreign)
     assert copied.status_code == 200, copied.text
     assert client.post(f"/v1/model-versions/{copied.json()['id']}:activate", headers=foreign).status_code == 422
+    cooldown = client.post('/v1/training-jobs', json={**request, 'request_id': 'too-soon'}, headers=headers)
+    assert cooldown.status_code == 409, cooldown.text
+    assert cooldown.json()['error']['code'] == 'training_cooldown'
+    assert cooldown.json()['error']['retryable'] is True
+    assert int(cooldown.headers['Retry-After']) > 0
+    monkeypatch.setattr(get_settings(), 'training_cooldown_seconds', 0)
     cancel = client.post('/v1/training-jobs', json={**request, 'request_id': 'cancel-train'}, headers=headers)
     assert cancel.status_code == 200, cancel.text
     job_id = cancel.json()['id']
     cancelled = client.post(f'/v1/training-jobs/{job_id}:cancel', headers=headers)
     assert cancelled.status_code == 200, cancelled.text
     assert cancelled.json()['status'] == 'cancelled'
-    assert client.post(f'/v1/training-jobs/{job_id}:cancel', headers=headers).json()['status'] == 'cancelled'
+    # UC-14: a terminal (already cancelled) job returns a state conflict.
+    repeat = client.post(f'/v1/training-jobs/{job_id}:cancel', headers=headers)
+    assert repeat.status_code == 409 and repeat.json()['error']['code'] == 'job_terminal'
     with SessionLocal() as db, db.begin():
         set_local_tenant(db, UUID(tenant))
         assert db.scalar(select(TrainingJob.model_version_id).where(TrainingJob.id == UUID(job_id))) is None

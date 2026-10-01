@@ -1,10 +1,4 @@
-"""Serving status schemas.
-
-Every field here is either read from tenant state in PostgreSQL or measured
-from the ``serving_requests`` ledger. Fields the platform does not observe —
-replica counts, autoscaling bounds, capacity — are deliberately absent rather
-than reported with nominal values.
-"""
+"""Serving transition and measured traffic schemas."""
 from __future__ import annotations
 
 from datetime import datetime
@@ -15,10 +9,12 @@ from pydantic import BaseModel
 
 
 class DeploymentStatus(BaseModel):
-    #: "available" when a model version is active, otherwise "stopped".
+    id: UUID | None = None
+    desired_model_version_id: UUID | None = None
     status: str
     active_model_version_id: UUID | None = None
-    #: When the active version was activated; null when nothing is active.
+    desired_capacity: int = 1
+    ready_capacity: int = 0
     last_transition_at: datetime | None = None
     failure_reason: str | None = None
 

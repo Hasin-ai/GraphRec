@@ -112,6 +112,7 @@ def _bearer_principal(token: str, db: Session, settings: Settings) -> Authentica
             select(
                 TenantUser.role.label("role"),
                 TenantUser.status.label("user_status"),
+                TenantUser.auth_epoch.label("auth_epoch"),
                 Tenant.status.label("tenant_status"),
             )
             .join(Tenant, Tenant.id == TenantUser.tenant_id)
@@ -127,6 +128,7 @@ def _bearer_principal(token: str, db: Session, settings: Settings) -> Authentica
         or identity.tenant_status != "active"
         or identity.role != claimed_role
         or identity.role not in ROLE_SCOPES
+        or claims.get("av", 0) != identity.auth_epoch
     ):
         raise _authentication_failed()
 

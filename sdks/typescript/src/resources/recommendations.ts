@@ -6,7 +6,9 @@ import { Resource, toIso, utcNow } from "./base.js";
 
 export interface RecommendationOptions {
   userId?: string | null;
+  requestId?: string;
   topN?: number;
+  fallbackAllowed?: boolean;
   context?: JsonObject;
   /** Items to leave out, e.g. the product on the current page or the cart contents (max 200). */
   excludeProductIds?: readonly string[];
@@ -48,6 +50,8 @@ function requestBody(options: RecommendationOptions, session?: JsonObject): Reco
   if (!Number.isInteger(topN) || topN < 1 || topN > MAX_TOP_N) throw new InputValidationError(`topN must be an integer between 1 and ${MAX_TOP_N}`);
   const body: Record<string, unknown> = { top_n: topN, context: { ...(options.context ?? {}), ...(session ?? {}) } };
   if (options.userId !== undefined && options.userId !== null) body.user_id = options.userId;
+  if (options.requestId !== undefined) body.request_id = options.requestId;
+  if (options.fallbackAllowed !== undefined) body.fallback_allowed = options.fallbackAllowed;
   if (options.excludeProductIds?.length) {
     const unique = Array.from(new Set(options.excludeProductIds.map(String)));
     if (unique.length > MAX_EXCLUSIONS) throw new InputValidationError(`At most ${MAX_EXCLUSIONS} product IDs can be excluded`);

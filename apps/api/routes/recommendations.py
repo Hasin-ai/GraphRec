@@ -37,8 +37,10 @@ from graphrec_core.database.models import (
     ServingRequest,
     UsageEvent,
     RecommendationRecord,
+    RecommendationResult,
 )
 from graphrec_core.database.session import get_db
+from graphrec_core.customers import ensure_customers
 from graphrec_core.models_reg.service import artifact_directory
 from graphrec_core.schemas.recommendations import (
     ClickFeedback,
@@ -64,11 +66,8 @@ router = APIRouter(tags=["recommendations"])
 def _zero_query_vector(dim: int) -> list[float]:
     """Return a deterministic placeholder query vector.
 
-    In production this is replaced by the GNN-assembled user/session
-    embedding from the DGSR-lite forward pass running inside the
-    tenant-pinned inference pod. Until that Celery worker slice is built,
-    a unit-first vector is used so that Qdrant returns a stable ordering
-    without all-zero cosine issues.
+    This is used only by explicit development-placeholder versions. Real DGSR
+    versions encode the user's history with the trained artifact.
     """
     vec = [0.0] * dim
     vec[0] = 1.0
@@ -267,8 +266,19 @@ def get_recommendations(
             latency_ms=_elapsed_ms(started),
         )
         raise
+    created_at = datetime.now(timezone.utc)
+    if payload.user_id:
+        ensure_customers(db, principal.tenant_id, {payload.user_id})
     db.add(RecommendationRecord(tenant_id=principal.tenant_id, request_id=response.request_id,
-        payload_hash=fingerprint, response=response.model_dump(mode="json"), created_at=datetime.now(timezone.utc)))
+        external_customer_id=payload.user_id, payload_hash=fingerprint,
+        response=response.model_dump(mode="json"), created_at=created_at))
+    for item in response.items:
+        db.add(RecommendationResult(
+            id=uuid4(), tenant_id=principal.tenant_id, request_id=response.request_id,
+            external_product_id=item.external_product_id, rank_position=item.position,
+            candidate_source=response.fallback_tier if response.fallback_used else "model_retrieval",
+            strategy=response.strategy, created_at=created_at,
+        ))
     recorded = _record_serving_request(
         db,
         principal.tenant_id,
@@ -345,7 +355,7 @@ def _serve(
             ).scalars()
         )
         # Preserve Qdrant ranking order (Stage 3 proxy score)
-        filtered_ids = [eid for eid in candidate_ids if eid in active_set]
+        filtered_ids = list(dict.fromkeys(eid for eid in candidate_ids if eid in active_set))
     else:
         filtered_ids = []
 
@@ -362,6 +372,12 @@ def _serve(
     fallback_tier = "none"
 
     if not top_ids:
+        if not payload.fallback_allowed:
+            raise ApiError(
+                503,
+                "recommendation_unavailable",
+                "Personalized recommendations are unavailable for this customer or session. Enable fallback or provide usable history.",
+            )
         fallback_used = True
         fallback_tier = "tenant_popular"
         strategy = "popular_fallback"

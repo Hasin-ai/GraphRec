@@ -5,6 +5,7 @@ from uuid import UUID
 
 from ..enums import TenantStatus
 from ..errors import InputValidationError
+from ..models.billing import UsageSummary
 from ..models.platform import (
     AuditRecordList,
     PlatformFailureList,
@@ -13,6 +14,7 @@ from ..models.platform import (
     PricingPlan,
     PricingPlanList,
     QuotaOverride,
+    TenantQuota,
 )
 from ._base import AsyncResource, SyncResource
 
@@ -32,6 +34,15 @@ def _quota_body(overrides: Mapping[str, Any]) -> Dict[str, Any]:
     if not isinstance(overrides, Mapping):
         raise InputValidationError("overrides must be a mapping of limit name to value")
     return {"overrides": dict(overrides)}
+
+
+def _plan_body(name: str, limits: Mapping[str, int], is_active: bool) -> Dict[str, Any]:
+    if not name.strip() or len(name) > 100 or not limits:
+        raise InputValidationError("name and all supported plan limits are required")
+    if any(not key or isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 9_000_000_000_000_000
+           for key, value in limits.items()):
+        raise InputValidationError("plan limits must be non-negative integers")
+    return {"name": name.strip(), "limits": dict(limits), "is_active": is_active}
 
 
 class Platform(SyncResource):
@@ -63,6 +74,28 @@ class Platform(SyncResource):
             ),
         )
 
+    def get_tenant_quota(self, tenant_id: Union[str, UUID]) -> TenantQuota:
+        return cast(TenantQuota, self._client.request(
+            "platform.get_tenant_quota", path_params={"tenant_id": tenant_id}, cast_to=TenantQuota,
+        ))
+
+    def get_tenant_usage(self, tenant_id: Union[str, UUID]) -> UsageSummary:
+        return cast(UsageSummary, self._client.request(
+            "platform.get_tenant_usage", path_params={"tenant_id": tenant_id}, cast_to=UsageSummary,
+        ))
+
+    def issue_recovery(self, tenant_id: Union[str, UUID], *, email: str) -> Dict[str, str]:
+        return cast(Dict[str, str], self._client.request(
+            "platform.issue_recovery", path_params={"tenant_id": tenant_id},
+            json={"email": email}, cast_to=Dict[str, str],
+        ))
+
+    def assign_tenant_plan(self, tenant_id: Union[str, UUID], plan_id: Union[str, UUID]) -> TenantQuota:
+        return cast(TenantQuota, self._client.request(
+            "platform.assign_tenant_plan", path_params={"tenant_id": tenant_id},
+            json={"plan_id": str(plan_id)}, cast_to=TenantQuota,
+        ))
+
     def set_tenant_status(self, tenant_id: Union[str, UUID], status: StatusLike) -> PlatformTenant:
         """Change a tenant's lifecycle status (see :class:`~graphrec_sdk.TenantStatus`).
 
@@ -84,6 +117,12 @@ class Platform(SyncResource):
 
         items = self._client.request("platform.list_plans", cast_to=List[PricingPlan])
         return PricingPlanList(items=items)
+
+    def update_plan(self, plan_id: Union[str, UUID], *, name: str, limits: Mapping[str, int], is_active: bool) -> PricingPlan:
+        return cast(PricingPlan, self._client.request(
+            "platform.update_plan", path_params={"plan_id": plan_id},
+            json=_plan_body(name, limits, is_active), cast_to=PricingPlan,
+        ))
 
     def set_quota_override(
         self, tenant_id: Union[str, UUID], *, overrides: Mapping[str, Any]
@@ -145,6 +184,28 @@ class AsyncPlatform(AsyncResource):
             ),
         )
 
+    async def get_tenant_quota(self, tenant_id: Union[str, UUID]) -> TenantQuota:
+        return cast(TenantQuota, await self._client.request(
+            "platform.get_tenant_quota", path_params={"tenant_id": tenant_id}, cast_to=TenantQuota,
+        ))
+
+    async def get_tenant_usage(self, tenant_id: Union[str, UUID]) -> UsageSummary:
+        return cast(UsageSummary, await self._client.request(
+            "platform.get_tenant_usage", path_params={"tenant_id": tenant_id}, cast_to=UsageSummary,
+        ))
+
+    async def issue_recovery(self, tenant_id: Union[str, UUID], *, email: str) -> Dict[str, str]:
+        return cast(Dict[str, str], await self._client.request(
+            "platform.issue_recovery", path_params={"tenant_id": tenant_id},
+            json={"email": email}, cast_to=Dict[str, str],
+        ))
+
+    async def assign_tenant_plan(self, tenant_id: Union[str, UUID], plan_id: Union[str, UUID]) -> TenantQuota:
+        return cast(TenantQuota, await self._client.request(
+            "platform.assign_tenant_plan", path_params={"tenant_id": tenant_id},
+            json={"plan_id": str(plan_id)}, cast_to=TenantQuota,
+        ))
+
     async def set_tenant_status(
         self, tenant_id: Union[str, UUID], status: StatusLike
     ) -> PlatformTenant:
@@ -165,6 +226,12 @@ class AsyncPlatform(AsyncResource):
 
         items = await self._client.request("platform.list_plans", cast_to=List[PricingPlan])
         return PricingPlanList(items=items)
+
+    async def update_plan(self, plan_id: Union[str, UUID], *, name: str, limits: Mapping[str, int], is_active: bool) -> PricingPlan:
+        return cast(PricingPlan, await self._client.request(
+            "platform.update_plan", path_params={"plan_id": plan_id},
+            json=_plan_body(name, limits, is_active), cast_to=PricingPlan,
+        ))
 
     async def set_quota_override(
         self, tenant_id: Union[str, UUID], *, overrides: Mapping[str, Any]

@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from graphrec_core.database.models import RecommendationFeedback, RecommendationRecord
+from graphrec_core.database.models import RecommendationFeedback, RecommendationRecord, RecommendationResult
 from graphrec_core.errors import ApiError
 from graphrec_core.schemas.recommendations import FeedbackResponse
 
@@ -30,10 +30,18 @@ def submit_feedback(db: Session, tenant_id: UUID, kind: str, payload) -> Feedbac
     record = db.get(RecommendationRecord, (tenant_id, payload.request_id))
     if record is None:
         raise ApiError(404, "resource_not_found", "Recommendation result not found.")
-    allowed = {(item["external_product_id"], item["position"]) for item in record.response["items"]}
+    results = db.scalars(select(RecommendationResult).where(
+        RecommendationResult.tenant_id == tenant_id,
+        RecommendationResult.request_id == payload.request_id,
+    )).all()
+    allowed = {(result.external_product_id, result.rank_position): result for result in results}
     submitted = [(item.external_product_id, item.position) for item in payload.items] if kind == "impression" else [(payload.external_product_id, payload.position)]
     if not submitted or any((product, position) not in allowed if position is not None else not any(product == item[0] for item in allowed) for product, position in submitted):
         raise ApiError(422, "invalid_feedback_reference", "Feedback products and positions must match the referenced recommendation.")
+    selected_result = None if kind == "impression" else next(
+        result for (product, position), result in allowed.items()
+        if product == payload.external_product_id and (payload.position is None or position == payload.position)
+    )
     impression_id = getattr(payload, "impression_event_id", None)
     if impression_id:
         impression = db.get(RecommendationFeedback, (tenant_id, impression_id))
@@ -41,7 +49,8 @@ def submit_feedback(db: Session, tenant_id: UUID, kind: str, payload) -> Feedbac
             raise ApiError(422, "invalid_feedback_reference", "The impression does not belong to this recommendation.")
     now = datetime.now(timezone.utc)
     saved = db.execute(insert(RecommendationFeedback).values(tenant_id=tenant_id, event_id=payload.event_id,
-        request_id=payload.request_id, feedback_type=kind, payload_hash=fingerprint, payload=body, received_at=now)
+        request_id=payload.request_id, recommendation_result_id=selected_result.id if selected_result else None,
+        feedback_type=kind, payload_hash=fingerprint, payload=body, received_at=now)
         .on_conflict_do_nothing(index_elements=["tenant_id", "event_id"]).returning(RecommendationFeedback.event_id)).scalar_one_or_none()
     if saved is None:
         previous = db.scalar(select(RecommendationFeedback).where(RecommendationFeedback.tenant_id == tenant_id, RecommendationFeedback.event_id == payload.event_id))

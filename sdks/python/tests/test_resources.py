@@ -89,6 +89,11 @@ CASES: List[Case] = [
         body=_eq({"setup_token": "one-time-token", "password": "long-password"}),
     ),
     Case(
+        "auth.recover_password", "/v1/auth/recover-password", {"status": "completed"},
+        lambda c: c.auth.recover_password(recovery_token="one-time-token-long", password="long-password"),
+        body=_eq({"recovery_token": "one-time-token-long", "password": "long-password"}),
+    ),
+    Case(
         "api_keys.list",
         "/v1/api-keys",
         {"items": [fx.api_key()]},
@@ -203,6 +208,18 @@ CASES: List[Case] = [
         check=lambda r: r.created_count == 2 and r.request_count == 1,
     ),
     Case(
+        "products.list_syncs", "/v1/catalog-syncs",
+        [{"sync_id": fx.UUID_A, "status": "completed", "created_at": fx.NOW,
+          **fx.bulk_result(created=1)}],
+        lambda c: c.products.list_syncs(),
+    ),
+    Case(
+        "products.get_sync", f"/v1/catalog-syncs/{fx.UUID_A}",
+        {"sync_id": fx.UUID_A, "status": "completed", "created_at": fx.NOW,
+         **fx.bulk_result(created=1)},
+        lambda c: c.products.get_sync(fx.UUID_A),
+    ),
+    Case(
         "products.list",
         "/v1/products",
         {"items": [fx.product()], "total": 1},
@@ -301,7 +318,7 @@ CASES: List[Case] = [
         fx.model_version(),
         lambda c: c.model_versions.create(version_tag="v1", metrics={"ndcg_at_10": 0.7}),
         body=_eq(
-            {"version_tag": "v1", "model_type": "simplified_dgsr", "metrics": {"ndcg_at_10": 0.7}}
+            {"version_tag": "v1", "model_type": "dgsr", "metrics": {"ndcg_at_10": 0.7}}
         ),
     ),
     Case(
@@ -345,7 +362,7 @@ CASES: List[Case] = [
         ),
         body=_eq(
             {
-                "model_type": "simplified_dgsr",
+                "model_type": "dgsr",
                 "dataset_snapshot_id": fx.UUID_A,
                 "configuration": {"epochs": 10},
             }
@@ -357,6 +374,18 @@ CASES: List[Case] = [
         "/v1/training-jobs",
         {"items": [fx.training_job()]},
         lambda c: c.training_jobs.list(),
+    ),
+    Case(
+        "training_jobs.get",
+        f"/v1/training-jobs/{fx.UUID_A}",
+        fx.training_job(),
+        lambda c: c.training_jobs.get(fx.UUID_A),
+    ),
+    Case(
+        "training_jobs.cancel",
+        f"/v1/training-jobs/{fx.UUID_A}:cancel",
+        fx.training_job("cancelled"),
+        lambda c: c.training_jobs.cancel(fx.UUID_A),
     ),
     Case(
         "deployment.get",
@@ -414,9 +443,11 @@ CASES: List[Case] = [
         "/v1/recommendations",
         fx.recommendations(),
         lambda c: c.recommendations.get(
-            user_id="u1", top_n=3, exclude_product_ids=["sku-9", "sku-9"]
+            user_id="u1", top_n=3, exclude_product_ids=["sku-9", "sku-9"],
+            request_id="rec-once", fallback_allowed=False,
         ),
-        body=_eq({"top_n": 3, "context": {}, "user_id": "u1", "exclude_product_ids": ["sku-9"]}),
+        body=_eq({"top_n": 3, "context": {}, "user_id": "u1", "exclude_product_ids": ["sku-9"],
+                  "request_id": "rec-once", "fallback_allowed": False}),
         check=lambda r: r.product_ids == ["sku-1", "sku-2", "sku-3"] and r.is_personalized,
     ),
     Case(
@@ -492,6 +523,21 @@ CASES: List[Case] = [
         client_kwargs=PLATFORM,
     ),
     Case(
+        "platform.get_tenant_quota",
+        f"/v1/platform/tenants/{fx.UUID_A}/quotas",
+        {"plan_id": fx.UUID_B, "plan_code": "basic", "limits": {"accepted_events": 100}, "overrides": {}},
+        lambda c: c.platform.get_tenant_quota(fx.UUID_A),
+        client_kwargs=PLATFORM,
+    ),
+    Case(
+        "platform.get_tenant_usage",
+        f"/v1/platform/tenants/{fx.UUID_A}/usage",
+        {"period_start": fx.NOW, "period_end": "2026-10-01T00:00:00Z", "reset_at": "2026-10-01T00:00:00Z",
+         "dimensions": [], "last_reconciled_at": fx.NOW, "project_defaults": False},
+        lambda c: c.platform.get_tenant_usage(fx.UUID_A),
+        client_kwargs=PLATFORM,
+    ),
+    Case(
         "platform.set_tenant_status",
         f"/v1/platform/tenants/{fx.UUID_A}/status",
         {
@@ -522,6 +568,20 @@ CASES: List[Case] = [
         client_kwargs=PLATFORM,
     ),
     Case(
+        "platform.update_plan",
+        f"/v1/platform/plans/{fx.UUID_A}",
+        {"id": fx.UUID_A, "code": "free", "name": "Free", "limits": {"accepted_events": 100}, "is_active": True},
+        lambda c: c.platform.update_plan(fx.UUID_A, name="Free", limits={"accepted_events": 100}, is_active=True),
+        body=_eq({"name": "Free", "limits": {"accepted_events": 100}, "is_active": True}),
+        client_kwargs=PLATFORM,
+    ),
+    Case(
+        "platform.issue_recovery", f"/v1/platform/tenants/{fx.UUID_A}/recovery",
+        {"recovery_token": "secret", "expires_at": fx.NOW},
+        lambda c: c.platform.issue_recovery(fx.UUID_A, email="a@shop.test"),
+        body=_eq({"email": "a@shop.test"}), client_kwargs=PLATFORM,
+    ),
+    Case(
         "platform.set_quota_override",
         f"/v1/platform/tenants/{fx.UUID_A}/quotas",
         {"limits": {"accepted_events": 50000}, "overrides": {"accepted_events": 1000000}},
@@ -530,6 +590,14 @@ CASES: List[Case] = [
         ),
         body=_eq({"overrides": {"accepted_events": 1000000}}),
         check=lambda r: r.overrides["accepted_events"] == 1_000_000,
+        client_kwargs=PLATFORM,
+    ),
+    Case(
+        "platform.assign_tenant_plan",
+        f"/v1/platform/tenants/{fx.UUID_A}/plan",
+        {"plan_id": fx.UUID_B, "plan_code": "basic", "limits": {"accepted_events": 100}, "overrides": {}},
+        lambda c: c.platform.assign_tenant_plan(fx.UUID_A, fx.UUID_B),
+        body=_eq({"plan_id": fx.UUID_B}),
         client_kwargs=PLATFORM,
     ),
     Case(

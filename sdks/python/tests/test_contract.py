@@ -275,7 +275,7 @@ RESPONSE_MODELS: List[Tuple[str, Type[BaseModel]]] = [
 ]
 
 #: Fields the SDK computes itself and never expects from the server.
-SDK_ONLY_FIELDS = {"request_count"}
+SDK_ONLY_FIELDS = {"request_count", "sync_ids"}
 
 
 @pytest.mark.parametrize(("schema", "model"), RESPONSE_MODELS, ids=[s for s, _ in RESPONSE_MODELS])

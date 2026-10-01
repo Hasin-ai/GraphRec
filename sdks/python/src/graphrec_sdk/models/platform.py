@@ -18,6 +18,7 @@ __all__ = [
     "PricingPlan",
     "PricingPlanList",
     "QuotaOverride",
+    "TenantQuota",
 ]
 
 
@@ -48,6 +49,11 @@ class PricingPlanList(ItemList[PricingPlan]):
 class QuotaOverride(GraphRecModel):
     limits: Dict[str, Any] = Field(default_factory=dict)
     overrides: Dict[str, Any] = Field(default_factory=dict)
+
+
+class TenantQuota(QuotaOverride):
+    plan_id: UUID
+    plan_code: str
 
 
 class PlatformFailure(GraphRecModel):

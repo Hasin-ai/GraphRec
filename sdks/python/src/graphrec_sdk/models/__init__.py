@@ -11,6 +11,7 @@ from .catalog import (
     ProductBulkUpsertResult,
     ProductInput,
     ProductList,
+    CatalogSync,
 )
 from .datasets import DatasetSnapshot, DatasetSnapshotList, DatasetUploadResult
 from .events import EventBatch, EventBatchList, EventBatchResult, EventInput, EventReceipt
@@ -25,6 +26,7 @@ from .platform import (
     PricingPlan,
     PricingPlanList,
     QuotaOverride,
+    TenantQuota,
 )
 from .recommendations import FeedbackReceipt, RecommendationItem, Recommendations
 from .serving import (
@@ -70,8 +72,10 @@ __all__ = [
     "ProductBulkUpsertResult",
     "ProductInput",
     "ProductList",
+    "CatalogSync",
     "QualitySummary",
     "QuotaOverride",
+    "TenantQuota",
     "RecommendationItem",
     "Recommendations",
     "Subscription",

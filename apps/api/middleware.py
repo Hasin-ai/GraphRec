@@ -12,6 +12,7 @@ from graphrec_core.registration.audit import record_public_registration_denial
 from graphrec_core.settings import Settings
 
 MULTIPART_PATHS = frozenset({"/v1/datasets/upload"})
+BULK_JSON_PATHS = frozenset({"/v1/events/batches", "/v1/products:bulk-upsert"})
 
 
 class ContractMiddleware(BaseHTTPMiddleware):
@@ -96,11 +97,12 @@ class ContractMiddleware(BaseHTTPMiddleware):
                 )
 
         # Dataset files legitimately exceed the 16 KiB JSON limit.
-        limit = (
-            self.settings.max_upload_body_bytes
-            if is_upload
-            else self.settings.max_request_body_bytes
-        )
+        if is_upload:
+            limit = self.settings.max_upload_body_bytes
+        elif request.url.path in BULK_JSON_PATHS:
+            limit = self.settings.max_bulk_body_bytes
+        else:
+            limit = self.settings.max_request_body_bytes
         if size > limit:
             return error_response(
                 correlation_id=correlation_id,

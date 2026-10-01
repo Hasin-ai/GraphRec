@@ -58,6 +58,12 @@ export interface SetupPasswordInput {
   email?: string;
 }
 
+export interface RecoverPasswordInput {
+  recovery_token: string;
+  password: string;
+  email?: string;
+}
+
 export type TenantUserRole = "tenant_administrator" | "tenant_developer";
 
 export interface TenantUserResource {
@@ -184,12 +190,22 @@ export interface ProductBulkFailure {
 }
 
 export interface ProductBulkUpsertResponse {
+  sync_id?: string | null;
+  status?: string;
+  request_id?: string | null;
   accepted_count: number;
   created_count: number;
   updated_count: number;
   skipped_count: number;
   rejected_count: number;
   failures: ProductBulkFailure[];
+  outcomes?: { external_id: string; status: string; reason?: string }[];
+}
+
+export interface CatalogSyncResource extends ProductBulkUpsertResponse {
+  sync_id: string;
+  status: string;
+  created_at: string;
 }
 
 export interface ProductResource {
@@ -231,9 +247,11 @@ export interface EventSubmitResponse {
 export interface EventBatchResponse {
   id: string;
   status: string;
+  request_id?: string | null;
   accepted_count: number;
   duplicate_count: number;
   rejected_count: number;
+  outcomes?: { event_id: string; status: string; reason?: string }[];
   created_at: string;
 }
 
@@ -272,8 +290,8 @@ export interface ModelVersionResource {
   activated_at: string | null;
 }
 
-/** A job runs synchronously inside the request that created it. */
-export type TrainingJobStatus = "running" | "succeeded" | "failed" | string;
+/** Training requests are durable; a separate worker advances the job. */
+export type TrainingJobStatus = "queued" | "running" | "cancelling" | "cancelled" | "succeeded" | "failed" | string;
 
 export interface TrainingJobCreate {
   request_id?: string;
@@ -300,10 +318,12 @@ export interface TrainingJobResource {
 
 // ── serving ────────────────────────────────────────────────────
 export interface DeploymentStatus {
-  /** "available" when a model version is active, otherwise "stopped". */
+  id?: string | null;
+  desired_model_version_id?: string | null;
   status: string;
   active_model_version_id: string | null;
-  /** When the active version took over; null when nothing is active. */
+  desired_capacity?: number;
+  ready_capacity?: number;
   last_transition_at: string | null;
   failure_reason: string | null;
 }
@@ -348,7 +368,7 @@ export interface PlatformPlan {
   id: string;
   code: string;
   name: string;
-  limits: Record<string, unknown>;
+  limits: Record<string, number>;
   is_active: boolean;
 }
 
@@ -381,5 +401,6 @@ export interface PlatformStatus {
   api_cluster: string;
   database: string;
   worker_pool: string;
+  deployments?: { available_tenants: number; degraded_tenants: number; desired_capacity: number; ready_capacity: number } | null;
   timestamp: string;
 }
