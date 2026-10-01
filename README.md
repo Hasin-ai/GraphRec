@@ -204,6 +204,52 @@ Configuration (environment variables, also listed in `.env.example`):
 Lower values (for example 2 / 10 / 30 / 60) are useful for local testing only;
 do not commit them.
 
+## Recommendation admission control (D16)
+
+GraphRec now requires **Redis** (`redis:7.4.2-alpine`, the compose service is `redis`). It holds the
+shared recommendation limits, so every API process and replica enforces one limit per tenant.
+Each check is a single atomic Lua call, with no application lock, so concurrent requests are not serialized:
+
+| Limit | Redis structure | Behaviour |
+|---|---|---|
+| `requests_per_minute` | sorted set `gr:rl:{tenant}:recs` (exact sliding window) | 429 "The recommendation request rate limit has been reached." with `Retry-After` |
+| `recommendation_requests` (monthly) | counter `gr:q:{tenant}:recommendation_requests:{YYYYMM}`, seeded from the usage ledger | 429 when exhausted; refunded if the request is not served |
+| `concurrent_recommendation_requests` | leased semaphore `gr:slots:{tenant}`; slot count = XR-F-08 `serving_slots` | waits up to `SLOT_WAIT_MS`, then 429 "Concurrent recommendation capacity is in use."; leases expire after `SLOT_LEASE_SECONDS` |
+
+Every recommendation response carries `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `REDIS_URL` | `redis://redis:6379/0` | Shared admission store |
+| `REDIS_TIMEOUT_MS` | 30 | Connect and read timeout for each Redis call |
+| `SLOT_WAIT_MS` | 100 | How long a request waits for a free concurrency slot |
+| `SLOT_LEASE_SECONDS` | 30 | Lease length; a crashed request's slot is reclaimed after this |
+
+**Fail-open.** If Redis errors or times out, recommendations are still served:
+
+- The first failure opens a circuit breaker. Requests then use a per-process limiter with the same plan
+  limits, so ER-F-09 still holds within each process, and never wait on Redis.
+- A background probe checks Redis every second and switches back on the first successful `PING`.
+- The outage is logged (`admission control: Redis unavailable …`), and `fail_open_total` counts the
+  requests admitted without the shared store.
+- `/v1/deployment`, `/v1/platform/status` and the console's Service Status (Admission control panel)
+  report the store as `degraded` until it recovers.
+
+Limitations:
+
+- While Redis is down, each API replica enforces the limits on its own.
+- The first request after Redis disappears can wait for one connection or name-resolution timeout. This
+  was about 5.5 s for a stopped container in Docker.
+
+**Plan limits** are data (`pricing_plans.limits`), editable per plan with `PUT /v1/platform/plans/{id}`, and
+tenant overrides (`POST /v1/platform/tenants/{id}/quotas`) still apply on top. Defaults after migration 0031:
+
+| Plan | Concurrent slots | Requests per minute | Max replicas |
+|---|---|---|---|
+| free | 8 | 120 | 1 |
+| basic | 12 | 300 | 2 |
+| pro | 30 | 1,000 | 3 |
+
 ## Run locally
 
 ```bash
