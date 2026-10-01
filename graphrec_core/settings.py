@@ -50,6 +50,12 @@ class Settings(BaseSettings):
     # scale up immediately, scale down only after the stabilization window.
     capacity_target_rpm_per_replica: int = Field(default=120, ge=1, le=1_000_000)
     capacity_scale_down_stabilization_seconds: int = Field(default=120, ge=0, le=86_400)
+    # D16 admission control: shared Redis for recommendation rate limits and
+    # concurrency slots. Redis errors fail open to a per-process fallback.
+    redis_url: str | None = "redis://localhost:6379/0"
+    redis_timeout_ms: int = Field(default=30, ge=5, le=1_000)
+    slot_wait_ms: int = Field(default=100, ge=0, le=5_000)
+    slot_lease_seconds: int = Field(default=30, ge=1, le=600)
     # Shared secret for /v1/platform routes; unset disables platform administration.
     platform_admin_token: str | None = None
 
