@@ -56,4 +56,16 @@ describe("RegisterPage", () => {
     expect(screen.getByLabelText("Business name")).toHaveValue("Kelder Tools");
     expect(screen.getByLabelText("Administrator email")).toHaveValue("ops@kelder.example");
   });
+
+  it("reports only the field the API says is duplicated (D15)", async () => {
+    const user = userEvent.setup();
+    mockFetch([{ method: "POST", path: "/v1/tenants", status: 409, body: { error: { code: "duplicate_resource", message: "x", details: { fields: [{ field: "name", message: "This business name is already registered. Choose a different name." }] } } } }]);
+    renderAt("/register");
+    await user.type(screen.getByLabelText("Business name"), "Kelder Tools");
+    await user.type(screen.getByLabelText("Administrator email"), "new@kelder.example");
+    await user.click(screen.getByRole("button", { name: "Create tenant" }));
+    expect(await screen.findByText("Choose a different business name and submit again.")).toBeInTheDocument();
+    expect(screen.getByText("This business name is already registered. Choose a different name.")).toBeInTheDocument();
+    expect(screen.queryByText(/with this administrator email was already registered/)).not.toBeInTheDocument();
+  });
 });
