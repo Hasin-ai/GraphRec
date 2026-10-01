@@ -25,13 +25,14 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy import select, text, func
 from sqlalchemy.orm import Session
 
 from graphrec_core.auth.principal import AuthenticatedPrincipal, authenticated_principal
 from graphrec_core.database.models import (
     CustomerEvent,
+    ModelDeployment,
     ModelVersion,
     Product,
     ServingRequest,
@@ -56,7 +57,9 @@ from graphrec_core.schemas.recommendations import (
 from graphrec_core.settings import get_settings
 from graphrec_core.errors import ApiError
 from graphrec_core.feedback import payload_hash, submit_feedback
-from graphrec_core.usage.limits import require_capacity
+from graphrec_core.capacity import effective_limits, serving_slots
+from graphrec_core.usage.admission import get_admission
+from graphrec_core.usage.limits import ledger_usage, month_bounds
 from graphrec_core.vector_store.client import get_qdrant_client
 from graphrec_core.vector_store.retriever import retrieve_candidates
 
@@ -226,6 +229,7 @@ def _dgsr_candidates(
 @router.post("/v1/recommendations", response_model=RecommendationResponse)
 def get_recommendations(
     payload: RecommendationRequest,
+    response: Response,
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> RecommendationResponse:
@@ -249,9 +253,40 @@ def get_recommendations(
             if returned_ids != eligible_ids:
                 raise ApiError(409, "recommendation_expired", "Catalog eligibility changed. Submit a new request identifier.")
             return RecommendationResponse.model_validate(existing.response)
-    require_capacity(db, principal.tenant_id, "concurrent_recommendation_requests")
-    require_capacity(db, principal.tenant_id, "recommendation_requests")
-    require_capacity(db, principal.tenant_id, "requests_per_minute")
+    tenant_id = principal.tenant_id
+    limits = effective_limits(db, tenant_id)
+    if any(limits.get(k) is None for k in ("concurrent_recommendation_requests", "requests_per_minute",
+                                            "recommendation_requests")):
+        raise ApiError(503, "quota_unavailable", "Usage limits are temporarily unavailable.", retryable=True)
+    # XR-F-08: an active deployment serves with the slots its scaled capacity
+    # provides; without one the plan limit applies unchanged. D16: admission
+    # state is shared in Redis, so every API replica sees the same slots.
+    ready = db.scalar(select(ModelDeployment.ready_capacity).where(
+        ModelDeployment.tenant_id == tenant_id, ModelDeployment.active_model_version_id.is_not(None)))
+    slots = (serving_slots(limits, ready) if ready else None) or limits["concurrent_recommendation_requests"]
+    admission = get_admission()
+    period_start, period_end = month_bounds(datetime.now(timezone.utc))
+    lease = admission.acquire_slot(tenant_id, slots)
+    quota_taken = served = False
+    try:
+        rate = admission.check_rate(tenant_id, limits["requests_per_minute"])
+        admission.consume_quota(tenant_id, "recommendation_requests", limits["recommendation_requests"],
+                                period_start, period_end,
+                                seed=lambda: ledger_usage(db, tenant_id, "recommendation_requests",
+                                                          period_start, period_end))
+        quota_taken = True
+        result = _serve_and_record(payload, principal, db, fingerprint)
+        response.headers.update(rate.headers())
+        served = True
+        return result
+    finally:
+        if quota_taken and not served:
+            admission.refund_quota(tenant_id, "recommendation_requests", period_start)
+        admission.release(lease)
+
+
+def _serve_and_record(payload: RecommendationRequest, principal: AuthenticatedPrincipal, db: Session,
+                      fingerprint: str) -> RecommendationResponse:
     started = time.perf_counter()
     try:
         response = _serve(payload, principal.tenant_id, db)
@@ -435,11 +470,12 @@ def _rule_meta(db: Session, tenant_id: UUID, ids: list[str]) -> dict[str, tuple[
 @router.post("/v1/recommendations/session", response_model=RecommendationResponse)
 def get_session_recommendations(
     payload: RecommendationRequest,
+    response: Response,
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> RecommendationResponse:
     principal.require_scope("recommendations:read")
-    return get_recommendations(payload, principal, db)
+    return get_recommendations(payload, response, principal, db)
 
 
 @router.post("/v1/feedback/impressions", response_model=FeedbackResponse)
