@@ -80,6 +80,11 @@ export function clearTenantSession(): void {
   write(TENANT_KEY, null);
 }
 
+/** D13: an explicit sign-out must not hand the next user this user's last page. */
+let signedOutExplicitly = false;
+export function markExplicitSignOut(): void { signedOutExplicitly = true; }
+export function consumeExplicitSignOut(): boolean { const value = signedOutExplicitly; signedOutExplicitly = false; return value; }
+
 export function getPlatformSession(): PlatformSession | null {
   if (platformCache === undefined) platformCache = read<PlatformSession>(PLATFORM_KEY);
   return platformCache;

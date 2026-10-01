@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation } from "react-router-dom";
-import { roleLabel, sessionTenantId } from "../auth/session";
+import { consumeExplicitSignOut, roleLabel, sessionTenantId } from "../auth/session";
 import { useSession } from "../hooks/useSession";
 import { useTheme } from "../hooks/useTheme";
 
@@ -73,7 +73,12 @@ export function PublicLayout() {
 export function RequireTenant() {
   const { tenant } = useSession();
   const location = useLocation();
-  if (!tenant) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
+  if (!tenant) {
+    // Expired sessions keep the return path; an explicit sign-out clears it so
+    // the next person to sign in on this tab starts at their own Overview.
+    if (consumeExplicitSignOut()) return <Navigate to="/login" replace />;
+    return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
+  }
   return <Outlet />;
 }
 export function RequireScope({ scope, children }: { scope: string; children: ReactNode }) {

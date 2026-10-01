@@ -3,6 +3,7 @@ import {
   SESSION_EVENT,
   clearPlatformSession,
   clearTenantSession,
+  markExplicitSignOut,
   getPlatformSession,
   getTenantSession,
   hasScope,
@@ -56,6 +57,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             keepalive: true,
           }).catch(() => undefined);
         }
+        markExplicitSignOut();
         clearTenantSession();
       },
       signOutPlatform: () => clearPlatformSession(),
