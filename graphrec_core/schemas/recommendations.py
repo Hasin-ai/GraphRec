@@ -51,6 +51,9 @@ class RecommendationResponse(BaseModel):
     strategy: str
     fallback_used: bool
     fallback_tier: str
+    #: XR-F-04 / XR-NF-02: re-ranking rules applied and the policy version used.
+    applied_rules: list[str] = Field(default_factory=list)
+    rules_version: int | None = None
 
 
 class ImpressionFeedback(BaseModel):

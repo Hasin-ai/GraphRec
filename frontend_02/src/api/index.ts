@@ -37,6 +37,13 @@ import type {
   TenantUserResource,
   TenantUserInvitation,
   TenantUserRole,
+  RetrainingPolicy,
+  RetrainingPolicyInput,
+  RecommendationPolicy,
+  RecommendationPolicyInput,
+  UsageTrend,
+  TrendGranularity,
+  ScalingStatus,
 } from "./types";
 
 const enc = encodeURIComponent;
@@ -78,6 +85,24 @@ export const apiKeys = {
 export const billing = {
   subscription: () => request<SubscriptionResult>("/v1/subscription"),
   usage: () => request<UsageSummaryResult>("/v1/usage"),
+  /** XR-F-07: ledger sums per bucket. `start`/`end` are ISO-8601 with offset. */
+  trends: (params: { granularity: TrendGranularity; start?: string; end?: string; types?: string[] }) => {
+    const query = new URLSearchParams({ granularity: params.granularity });
+    if (params.start) query.set("start", params.start);
+    if (params.end) query.set("end", params.end);
+    if (params.types?.length) query.set("types", params.types.join(","));
+    return request<UsageTrend>(`/v1/usage/trends?${query.toString()}`);
+  },
+};
+
+export const retraining = {
+  get: () => request<RetrainingPolicy>("/v1/retraining-policy"),
+  put: (input: RetrainingPolicyInput) => request<RetrainingPolicy>("/v1/retraining-policy", { method: "PUT", json: input }),
+};
+
+export const recommendationRules = {
+  get: () => request<RecommendationPolicy>("/v1/recommendation-policy"),
+  put: (input: RecommendationPolicyInput) => request<RecommendationPolicy>("/v1/recommendation-policy", { method: "PUT", json: input }),
 };
 
 export const products = {
@@ -142,6 +167,7 @@ export const training = {
 
 export const serving = {
   deployment: () => request<DeploymentStatus>("/v1/deployment"),
+  scaling: () => request<ScalingStatus>("/v1/deployment/scaling"),
   /** Measured over the last `windowMinutes` (the API defaults to 60). */
   metrics: (windowMinutes?: number) =>
     request<MetricsSummary>(

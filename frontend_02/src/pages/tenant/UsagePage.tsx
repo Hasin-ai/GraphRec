@@ -5,6 +5,7 @@ import { fmtDateTime, fmtNumber, fmtQuantity, humanize } from "../../lib/format"
 import { quotaState } from "../../lib/quota";
 import { Page } from "../../ui/Page";
 import { Banner, Cell, DataTable, ErrorBanner, Meter, PanelTable, Skeleton, Tag } from "../../ui/primitives";
+import { UsageTrends } from "./UsageTrends";
 
 export function UsagePage() {
   const { can } = useSession();
@@ -33,6 +34,7 @@ export function UsagePage() {
       <p className="footnote">Period {fmtDateTime(usage.data.period_start)} – {fmtDateTime(usage.data.period_end)}. Last reconciled {fmtDateTime(usage.data.last_reconciled_at)}. {usage.data.project_defaults ? 'Default limits apply.' : 'Assigned plan and approved overrides apply.'}</p>
       <p className="footnote">These are ledger measurements. Stored-product and active-version usage can lag behind the catalog and model registry until the backend reconciles them.</p>
     </> : null}
+    <UsageTrends />
     {subscription.error ? <ErrorBanner error={subscription.error} title="Subscription unavailable" onRetry={subscription.reload} /> : null}
     {plan ? <details className="details-section"><summary>Subscription · {humanize(plan.plan_code)} · {humanize(plan.status)}</summary>
       <p className="footnote">Plan defaults below. The usage table above includes effective overrides.</p>

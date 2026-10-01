@@ -46,3 +46,33 @@ class MetricsSummary(BaseModel):
     p95_latency_ms: int | None = None
     active_model_version_id: UUID | None = None
     quality: QualitySummary | None = None
+
+
+class CapacityEventResource(BaseModel):
+    id: UUID
+    model_version_id: UUID | None = None
+    from_capacity: int
+    to_capacity: int
+    reason: str
+    measured_rpm: int
+    peak_rpm: int
+    max_capacity: int
+    occurred_at: datetime
+
+
+class ScalingStatus(BaseModel):
+    """XR-F-08: capacity policy, current capacity, live demand and recent scaling events."""
+
+    managed: bool
+    desired_capacity: int
+    ready_capacity: int
+    min_capacity: int = 1
+    max_capacity: int
+    serving_slots: int | None
+    target_rpm_per_replica: int
+    scale_down_stabilization_seconds: int
+    measured_rpm: int
+    peak_rpm: int
+    last_scaled_at: datetime | None = None
+    events: list[CapacityEventResource]
+    limitation: str

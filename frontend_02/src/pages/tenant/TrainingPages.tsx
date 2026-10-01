@@ -16,6 +16,7 @@ import { Page } from "../../ui/Page";
 import { QualitySummary } from "../../ui/QualitySummary";
 import { ActionsCell, Badge, Cell, DataTable, DefinitionList, ErrorBanner, FilterBar, Footnote, Panel, Skeleton, Banner } from "../../ui/primitives";
 import { NotFoundPage } from "../errors/ErrorPages";
+import { RetrainingPolicyPanel } from "./RetrainingPolicyPanel";
 
 /** The worker records detailed stages while status remains queued or running. */
 const ACTIVE_STATES = ["queued", "running"];
@@ -152,6 +153,7 @@ export function TrainingPage() {
           empty={{ title: state === "all states" ? "No training jobs yet" : "No jobs match this filter", body: state === "all states" ? "Request training to produce your first model version." : "Choose another state or clear the filter.", action: el.ok ? { label: "Start training", onClick: () => setStarting(true) } : undefined }}
         />
       )}
+      <RetrainingPolicyPanel />
       {starting ? (
         <StartTrainingDialog
           el={el}

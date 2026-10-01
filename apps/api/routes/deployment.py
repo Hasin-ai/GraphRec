@@ -8,10 +8,14 @@ from sqlalchemy import Float, case, cast, func, select
 from sqlalchemy.orm import Session
 
 from graphrec_core.auth.principal import AuthenticatedPrincipal, authenticated_principal
-from graphrec_core.database.models import ModelDeployment, ModelVersion, ServingRequest
+from graphrec_core.capacity import effective_limits, max_replicas, measure, serving_slots
+from graphrec_core.database.models import CapacityEvent, ModelDeployment, ModelVersion, ServingRequest
+from graphrec_core.settings import get_settings
 from graphrec_core.database.session import get_db
 from graphrec_core.schemas.deployment import (
+    CapacityEventResource,
     DeploymentStatus,
+    ScalingStatus,
     MetricsSummary,
     QualitySummary,
 )
@@ -110,4 +114,43 @@ def get_metrics_summary(
         p95_latency_ms=int(p95) if p95 is not None else None,
         active_model_version_id=active_model.id if active_model else None,
         quality=quality,
+    )
+
+
+CAPACITY_LIMITATION = (
+    "Recommendations are served in-process; a replica is a logical serving unit "
+    "(a block of concurrent recommendation slots). No container orchestrator is "
+    "attached in this deployment."
+)
+
+
+@router.get("/v1/deployment/scaling", response_model=ScalingStatus)
+def get_scaling_status(
+    limit: int = Query(20, ge=1, le=100),
+    principal: AuthenticatedPrincipal = Depends(authenticated_principal),
+    db: Session = Depends(get_db),
+) -> ScalingStatus:
+    """XR-F-08: the tenant's capacity policy, live demand and recent scaling events."""
+    principal.require_scope("deployments:read")
+    settings = get_settings()
+    deployment = db.scalar(select(ModelDeployment).where(ModelDeployment.tenant_id == principal.tenant_id))
+    limits = effective_limits(db, principal.tenant_id)
+    now = datetime.now(timezone.utc)
+    rpm, peak = measure(db, principal.tenant_id, now, settings.capacity_scale_down_stabilization_seconds)
+    managed = deployment is not None and deployment.active_model_version_id is not None
+    ready = deployment.ready_capacity if managed else 0
+    events = db.scalars(select(CapacityEvent).where(CapacityEvent.tenant_id == principal.tenant_id)
+                        .order_by(CapacityEvent.occurred_at.desc()).limit(limit)).all()
+    return ScalingStatus(
+        managed=managed,
+        desired_capacity=deployment.desired_capacity if deployment else 1,
+        ready_capacity=ready,
+        max_capacity=max_replicas(limits),
+        serving_slots=serving_slots(limits, ready) if managed else limits.get("concurrent_recommendation_requests"),
+        target_rpm_per_replica=settings.capacity_target_rpm_per_replica,
+        scale_down_stabilization_seconds=settings.capacity_scale_down_stabilization_seconds,
+        measured_rpm=rpm, peak_rpm=peak,
+        last_scaled_at=deployment.last_scaled_at if deployment else None,
+        events=[CapacityEventResource.model_validate(e, from_attributes=True) for e in events],
+        limitation=CAPACITY_LIMITATION,
     )

@@ -41,6 +41,8 @@ from graphrec_core.database.models import (
 )
 from graphrec_core.database.session import get_db
 from graphrec_core.customers import ensure_customers
+from graphrec_core.recommendation_policy_service import load_rules
+from graphrec_core.recommendation_rules import rerank
 from graphrec_core.models_reg.service import artifact_directory
 from graphrec_core.schemas.recommendations import (
     ClickFeedback,
@@ -365,7 +367,12 @@ def _serve(
     # Qdrant already returns results in descending cosine similarity order.
     # Stable tie-break: sort equal-score items by external_id lexicographically.
     # Truncate to top_n.
-    top_ids = filtered_ids[: payload.top_n]
+    rules = load_rules(db, tenant_id)
+    if rules and filtered_ids:
+        top_ids = rerank(filtered_ids, _rule_meta(db, tenant_id, filtered_ids), rules,
+                         top_n=payload.top_n, now=datetime.now(timezone.utc))
+    else:
+        top_ids = filtered_ids[: payload.top_n]
 
     # Fallback: if Qdrant returned nothing, pull most recent servable products
     fallback_used = False
@@ -387,13 +394,17 @@ def _serve(
             .outerjoin(popularity, popularity.c.product_id == Product.external_id)
             .where(Product.tenant_id == tenant_id, *_servable())
             .order_by(func.coalesce(popularity.c.events, 0).desc(), Product.external_id.asc())
-            .limit(payload.top_n)
+            # Re-ranking needs a wider eligible pool than the final list (bounded).
+            .limit(min(max(payload.top_n * 5, 50), 500) if rules else payload.top_n)
         )
         if payload.exclude_product_ids:
             fallback_query = fallback_query.where(
                 Product.external_id.not_in(payload.exclude_product_ids)
             )
         top_ids = list(db.execute(fallback_query).scalars())
+        if rules and top_ids:
+            top_ids = rerank(top_ids, _rule_meta(db, tenant_id, top_ids), rules,
+                             top_n=payload.top_n, now=datetime.now(timezone.utc))
 
     items = [
         RecommendationItem(external_product_id=eid, position=idx + 1)
@@ -407,7 +418,15 @@ def _serve(
         strategy=strategy,
         fallback_used=fallback_used,
         fallback_tier=fallback_tier,
+        applied_rules=rules.applied() if rules else [],
+        rules_version=rules.version if rules else None,
     )
+
+
+def _rule_meta(db: Session, tenant_id: UUID, ids: list[str]) -> dict[str, tuple[str | None, datetime]]:
+    rows = db.execute(select(Product.external_id, Product.category, Product.created_at).where(
+        Product.tenant_id == tenant_id, Product.external_id.in_(ids)))
+    return {external_id: (category, created_at) for external_id, category, created_at in rows}
 
 
 @router.post("/v1/recommendations/session", response_model=RecommendationResponse)

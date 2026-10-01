@@ -70,6 +70,9 @@ services:
       MAX_PASSWORD_LENGTH: ${MAX_PASSWORD_LENGTH}
       ACCOUNT_SETUP_TOKEN_TTL_SECONDS: ${ACCOUNT_SETUP_TOKEN_TTL_SECONDS:-86400}
       TRAINING_COOLDOWN_SECONDS: ${TRAINING_COOLDOWN_SECONDS:-60}
+      RETRAINING_MIN_INTERVAL_MINUTES: ${RETRAINING_MIN_INTERVAL_MINUTES:-60}
+      CAPACITY_TARGET_RPM_PER_REPLICA: ${CAPACITY_TARGET_RPM_PER_REPLICA:-120}
+      CAPACITY_SCALE_DOWN_STABILIZATION_SECONDS: ${CAPACITY_SCALE_DOWN_STABILIZATION_SECONDS:-120}
       PLATFORM_ADMIN_TOKEN: ${PLATFORM_ADMIN_TOKEN:-}
       QDRANT_URL: ${QDRANT_URL:-http://qdrant:6334}
       QDRANT_COLLECTION_PREFIX: ${QDRANT_COLLECTION_PREFIX:-graphrec}
@@ -92,6 +95,18 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+
+  scheduler:
+    build: .
+    # XR-F-02/03 retraining policies and XR-F-08 capacity controller.
+    command: ["python", "-m", "graphrec_core.scheduler"]
+    environment:
+      <<: *api-environment
+      SCHEDULER_TICK_SECONDS: ${SCHEDULER_TICK_SECONDS:-15}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
 
   worker:
     build: .

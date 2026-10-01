@@ -404,3 +404,83 @@ export interface PlatformStatus {
   deployments?: { available_tenants: number; degraded_tenants: number; desired_capacity: number; ready_capacity: number } | null;
   timestamp: string;
 }
+
+// ── XR-F-02/03: retraining policy ─────────────────────────────
+export interface RetrainingPolicyInput {
+  schedule_enabled: boolean;
+  interval_minutes: number;
+  event_trigger_enabled: boolean;
+  event_threshold: number;
+  epochs: number;
+}
+export interface RetrainingPolicy extends RetrainingPolicyInput {
+  tenant_id: string;
+  configured: boolean;
+  next_run_at: string | null;
+  new_events_since_last_training: number;
+  last_training_requested_at: string | null;
+  training_in_progress: boolean;
+  minimum_interval_minutes: number;
+  last_evaluated_at: string | null;
+  last_trigger: string | null;
+  last_outcome: string | null;
+  last_outcome_detail: string | null;
+  last_outcome_at: string | null;
+  last_job_id: string | null;
+  updated_at: string | null;
+}
+
+// ── XR-F-04: recommendation rules ─────────────────────────────
+export interface RecommendationPolicyInput {
+  diversity_enabled: boolean;
+  max_per_category: number;
+  freshness_enabled: boolean;
+  freshness_weight: number;
+  freshness_half_life_days: number;
+}
+export interface RecommendationPolicy extends RecommendationPolicyInput {
+  tenant_id: string;
+  configured: boolean;
+  version: number;
+  updated_at: string | null;
+}
+
+// ── XR-F-07: usage trends ─────────────────────────────────────
+export type TrendGranularity = "hour" | "day" | "week";
+export interface UsageTrend {
+  tenant_id: string;
+  start: string;
+  end: string;
+  granularity: TrendGranularity;
+  usage_types: string[];
+  buckets: { start: string; values: Record<string, number> }[];
+  totals: Record<string, number>;
+}
+
+// ── XR-F-08: serving capacity ─────────────────────────────────
+export interface CapacityEvent {
+  id: string;
+  model_version_id: string | null;
+  from_capacity: number;
+  to_capacity: number;
+  reason: string;
+  measured_rpm: number;
+  peak_rpm: number;
+  max_capacity: number;
+  occurred_at: string;
+}
+export interface ScalingStatus {
+  managed: boolean;
+  desired_capacity: number;
+  ready_capacity: number;
+  min_capacity: number;
+  max_capacity: number;
+  serving_slots: number | null;
+  target_rpm_per_replica: number;
+  scale_down_stabilization_seconds: number;
+  measured_rpm: number;
+  peak_rpm: number;
+  last_scaled_at: string | null;
+  events: CapacityEvent[];
+  limitation: string;
+}

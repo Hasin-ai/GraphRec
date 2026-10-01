@@ -42,6 +42,14 @@ class Settings(BaseSettings):
     max_password_length: int = Field(default=1_024, ge=64)
     account_setup_token_ttl_seconds: int = Field(default=86_400, ge=300, le=604_800)
     training_cooldown_seconds: int = Field(default=60, ge=0, le=86_400)
+    # XR-F-02/03 scheduler: shortest allowed schedule and how often policies are evaluated.
+    retraining_min_interval_minutes: int = Field(default=60, ge=1, le=43_200)
+    scheduler_tick_seconds: int = Field(default=15, ge=1, le=3_600)
+    # XR-F-08 capacity policy: logical serving replicas, each worth
+    # ceil(plan concurrency / plan maximum replicas) recommendation slots;
+    # scale up immediately, scale down only after the stabilization window.
+    capacity_target_rpm_per_replica: int = Field(default=120, ge=1, le=1_000_000)
+    capacity_scale_down_stabilization_seconds: int = Field(default=120, ge=0, le=86_400)
     # Shared secret for /v1/platform routes; unset disables platform administration.
     platform_admin_token: str | None = None
 

@@ -137,3 +137,8 @@
 .auth-links { display: flex; flex-wrap: wrap; gap: 12px 24px; border-top: 1px solid var(--color-border); padding-top: 20px; font-size: 14px; }
 .table-scroll-hint { display: none; color: var(--color-neutral-600); font-size: 13px; margin: 0 0 8px; }
 @media (max-width: 600px) { .table-scroll-hint { display: block; } }
+
+/* XR feature controls */
+.check { display: inline-flex; gap: 8px; align-items: center; font-weight: normal; }
+.trend-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.trend-chart { display: block; margin: 8px 0 12px; color: var(--accent, #4a6cf7); }

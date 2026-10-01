@@ -59,3 +59,23 @@ class UsageSummaryResponse(BaseModel):
         if len(self.dimensions) != 9 or len({item.type for item in self.dimensions}) != 9:
             raise ValueError("All supported usage dimensions are required")
         return self
+
+
+Granularity = Literal["hour", "day", "week"]
+
+
+class UsageTrendBucket(BaseModel):
+    start: datetime
+    values: dict[str, UsageNumber]
+
+
+class UsageTrendResponse(BaseModel):
+    """XR-F-07: summarized usage by period and usage type, read from the usage ledger."""
+
+    tenant_id: str
+    start: datetime
+    end: datetime
+    granularity: Granularity
+    usage_types: list[str]
+    buckets: list[UsageTrendBucket]
+    totals: dict[str, UsageNumber]

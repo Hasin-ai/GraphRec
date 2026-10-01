@@ -6,6 +6,7 @@ import { useSession } from "../../hooks/useSession";
 import { flattenMetrics, fmtDateTime, fmtNumber, fmtPercent } from "../../lib/format";
 import { Page } from "../../ui/Page";
 import { Badge, Banner, DefinitionList, ErrorBanner, FilterBar, Panel, Skeleton, Stats } from "../../ui/primitives";
+import { ScalingPanel } from "./ScalingPanel";
 const WINDOWS: Record<string, number> = { 'last hour': 60, 'last 24 hours': 1440, 'last 7 days': 10080 };
 export function ServiceStatusPage() {
   const { can } = useSession();
@@ -29,8 +30,9 @@ export function ServiceStatusPage() {
         { label: 'Local serving capacity', value: `${d.ready_capacity ?? 0} of ${d.desired_capacity ?? 1}`, mono: true },
         { label: 'Last activation', value: fmtDateTime(d.last_transition_at) },
       ]} />
-      <p className="footnote">Capacity describes this single local API process after the last activation check. {d.failure_reason ?? ''}</p>
+      <p className="footnote">Capacity is the logical serving units the capacity controller has allocated; see Serving capacity below. {d.failure_reason ?? ''}</p>
     </Panel> : null}
+    <ScalingPanel />
     {canMetrics ? <Panel title="Recommendation traffic">
       <FilterBar filters={[{ id: 'window', label: 'Measurement window', value: span, onChange: setSpan, options: Object.keys(WINDOWS) }]} onClear={() => setSpan('last hour')} />
       {metrics.error ? <ErrorBanner error={metrics.error} title="Traffic measurements unavailable" onRetry={metrics.reload} /> : null}

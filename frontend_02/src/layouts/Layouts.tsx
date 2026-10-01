@@ -17,6 +17,7 @@ const TENANT_NAV: NavGroup[] = [
   { label: "Models", items: [
     { label: "Training", to: "/training", scope: "training:read" },
     { label: "Model Versions", to: "/models", scope: "models:read" },
+    { label: "Recommendation Rules", to: "/recommendation-rules", scope: "models:read" },
   ] },
   { label: "Operations", items: [
     { label: "Service Status", to: "/service-status", scope: "deployments:read" },

@@ -484,6 +484,7 @@ class ModelDeployment(Base):
     ready_capacity: Mapped[int] = mapped_column(nullable=False, default=0)
     last_transition_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     failure_reason: Mapped[str | None] = mapped_column(Text)
+    last_scaled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class TrainingJob(Base):
@@ -566,4 +567,63 @@ class ServingRequest(Base):
     fallback_used: Mapped[bool] = mapped_column(Boolean, nullable=False)
     item_count: Mapped[int] = mapped_column(nullable=False, default=0)
     latency_ms: Mapped[int] = mapped_column(nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class RetrainingPolicy(Base):
+    """XR-F-02/XR-F-03: one scheduled / event-triggered retraining policy per tenant."""
+
+    __tablename__ = "retraining_policies"
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), primary_key=True
+    )
+    schedule_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    interval_minutes: Mapped[int] = mapped_column(nullable=False, default=1440)
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    event_trigger_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    event_threshold: Mapped[int] = mapped_column(nullable=False, default=1000)
+    epochs: Mapped[int] = mapped_column(nullable=False, default=3)
+    last_evaluated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_trigger: Mapped[str | None] = mapped_column(String(16))
+    last_outcome: Mapped[str | None] = mapped_column(String(48))
+    last_outcome_detail: Mapped[str | None] = mapped_column(Text)
+    last_outcome_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_job_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class RecommendationPolicy(Base):
+    """XR-F-04 / XR-NF-02: bounded, versioned diversity and freshness rules per tenant."""
+
+    __tablename__ = "recommendation_policies"
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), primary_key=True
+    )
+    version: Mapped[int] = mapped_column(nullable=False, default=1)
+    diversity_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    max_per_category: Mapped[int] = mapped_column(nullable=False, default=3)
+    freshness_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    freshness_weight: Mapped[Decimal] = mapped_column(Numeric(4, 3), nullable=False, default=Decimal("0.2"))
+    freshness_half_life_days: Mapped[int] = mapped_column(nullable=False, default=30)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class CapacityEvent(Base):
+    """XR-F-08: one observable serving-capacity change for a tenant."""
+
+    __tablename__ = "capacity_events"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    model_version_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    from_capacity: Mapped[int] = mapped_column(nullable=False)
+    to_capacity: Mapped[int] = mapped_column(nullable=False)
+    reason: Mapped[str] = mapped_column(String(32), nullable=False)
+    measured_rpm: Mapped[int] = mapped_column(nullable=False)
+    peak_rpm: Mapped[int] = mapped_column(nullable=False)
+    max_capacity: Mapped[int] = mapped_column(nullable=False)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

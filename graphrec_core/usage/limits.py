@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from graphrec_core.database.models import ModelVersion, PricingPlan, Product, ServingRequest, TenantResourceQuota, TenantSubscription, TrainingJob, UsageEvent
+from graphrec_core.database.models import ModelDeployment, ModelVersion, PricingPlan, Product, ServingRequest, TenantResourceQuota, TenantSubscription, TrainingJob, UsageEvent
 from graphrec_core.errors import ApiError
 from graphrec_core.subscription.service import SubscriptionService
 
@@ -31,6 +31,13 @@ def require_capacity(db: Session, tenant_id: UUID, dimension: str, quantity: int
     if limit is None:
         raise ApiError(503, "quota_unavailable", "The required usage limit is unavailable.", retryable=True)
     if dimension == "concurrent_recommendation_requests":
+        # XR-F-08: an active deployment serves with the slots its scaled
+        # capacity provides; without one the plan limit applies unchanged.
+        from graphrec_core.capacity import serving_slots
+        ready = db.scalar(select(ModelDeployment.ready_capacity).where(
+            ModelDeployment.tenant_id == tenant_id, ModelDeployment.active_model_version_id.is_not(None)))
+        if ready:
+            limit = serving_slots(limits, ready) or limit
         # A bounded number of transaction-scoped slots, shared across API workers.
         for slot in range(min(limit, 30)):
             key = int.from_bytes(hashlib.sha256(f"serving-slot:{tenant_id}:{slot}".encode()).digest()[:8], "big", signed=True)

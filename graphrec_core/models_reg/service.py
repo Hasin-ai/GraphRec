@@ -214,7 +214,8 @@ class ModelRegistryService:
         deployment.desired_model_version_id = desired
         deployment.active_model_version_id = active
         deployment.status = status
-        deployment.ready_capacity = 1 if active is not None else 0
+        # XR-NF-01: activation keeps the scaled capacity bound to the active version.
+        deployment.ready_capacity = deployment.desired_capacity if active is not None else 0
         deployment.failure_reason = failure_reason
         deployment.last_transition_at = at
 

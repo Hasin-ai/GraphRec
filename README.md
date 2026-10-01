@@ -152,6 +152,45 @@ screens are not backed by the API, and how to run it against a bare uvicorn.
 - Platform realm: `/admin/login` with `PLATFORM_ADMIN_TOKEN`, then
   `/admin/status`, `/admin/tenants`, `/admin/plans`, `/admin/audit`.
 
+## Automation, rules, trends and capacity (XR-F-02/03/04/07/08)
+
+| Feature | Endpoint | Read scope | Write scope | Console |
+|---|---|---|---|---|
+| Scheduled + event-triggered retraining (XR-F-02/03) | `GET/PUT /v1/retraining-policy` | `training:read` | `training:write` | Training → Automatic retraining |
+| Diversity / freshness rules (XR-F-04) | `GET/PUT /v1/recommendation-policy` | `models:read` | `models:deploy` | Models → Recommendation Rules |
+| Usage trends (XR-F-07) | `GET /v1/usage/trends?granularity=hour\|day\|week&start=&end=&types=` | `usage:read` | – | Usage & Quotas → Usage trends |
+| Serving capacity (XR-F-08) | `GET /v1/deployment/scaling` | `deployments:read` | – (controller) | Service Status → Serving capacity |
+
+All four are tenant-scoped exactly like the rest of the API: the tenant comes
+from the credential, tables use row-level security, and the background
+`scheduler` service discovers work through `SECURITY DEFINER` functions that
+return tenant ids only.
+
+* **Retraining.** One policy per tenant: a fixed interval (minimum
+  `RETRAINING_MIN_INTERVAL_MINUTES`, default 60) and/or a threshold of events
+  accepted since the latest training job started. The `scheduler` service
+  evaluates policies every `SCHEDULER_TICK_SECONDS` and requests training
+  through the normal training path, so cooldown, quota, data sufficiency and
+  one-active-job rules apply (XR-NF-03). Each schedule slot and each event
+  condition uses a deterministic request id, so it can start at most one job.
+  New versions are `eligible`; activation remains manual.
+* **Rules.** Optional category cap and freshness boost
+  (`score = (1-w)·relevance + w·0.5^(age/half_life)`, `w ≤ 0.3`). Rules only
+  reorder eligible, non-excluded products. Each change bumps a `version`, and
+  responses report `applied_rules` and `rules_version` (XR-NF-02).
+* **Trends.** Sums from the append-only usage ledger in UTC buckets (weeks
+  start Monday). Empty buckets are zero. Hourly ranges are capped at 31 days,
+  daily at 366 and weekly at 104 weeks.
+* **Capacity.** Each tenant with an active model has 1 to
+  `maximum_inference_replicas` logical serving units. Each unit is worth
+  `ceil(concurrent_recommendation_requests / maximum_inference_replicas)`
+  concurrent slots, and `require_capacity` enforces them. The controller
+  scales up at once to `ceil(rpm / CAPACITY_TARGET_RPM_PER_REPLICA)` and
+  scales down only after `CAPACITY_SCALE_DOWN_STABILIZATION_SECONDS`. Every
+  change is a `capacity_event`. **Limitation:** there is no orchestrator here,
+  so serving stays in-process. An orchestrator adapter would consume
+  `desired_capacity`.
+
 ## Run locally
 
 ```bash
