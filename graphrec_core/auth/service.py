@@ -140,7 +140,11 @@ class AuthenticationService:
         source: str,
     ) -> AuthTokenPair:
         try:
-            identities = self._resolve_identities(request.email)
+            # Only identities that could actually sign in take part in the
+            # uniqueness check: a pending invitation (no password yet) or a
+            # suspended tenant must not make another tenant's login ambiguous.
+            identities = [i for i in self._resolve_identities(request.email)
+                          if i.credential_digest and i.user_status == "active" and i.tenant_status == "active"]
             if len(identities) != 1:
                 for identity in identities or [None]:
                     verify_password(

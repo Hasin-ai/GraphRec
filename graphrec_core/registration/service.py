@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import text, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -95,6 +95,28 @@ class RegistrationService:
             if existing_request is not None:
                 self._add_security_event(
                     tenant_id=existing_request.tenant_id,
+                    event_type="registration_duplicate_denied",
+                    severity="warning",
+                    source=source,
+                    detail={
+                        "correlation_id": str(correlation_id),
+                        "administrator_email_hash": self._protected_hash(request.admin_email),
+                    },
+                )
+                self.session.commit()
+                raise self._duplicate_error()
+
+            # UC-01: an administrator email that already belongs to a tenant user
+            # is a duplicate registration. Without this check an anonymous caller
+            # could register another tenant with someone's email and make their
+            # sign-in ambiguous (login resolves users by email across tenants).
+            existing_user = self.session.execute(
+                text("SELECT 1 FROM resolve_login_identities(:email) LIMIT 1"),
+                {"email": request.admin_email},
+            ).first()
+            if existing_user is not None:
+                self._add_security_event(
+                    tenant_id=None,
                     event_type="registration_duplicate_denied",
                     severity="warning",
                     source=source,
