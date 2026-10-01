@@ -13,7 +13,7 @@ const GROUPS: Record<string, Record<string, Tone>> = {
   batch: { completed: "ok" },
   outcome: { success: "ok", succeeded: "ok", denied: "warn", failure: "danger", failed: "danger" },
   sev: { info: "info", low: "info", warning: "warn", medium: "warn", error: "danger", high: "danger", critical: "danger" },
-  platform: { healthy: "ok", degraded: "warn", online: "ok", connected: "ok", unavailable: "danger", not_deployed: "neu" },
+  platform: { healthy: "ok", ok: "ok", disabled: "neu", degraded: "warn", online: "ok", connected: "ok", unavailable: "danger", not_deployed: "neu" },
 };
 
 export function toneFor(group: keyof typeof GROUPS | string, value: string): Tone {

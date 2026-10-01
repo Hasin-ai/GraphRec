@@ -105,4 +105,13 @@ describe('operational state', () => {
     expect(screen.queryByText('First-page product')).not.toBeInTheDocument();
     expect(calls.some(call => call.url.endsWith('offset=50'))).toBe(true);
   });
+  it('shows the rate-limit store as degraded on Service Status when Redis is down (D16)', async () => {
+    signInAsAdmin();
+    mockFetch([{ path: '/v1/deployment', body: { status: 'stopped', active_model_version_id: null, last_transition_at: null, failure_reason: null,
+      rate_limiter: { backend: 'redis', status: 'degraded', fail_open_total: 7, last_error_at: '2026-10-01T17:00:00Z' } } }]);
+    renderAt('/service-status');
+    expect(await screen.findByText('Rate-limit store unavailable')).toBeInTheDocument();
+    expect(screen.getByText('redis · degraded')).toBeInTheDocument();
+    expect(screen.getByText('7')).toBeInTheDocument();
+  });
 });

@@ -317,6 +317,14 @@ export interface TrainingJobResource {
 }
 
 // ── serving ────────────────────────────────────────────────────
+/** D16: shared admission-control backend; "degraded" means Redis is unreachable and limits fail open per process. */
+export interface RateLimiterStatus {
+  backend: string;
+  status: "ok" | "degraded" | "disabled" | string;
+  fail_open_total: number;
+  last_error_at: string | null;
+}
+
 export interface DeploymentStatus {
   id?: string | null;
   desired_model_version_id?: string | null;
@@ -326,6 +334,7 @@ export interface DeploymentStatus {
   ready_capacity?: number;
   last_transition_at: string | null;
   failure_reason: string | null;
+  rate_limiter?: RateLimiterStatus | null;
 }
 
 /** Offline measures recorded for the active version at training time. */
@@ -401,6 +410,7 @@ export interface PlatformStatus {
   api_cluster: string;
   database: string;
   worker_pool: string;
+  rate_limiter?: RateLimiterStatus | null;
   deployments?: { available_tenants: number; degraded_tenants: number; desired_capacity: number; ready_capacity: number } | null;
   timestamp: string;
 }

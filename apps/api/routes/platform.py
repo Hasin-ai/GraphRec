@@ -265,11 +265,14 @@ def get_platform_status(db: Session = Depends(get_db)) -> dict[str, Any]:
     except SQLAlchemyError:
         db.rollback()
         database = "unavailable"
+    from graphrec_core.usage.admission import get_admission
+    limiter = get_admission().status()
     return {
-        "status": "healthy" if database == "connected" else "degraded",
+        "status": "healthy" if database == "connected" and limiter["status"] != "degraded" else "degraded",
         "api_cluster": "online",
         "database": database,
         "worker_pool": worker,
         "deployments": deployments,
+        "rate_limiter": limiter,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }

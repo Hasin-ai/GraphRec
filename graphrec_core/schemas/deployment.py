@@ -8,6 +8,15 @@ from uuid import UUID
 from pydantic import BaseModel
 
 
+class RateLimiterStatus(BaseModel):
+    """D16: shared admission-control backend (Redis) as seen by this API process."""
+
+    backend: str
+    status: str  # ok | degraded (Redis unreachable; failing open) | disabled
+    fail_open_total: int = 0
+    last_error_at: str | None = None
+
+
 class DeploymentStatus(BaseModel):
     id: UUID | None = None
     desired_model_version_id: UUID | None = None
@@ -17,6 +26,7 @@ class DeploymentStatus(BaseModel):
     ready_capacity: int = 0
     last_transition_at: datetime | None = None
     failure_reason: str | None = None
+    rate_limiter: RateLimiterStatus | None = None
 
 
 class QualitySummary(BaseModel):

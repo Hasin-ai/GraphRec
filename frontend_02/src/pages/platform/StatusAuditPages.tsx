@@ -37,6 +37,10 @@ export function PlatformStatusPage() {
               { label: "API cluster", badge: <Badge group="platform" value={s.api_cluster} /> },
               { label: "Database", badge: <Badge group="platform" value={s.database} /> },
               { label: "Worker pool", badge: <Badge group="platform" value={s.worker_pool} /> },
+              ...(s.rate_limiter ? [
+                { label: "Rate-limit store (Redis)", badge: <Badge group="platform" value={s.rate_limiter.status} /> },
+                { label: "Admitted without the shared store", value: String(s.rate_limiter.fail_open_total) },
+              ] : []),
               ...(s.deployments ? [
                 { label: "Ready local capacity", value: `${s.deployments.ready_capacity} of ${s.deployments.desired_capacity}` },
                 { label: "Degraded tenants", value: String(s.deployments.degraded_tenants) },

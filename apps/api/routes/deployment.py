@@ -11,6 +11,7 @@ from graphrec_core.auth.principal import AuthenticatedPrincipal, authenticated_p
 from graphrec_core.capacity import effective_limits, max_replicas, measure, serving_slots
 from graphrec_core.database.models import CapacityEvent, ModelDeployment, ModelVersion, ServingRequest
 from graphrec_core.settings import get_settings
+from graphrec_core.usage.admission import get_admission
 from graphrec_core.database.session import get_db
 from graphrec_core.schemas.deployment import (
     CapacityEventResource,
@@ -41,8 +42,9 @@ def get_deployment_status(
 ) -> DeploymentStatus:
     principal.require_scope("deployments:read")
     deployment = db.scalar(select(ModelDeployment).where(ModelDeployment.tenant_id == principal.tenant_id))
+    limiter = get_admission().status()
     if deployment is None:
-        return DeploymentStatus(status="stopped")
+        return DeploymentStatus(status="stopped", rate_limiter=limiter)
     return DeploymentStatus(
         id=deployment.id,
         desired_model_version_id=deployment.desired_model_version_id,
@@ -52,6 +54,7 @@ def get_deployment_status(
         ready_capacity=deployment.ready_capacity,
         last_transition_at=deployment.last_transition_at,
         failure_reason=deployment.failure_reason,
+        rate_limiter=limiter,
     )
 
 

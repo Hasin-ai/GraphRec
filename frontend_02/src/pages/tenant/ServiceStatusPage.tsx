@@ -32,6 +32,14 @@ export function ServiceStatusPage() {
       ]} />
       <p className="footnote">Capacity is the logical serving units the capacity controller has allocated; see Serving capacity below. {d.failure_reason ?? ''}</p>
     </Panel> : null}
+    {d?.rate_limiter ? <Panel title="Admission control">
+      {d.rate_limiter.status === 'degraded' ? <Banner tone="warn" title="Rate-limit store unavailable">Redis is not responding. Recommendations are still served, and limits are enforced separately by each API process until Redis recovers.</Banner> : null}
+      <DefinitionList items={[
+        { label: 'Rate-limit store', value: `${d.rate_limiter.backend} · ${d.rate_limiter.status === 'ok' ? 'healthy' : d.rate_limiter.status}` },
+        { label: 'Requests admitted without the shared store', value: fmtNumber(d.rate_limiter.fail_open_total), mono: true },
+        { label: 'Last store error', value: d.rate_limiter.last_error_at ? fmtDateTime(d.rate_limiter.last_error_at) : 'None' },
+      ]} />
+    </Panel> : null}
     <ScalingPanel />
     {canMetrics ? <Panel title="Recommendation traffic">
       <FilterBar filters={[{ id: 'window', label: 'Measurement window', value: span, onChange: setSpan, options: Object.keys(WINDOWS) }]} onClear={() => setSpan('last hour')} />
