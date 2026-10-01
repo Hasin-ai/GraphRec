@@ -80,3 +80,26 @@ def test_revoke_invitation_disables_the_link_and_is_tenant_scoped(client):
     assert revoked.status_code == 200 and revoked.json()['status'] == 'disabled'
     assert client.post('/v1/auth/setup-password', json={'setup_token': token, 'password': 'Some-Password-1!'}, headers=JSON).status_code == 401
     assert client.delete(f'/v1/tenant/users/{user_id}/invitation', headers=admin_a).status_code == 409
+
+
+# ---- D10 / D15: duplicate tenant names and accurate duplicate reasons -----
+def test_duplicate_tenant_name_is_rejected_case_insensitively_with_field_reason(client):
+    tag = uuid4().hex[:10]
+    name = f'Acme Tools {tag}'
+    first = client.post('/v1/tenants', json={'name': name, 'admin_email': f'a-{tag}@example.org'},
+                        headers={**JSON, 'Idempotency-Key': uuid4().hex})
+    assert first.status_code == 201
+    dup = client.post('/v1/tenants', json={'name': f'  {name.upper()} ', 'admin_email': f'b-{tag}@example.org'},
+                      headers={**JSON, 'Idempotency-Key': uuid4().hex})
+    assert dup.status_code == 409, dup.text
+    fields = {f['field'] for f in dup.json()['error']['details']['fields']}
+    assert fields == {'name'}
+
+
+def test_duplicate_email_reason_names_only_the_email_field_and_does_not_echo_it(client):
+    _, email, _, _ = provision(client)
+    dup = client.post('/v1/tenants', json={'name': f'Fresh {uuid4().hex}', 'admin_email': email},
+                      headers={**JSON, 'Idempotency-Key': uuid4().hex})
+    assert dup.status_code == 409
+    assert {f['field'] for f in dup.json()['error']['details']['fields']} == {'admin_email'}
+    assert email not in dup.text
