@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -178,6 +179,15 @@ class FakeClient:
     feedback: FakeFeedback
     events: FakeEvents
     healthy: bool = True
+
+    # Mirror graphrec_sdk 1.x audience namespaces over the same fakes.
+    @property
+    def storefront(self) -> SimpleNamespace:
+        return SimpleNamespace(recommendations=self.recommendations, feedback=self.feedback, events=self.events)
+
+    @property
+    def tenant(self) -> SimpleNamespace:
+        return SimpleNamespace(catalog=self.products)
 
     async def health(self) -> dict:
         if not self.healthy:

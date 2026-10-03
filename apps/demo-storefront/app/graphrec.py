@@ -77,7 +77,7 @@ def build_services(settings: Settings) -> Services:
     return Services(
         client=client,
         tracker=tracker,
-        catalog=CatalogCache(client.products, ttl=settings.catalog_cache_seconds),
+        catalog=CatalogCache(client.tenant.catalog, ttl=settings.catalog_cache_seconds),
         settings=settings,
     )
 

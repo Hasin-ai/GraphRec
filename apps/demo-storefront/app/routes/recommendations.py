@@ -53,8 +53,8 @@ async def _fetch(svc: Services, persona: Persona, session_id: str, *, top_n: int
     """One raw Top-N request for a persona: user-based for known shoppers, session-based otherwise."""
 
     if persona.user_id:
-        return await svc.client.recommendations.get(user_id=persona.user_id, top_n=top_n, context=context, exclude_product_ids=exclude)
-    return await svc.client.recommendations.for_session(
+        return await svc.client.storefront.recommendations.get(user_id=persona.user_id, top_n=top_n, context=context, exclude_product_ids=exclude)
+    return await svc.client.storefront.recommendations.for_session(
         session_id, recent_product_ids=recent or None, top_n=top_n, context=context, exclude_product_ids=exclude
     )
 
@@ -75,7 +75,7 @@ async def recommend(body: RecommendationIn, ident: Identity = Depends(identity),
     impression_id: Optional[str] = None
     if recs.items:
         try:
-            receipt = await svc.client.feedback.impression(recs, context=context)
+            receipt = await svc.client.storefront.feedback.impression(recs, context=context)
             impression_id = receipt.event_id
             svc.impressions.put(recs.request_id, impression_id)
         except APIError as error:  # telemetry is best-effort
@@ -95,7 +95,7 @@ async def recommend(body: RecommendationIn, ident: Identity = Depends(identity),
 
 @router.post("/feedback/click", response_model=Envelope[FeedbackOut])
 async def click(body: ClickIn, ident: Identity = Depends(identity), svc: Services = Depends(services)) -> Envelope[FeedbackOut]:
-    receipt = await svc.client.feedback.click(
+    receipt = await svc.client.storefront.feedback.click(
         body.request_id,
         body.product_id,
         position=body.position,
@@ -149,7 +149,7 @@ async def purchase(body: PurchaseIn, ident: Identity = Depends(identity), svc: S
             )
         )
     # Sent directly (not through the buffer) so the confirmation page can report the receipt.
-    result = await svc.client.events.create_batch(events)
+    result = await svc.client.storefront.events.create_batch(events)
     return Envelope(
         data=PurchaseOut(
             order_id=order_id,

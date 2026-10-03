@@ -47,14 +47,14 @@ async def main(argv=None) -> int:
     report = {"checked_at": datetime.now(timezone.utc).isoformat(), "top_n": args.top_n, "exclude": args.exclude, "personas": {}}
 
     async with AsyncGraphRec(base_url=args.base_url, api_key=api_key, use_env=False) as client:
-        inactive = {p.external_id for p in await client.products.list() if not (p.is_active and p.availability_status == "available")}
+        inactive = {p.external_id for p in await client.tenant.catalog.list() if not (p.is_active and p.availability_status == "available")}
         rankings = {}
         versions = set()
         step("known shoppers, same request twice")
         for key in KNOWN_PERSONAS:
             persona = PERSONAS[key]
-            first = await client.recommendations.get(user_id=persona.user_id, top_n=args.top_n, exclude_product_ids=args.exclude)
-            second = await client.recommendations.get(user_id=persona.user_id, top_n=args.top_n, exclude_product_ids=args.exclude)
+            first = await client.storefront.recommendations.get(user_id=persona.user_id, top_n=args.top_n, exclude_product_ids=args.exclude)
+            second = await client.storefront.recommendations.get(user_id=persona.user_id, top_n=args.top_n, exclude_product_ids=args.exclude)
             ids = first.product_ids
             rankings[key] = ids
             repeatable = ids == second.product_ids
@@ -71,7 +71,7 @@ async def main(argv=None) -> int:
                 failures.append(f"{persona.name}: excluded or inactive products appeared: {leaked}")
 
         step("cold-start visitor")
-        guest = await client.recommendations.for_session("sess_verify_guest", top_n=args.top_n, exclude_product_ids=args.exclude)
+        guest = await client.storefront.recommendations.for_session("sess_verify_guest", top_n=args.top_n, exclude_product_ids=args.exclude)
         report["personas"]["guest"] = {"ids": guest.product_ids, "strategy": guest.strategy, "fallback_used": guest.fallback_used}
         print(f"  guest  strategy={guest.strategy:<17} fallback={guest.fallback_used} -> {guest.product_ids}")
         if not guest.fallback_used:
