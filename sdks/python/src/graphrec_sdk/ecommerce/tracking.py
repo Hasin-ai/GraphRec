@@ -39,7 +39,7 @@ __all__ = ["AsyncEventTracker", "EventTracker"]
 log = logging.getLogger("graphrec_sdk.tracking")
 
 ErrorHandler = Callable[[Exception, List[EventInput]], None]
-AsyncErrorHandler = Callable[[Exception, List[EventInput]], Union[None, Awaitable[None]]]
+AsyncErrorHandler = Callable[[Exception, List[EventInput]], Union[Awaitable[None], None]]
 
 
 class _Queue:
@@ -238,7 +238,7 @@ class EventTracker:
             if not events:
                 return None
             try:
-                return self._client.events.create_batch(events)
+                return self._client.storefront.events.create_batch(events)
             except Exception as exc:
                 if self.on_error is not None:
                     self.on_error(exc, events)
@@ -422,7 +422,7 @@ class AsyncEventTracker:
             if not events:
                 return None
             try:
-                return await self._client.events.create_batch(events)
+                return await self._client.storefront.events.create_batch(events)
             except Exception as exc:
                 if self.on_error is not None:
                     outcome = self.on_error(exc, events)

@@ -119,25 +119,26 @@ export function CredentialsPage() {
     upsertRow(row);
   }
 
+  const accessPreset = (scopes: string[]) => {
+    const set = new Set(scopes);
+    if (["training:write", "models:deploy"].every(x => set.has(x))) return "Full integration access";
+    if (["catalog:write", "events:write", "recommendations:read"].every(x => set.has(x))) return "Storefront: catalog, events and recommendations";
+    if (set.size === 1 && set.has("recommendations:read")) return "Recommendations only";
+    return `${scopes.length} selected permissions`;
+  };
   const rows = (keys.data?.items ?? []).map((k) => (
     <tr key={k.id}>
-      <Cell>{k.name}</Cell>
-      <Cell mono sub={k.status !== "active" ? "cannot authorize" : k.grace_expires_at ? `previous secret valid until ${fmtDateTime(k.grace_expires_at)}` : undefined}>
-        {k.prefix}…
-      </Cell>
-      <Cell muted sub={k.scopes.map((s) => SCOPE_SHORT[s] ?? s).join(" · ")}>
-        {k.scopes.length} operations
-      </Cell>
-      <Cell mono>{fmtDateTime(k.expires_at)}</Cell>
-      <Cell mono>{fmtDateTime(k.revoked_at)}</Cell>
-      <Cell mono>{fmtDateTime(k.last_used_at)}</Cell>
+      <td className="nowrap"><strong>{k.name}</strong><div className="sub"><span className="mono">{k.prefix}…</span>{k.status !== "active" ? " · cannot authorize" : k.grace_expires_at ? ` · previous secret valid until ${fmtDateTime(k.grace_expires_at)}` : ""}</div></td>
+      <td><span title={k.scopes.map((s) => SCOPE_SHORT[s] ?? s).join(" · ")}>{accessPreset(k.scopes)}</span><div className="sub">{k.scopes.length} permissions</div></td>
+      <Cell>{k.last_used_at ? fmtDateTime(k.last_used_at) : <span className="td-muted">Never used</span>}</Cell>
+      <Cell>{k.revoked_at ? `Revoked ${fmtDateTime(k.revoked_at)}` : k.expires_at ? `Expires ${fmtDateTime(k.expires_at)}` : <span className="td-muted">No expiry</span>}</Cell>
       <td>
         <Badge group="key" value={k.status} />
       </td>
       <ActionsCell
         actions={[
           { label: "Rotate", disabled: k.status === "revoked", reason: k.status === "revoked" ? "Revoked credentials cannot be rotated." : undefined, onClick: () => setDialog({ kind: "rotate", key: k }) },
-          { label: "Revoke", disabled: k.status === "revoked", onClick: () => setDialog({ kind: "revoke", key: k }) },
+          { label: "Revoke", danger: true, disabled: k.status === "revoked", onClick: () => setDialog({ kind: "revoke", key: k }) },
         ]}
       />
     </tr>
@@ -155,7 +156,7 @@ export function CredentialsPage() {
       {!keys.data ? (keys.loading ? <Skeleton /> : null) : (
         <DataTable
           minWidth={920}
-          columns={["Name", "Prefix", "Allowed operations", "Expires", "Revoked at", "Last used", "Status", { label: "", align: "right" }]}
+          columns={["Credential", "Access", "Last used", "Expiry", "Status", { label: "", align: "right" }]}
           rows={rows}
           count={`${rows.length} credentials`}
           empty={{ title: "No credentials yet", body: "Create a credential so your application can authenticate.", action: { label: "Create credential", onClick: () => setDialog({ kind: "create" }) } }}

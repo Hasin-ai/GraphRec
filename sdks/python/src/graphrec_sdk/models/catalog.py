@@ -11,6 +11,7 @@ from ._base import GraphRecModel, InputModel, ItemList
 
 __all__ = [
     "BulkUpsertFailure",
+    "CatalogSync",
     "Product",
     "ProductBulkUpsertResult",
     "ProductInput",
@@ -75,24 +76,43 @@ class BulkUpsertFailure(GraphRecModel):
 
 
 class ProductBulkUpsertResult(GraphRecModel):
+    sync_id: Optional[UUID] = None
+    sync_ids: List[UUID] = Field(default_factory=list)
+    status: str = "completed"
+    request_id: Optional[str] = None
     accepted_count: int = 0
     created_count: int = 0
     updated_count: int = 0
     skipped_count: int = 0
     rejected_count: int = 0
     failures: List[BulkUpsertFailure] = Field(default_factory=list)
+    outcomes: List[Dict[str, str]] = Field(default_factory=list)
     #: Number of HTTP requests the SDK used (payloads are split to fit the body limit).
     request_count: int = 1
 
     @classmethod
     def merge(cls, results: Iterable[ProductBulkUpsertResult]) -> ProductBulkUpsertResult:
         items = list(results)
+        ids = [
+            identifier
+            for r in items
+            for identifier in (r.sync_ids or ([r.sync_id] if r.sync_id else []))
+        ]
         return cls(
+            sync_id=ids[0] if len(ids) == 1 else None,
+            sync_ids=ids,
+            request_id=items[0].request_id if len(items) == 1 else None,
             accepted_count=sum(r.accepted_count for r in items),
             created_count=sum(r.created_count for r in items),
             updated_count=sum(r.updated_count for r in items),
             skipped_count=sum(r.skipped_count for r in items),
             rejected_count=sum(r.rejected_count for r in items),
             failures=[failure for r in items for failure in r.failures],
+            outcomes=[outcome for r in items for outcome in r.outcomes],
             request_count=sum(r.request_count for r in items) if items else 0,
         )
+
+
+class CatalogSync(ProductBulkUpsertResult):
+    sync_id: UUID
+    created_at: datetime

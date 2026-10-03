@@ -30,13 +30,17 @@ def main(base_url: str, platform_token: Optional[str]) -> None:
         step("health")
         print(public.health())
         step("register tenant")
-        tenant = public.tenants.register(name=f"SDK Smoke {suffix}", admin_email=email)
+        tenant = public.tenant.auth.register(name=f"SDK Smoke {suffix}", admin_email=email)
         print(tenant.id, tenant.status)
         assert tenant.setup_token, "registration must return a one-time setup token"
-        public.auth.setup_password(setup_token=tenant.setup_token, password=password, email=email)
+        public.tenant.auth.setup_password(
+            setup_token=tenant.setup_token, password=password, email=email
+        )
         step("setup token is single-use")
         try:
-            public.auth.setup_password(setup_token=tenant.setup_token, password="another-password")
+            public.tenant.auth.setup_password(
+                setup_token=tenant.setup_token, password="another-password"
+            )
         except g.AuthenticationError as exc:
             assert exc.code == "invalid_setup_token", exc.code
             print("reused token rejected:", exc.code)
@@ -46,16 +50,16 @@ def main(base_url: str, platform_token: Optional[str]) -> None:
         admin = public.with_credentials(email=email, password=password)
         step("subscription & usage")
         print(
-            admin.subscription.get().plan_code,
-            len(admin.usage.get().dimensions),
+            admin.tenant.subscription.get().plan_code,
+            len(admin.tenant.usage.get().dimensions),
             "usage dimensions",
         )
 
         step("API key lifecycle")
-        key = admin.api_keys.create(name=f"smoke-{suffix}", scopes=g.STOREFRONT_KEY_SCOPES)
-        rotated = admin.api_keys.rotate(key.id, reason="smoke test", grace_period_seconds=60)
+        key = admin.tenant.api_keys.create(name=f"smoke-{suffix}", scopes=g.STOREFRONT_KEY_SCOPES)
+        rotated = admin.tenant.api_keys.rotate(key.id, reason="smoke test", grace_period_seconds=60)
         assert rotated.secret != key.secret
-        print([k.prefix for k in admin.api_keys.list()])
+        print([k.prefix for k in admin.tenant.api_keys.list()])
 
         store = public.with_credentials(api_key=rotated.secret)
         step("catalog")
@@ -69,8 +73,8 @@ def main(base_url: str, platform_token: Optional[str]) -> None:
             for i in range(60)
         ]
         print(CatalogSync(store).run(catalog).summary())
-        store.products.update("sku-1", price="9.99")
-        store.products.disable("sku-59")
+        store.tenant.catalog.update("sku-1", price="9.99")
+        store.tenant.catalog.disable("sku-59")
 
         step("events")
         with EventTracker(store, batch_size=25) as tracker:
@@ -79,11 +83,11 @@ def main(base_url: str, platform_token: Optional[str]) -> None:
                 tracker.view(user, f"sku-{i % 60}")
                 if i % 5 == 0:
                     tracker.purchase(user, f"sku-{i % 60}", order_id=f"ORD-{i}")
-        print([b.accepted_count for b in store.events.list_batches()][:5])
+        print([b.accepted_count for b in store.storefront.events.list_batches()][:5])
 
         step("scope enforcement")
         try:
-            store.model_versions.list()
+            store.tenant.model_versions.list()
         except g.PermissionDeniedError as exc:
             print("storefront key cannot read the model registry:", exc.code)
         else:
@@ -93,22 +97,22 @@ def main(base_url: str, platform_token: Optional[str]) -> None:
         csv = "event_id,event_type,user_id,external_product_id\n" + "".join(
             f"csv-{suffix}-{i},click,user-{i % 7},sku-{i % 30}\n" for i in range(50)
         )
-        upload = admin.datasets.upload((f"events-{suffix}.csv", csv.encode()))
+        upload = admin.tenant.datasets.upload((f"events-{suffix}.csv", csv.encode()))
         print(
             "uploaded",
             upload.accepted_events,
             "events; snapshot",
             upload.dataset_snapshot.checksum[:12],
         )
-        snapshot = admin.datasets.create_snapshot(cutoff_at=datetime.now(timezone.utc))
+        snapshot = admin.tenant.datasets.create_snapshot(cutoff_at=datetime.now(timezone.utc))
 
         step("training & activation")
-        job = admin.training_jobs.create(dataset_snapshot_id=snapshot.id)
-        job = admin.training_jobs.wait(job.id, timeout=300, poll_interval=2)
+        job = admin.tenant.training_jobs.create(dataset_snapshot_id=snapshot.id)
+        job = admin.tenant.training_jobs.wait(job.id, timeout=300, poll_interval=2)
         assert job.model_version_id is not None, job
-        version = admin.model_versions.activate(job.model_version_id)
-        print(version.version_tag, version.status, admin.deployment.get().status)
-        summary = admin.metrics.summary()
+        version = admin.tenant.model_versions.activate(job.model_version_id)
+        print(version.version_tag, version.status, admin.tenant.deployment.get().status)
+        summary = admin.tenant.metrics.summary()
         print("requests", summary.request_count, "p95", summary.p95_latency_ms, "ms")
 
         step("recommendations & feedback")
@@ -119,7 +123,7 @@ def main(base_url: str, platform_token: Optional[str]) -> None:
         if recs.items:
             widget.click(recs, recs.items[0].external_product_id)
             widget.convert(recs, recs.items[0].external_product_id, value="12.00")
-        anon = store.recommendations.for_session(
+        anon = store.storefront.recommendations.for_session(
             "sess-smoke", recent_product_ids=["sku-3"], top_n=3
         )
         print("session:", anon.product_ids)
@@ -129,13 +133,13 @@ def main(base_url: str, platform_token: Optional[str]) -> None:
             ops = public.with_credentials(access_token=platform_token)
             print(ops.platform.status())
             print(
-                ops.platform.get_tenant(tenant.id).status,
+                ops.platform.tenants.get(tenant.id).status,
                 len(ops.platform.list_audit_logs()),
                 "audit records",
             )
 
         step("cleanup")
-        admin.api_keys.revoke(key.id)
+        admin.tenant.api_keys.revoke(key.id)
         print("revoked", key.prefix)
         admin.close()
         store.close()

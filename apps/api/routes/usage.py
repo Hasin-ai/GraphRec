@@ -2,14 +2,17 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request
+from datetime import datetime, timedelta, timezone
+
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from graphrec_core.auth.principal import AuthenticatedPrincipal, authenticated_principal
 from graphrec_core.database.session import get_db
 from graphrec_core.errors import ApiError
 from graphrec_core.registration.rate_limit import RegistrationRateLimiter
-from graphrec_core.schemas.usage import UsageSummaryResponse
+from graphrec_core.schemas.usage import Granularity, UsageSummaryResponse, UsageTrendResponse
+from graphrec_core.usage.trends import usage_trend
 from graphrec_core.settings import get_settings
 from graphrec_core.usage.service import UsageService
 
@@ -53,3 +56,24 @@ def get_usage(
 
     correlation_id: UUID = request.state.correlation_id
     return UsageService(db).get_current(principal, correlation_id=correlation_id)
+
+
+@router.get("/usage/trends", response_model=UsageTrendResponse)
+def get_usage_trends(
+    granularity: Granularity = Query("day"),
+    start: datetime | None = Query(None, description="Inclusive ISO-8601 start (default: 30 days before end)."),
+    end: datetime | None = Query(None, description="Exclusive ISO-8601 end (default: now)."),
+    types: str | None = Query(None, description="Comma-separated usage types (default: all metered types)."),
+    principal: AuthenticatedPrincipal = Depends(authenticated_principal),
+    db: Session = Depends(get_db),
+) -> UsageTrendResponse:
+    """XR-F-07: usage summarized by period and usage type for the caller's tenant."""
+    principal.require_scope("usage:read")
+    retry_after = usage_limiter.check(principal.limiter_subject)
+    if retry_after is not None:
+        raise ApiError(429, "rate_limit_exceeded", "Usage read limit exceeded", retryable=True, retry_after_seconds=retry_after)
+    end = end or datetime.now(timezone.utc)
+    start = start or end - timedelta(days=30)
+    selected = [t.strip() for t in types.split(",") if t.strip()] if types else None
+    return UsageTrendResponse.model_validate(usage_trend(db, principal.tenant_id, start=start, end=end,
+                                                         granularity=granularity, usage_types=selected))

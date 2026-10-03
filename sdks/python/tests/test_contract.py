@@ -21,7 +21,9 @@ from graphrec_sdk.resources import api_keys as api_keys_resource
 from graphrec_sdk.resources import datasets as datasets_resource
 from graphrec_sdk.resources import ml as ml_resource
 from graphrec_sdk.resources import platform as platform_resource
+from graphrec_sdk.resources import policies as policies_resource
 from graphrec_sdk.resources import recommendations as rec_resource
+from graphrec_sdk.resources import tenant_users as tenant_users_resource
 from graphrec_sdk.resources import tenants as tenants_resource
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -135,8 +137,12 @@ def _parse_router_file(path: Path, decorator_target: str) -> List[ServerRoute]:
                     continue
                 elif annotation and annotation.split("[")[0] not in NON_BODY_ANNOTATIONS:
                     route.body = "json"
+            # Follow calls to module-level helpers (``get_tenant_quota(...)``), but not
+            # method calls that merely share a name (``service.get_product(...)``).
             bodies = [node] + [
-                helpers[_call_name(c)] for c in _calls_in(node) if _call_name(c) in helpers
+                helpers[c.func.id]
+                for c in _calls_in(node)
+                if isinstance(c.func, ast.Name) and c.func.id in helpers
             ]
             for body in bodies:
                 for call in _calls_in(body):
@@ -164,6 +170,7 @@ def server_routes() -> Dict[Tuple[str, str], ServerRoute]:
 class SchemaField:
     name: str
     required: bool
+    nullable: bool = False
 
 
 def _schema_classes() -> Dict[str, Tuple[List[str], List[SchemaField]]]:
@@ -192,7 +199,9 @@ def _schema_classes() -> Dict[str, Tuple[List[str], List[SchemaField]]]:
                         ) or (first is None and not has_default)
                     else:
                         required = False
-                    fields.append(SchemaField(name, required))
+                    annotation = ast.unparse(statement.annotation)
+                    nullable = "None" in annotation or "Optional[" in annotation
+                    fields.append(SchemaField(name, required, nullable))
             bases = [ast.unparse(base) for base in node.bases]
             classes[node.name] = (bases, fields)
     return classes
@@ -272,10 +281,21 @@ RESPONSE_MODELS: List[Tuple[str, Type[BaseModel]]] = [
     ("PlatformFailureListResponse", m.PlatformFailureList),
     ("PlatformAuditItem", m.AuditRecord),
     ("PlatformAuditListResponse", m.AuditRecordList),
+    ("EventItemOutcome", m.EventItemOutcome),
+    ("TenantUserResource", m.TenantUser),
+    ("TenantUserInviteResponse", m.TenantUserInvitation),
+    ("TenantUserListResponse", m.TenantUserList),
+    ("UsageTrendBucket", m.UsageTrendBucket),
+    ("UsageTrendResponse", m.UsageTrend),
+    ("RateLimiterStatus", m.RateLimiterStatus),
+    ("CapacityEventResource", m.CapacityEvent),
+    ("ScalingStatus", m.ScalingStatus),
+    ("RecommendationPolicyResource", m.RecommendationPolicy),
+    ("RetrainingPolicyResource", m.RetrainingPolicy),
 ]
 
 #: Fields the SDK computes itself and never expects from the server.
-SDK_ONLY_FIELDS = {"request_count"}
+SDK_ONLY_FIELDS = {"request_count", "sync_ids"}
 
 
 @pytest.mark.parametrize(("schema", "model"), RESPONSE_MODELS, ids=[s for s, _ in RESPONSE_MODELS])
@@ -289,6 +309,23 @@ def test_response_models_match_server_schemas(schema: str, model: Type[BaseModel
     }
     assert not unexpected_required
     assert set(sdk) - set(server) <= SDK_ONLY_FIELDS
+    # A field the server may send as null must accept null in the SDK model.
+    not_nullable = {
+        name
+        for name, f in server.items()
+        if f.nullable and name in sdk and not _accepts_none(sdk[name].annotation)
+    }
+    assert not not_nullable, f"{model.__name__} rejects null for {not_nullable}"
+
+
+def _accepts_none(annotation: object) -> bool:
+    from pydantic import TypeAdapter, ValidationError
+
+    try:
+        TypeAdapter(annotation).validate_python(None)
+    except ValidationError:
+        return False
+    return True
 
 
 # -- request payloads -------------------------------------------------------------------
@@ -335,6 +372,13 @@ REQUEST_BODIES = [
     ),
     ("TenantStatusUpdate", lambda: platform_resource._status_body("suspended")),
     ("QuotaOverrideUpdate", lambda: platform_resource._quota_body({"accepted_events": 1})),
+    ("QuotaOverrideUpdate", lambda: platform_resource._quota_body({"accepted_events": 1}, True)),
+    ("PlanAssignment", lambda: platform_resource._assign_body("3f0e2b8e-9c1d-4c1e-8e2a-000000000001", True)),
+    ("PlanUpdate", lambda: platform_resource._plan_body("Free", {"accepted_events": 1}, True, True)),
+    ("RecoveryIssue", lambda: {"email": "a@b.test"}),
+    ("TenantUserInvite", lambda: tenant_users_resource._invite_body("a@b.test", "tenant_developer", "A")),
+    ("RecommendationPolicyUpdate", lambda: policies_resource._recommendation_body(None, {})),
+    ("RetrainingPolicyUpdate", lambda: policies_resource._retraining_body(None, {"epochs": 2})),
     ("LoginRequest", lambda: {"email": "a@b.test", "password": "x"}),
     ("SetupPasswordRequest", lambda: tenants_resource._setup_body("t" * 43, "x" * 8, "a@b.test")),
     ("TenantRegistrationRequest", lambda: {"name": "n", "admin_email": "a@b.test"}),
@@ -398,3 +442,44 @@ def test_role_and_delegation_scopes_match_server() -> None:
     assert _string_set(api_key_scopes["DEVELOPER_DELEGATED_SCOPES"], api_key_scopes) == set(
         g.DELEGATABLE_SCOPES["tenant_developer"]
     )
+
+
+# -- request models mirror server bounds -------------------------------------------------
+
+POLICY_MODELS = [
+    ("RecommendationPolicyUpdate", m.RecommendationPolicyUpdate),
+    ("RetrainingPolicyUpdate", m.RetrainingPolicyUpdate),
+]
+
+
+@pytest.mark.parametrize(("schema", "model"), POLICY_MODELS, ids=[s for s, _ in POLICY_MODELS])
+def test_policy_update_models_match_server_fields(schema: str, model: Type[BaseModel]) -> None:
+    assert set(schema_fields(schema)) == set(model.model_fields)
+
+
+# -- audience namespaces ---------------------------------------------------------------
+
+
+def _namespace_route_keys() -> Set[str]:
+    """Every route key referenced by a resource reachable from the client namespaces."""
+
+    import inspect
+    import re
+
+    client = g.GraphRec(api_key="gr_live_contract_test_key", use_env=False)
+    found: Set[str] = set()
+    for namespace in (client.storefront, client.tenant, client.platform):
+        objects = [namespace] + [v for v in vars(namespace).values() if hasattr(v, "_client")]
+        for obj in objects:
+            source = inspect.getsource(type(obj))
+            for base in type(obj).__mro__[1:]:
+                if base.__module__.startswith("graphrec_sdk.resources"):
+                    source += inspect.getsource(base)
+            found |= set(re.findall(r'"([a-z_]+\.[a-z_]+)"', source)) & set(g.ROUTES)
+    client.close()
+    return found
+
+
+def test_every_route_is_reachable_from_a_namespace() -> None:
+    reachable = _namespace_route_keys() | {"health.check"}
+    assert set(g.ROUTES) - reachable == set()

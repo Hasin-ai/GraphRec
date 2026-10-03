@@ -16,7 +16,6 @@ from . import conftest as fx
 from .conftest import MockAPI, error, make_async_client
 
 SYNC_TO_ASYNC = {
-    resources.Tenants: resources.AsyncTenants,
     resources.Authentication: resources.AsyncAuthentication,
     resources.ApiKeys: resources.AsyncApiKeys,
     resources.Subscriptions: resources.AsyncSubscriptions,
@@ -30,7 +29,11 @@ SYNC_TO_ASYNC = {
     resources.Metrics: resources.AsyncMetrics,
     resources.RecommendationsResource: resources.AsyncRecommendationsResource,
     resources.Feedback: resources.AsyncFeedback,
-    resources.Platform: resources.AsyncPlatform,
+    resources.PlatformTenants: resources.AsyncPlatformTenants,
+    resources.PlatformPlans: resources.AsyncPlatformPlans,
+    resources.PlatformOperations: resources.AsyncPlatformOperations,
+    resources.RecommendationPolicyResource: resources.AsyncRecommendationPolicyResource,
+    resources.RetrainingPolicyResource: resources.AsyncRetrainingPolicyResource,
     resources.TenantUsers: resources.AsyncTenantUsers,
 }
 
@@ -55,13 +58,30 @@ def test_async_resources_mirror_sync_signatures(sync_cls: type) -> None:
         assert str(inspect.signature(fn)) == str(inspect.signature(counterpart)), name
 
 
+def _resources(client: Any) -> Dict[str, type]:
+    found: Dict[str, type] = {}
+    for ns_name in ("storefront", "tenant", "platform"):
+        namespace = getattr(client, ns_name)
+        found[ns_name] = type(namespace)
+        for key, value in vars(namespace).items():
+            if not key.startswith("_"):
+                found[f"{ns_name}.{key}"] = type(value)
+    return found
+
+
 def test_clients_expose_the_same_resources() -> None:
     sync_client = g.GraphRec(use_env=False)
     async_client = g.AsyncGraphRec(use_env=False)
-    sync_attrs = {k: type(v) for k, v in vars(sync_client).items() if not k.startswith("_")}
-    async_attrs = {k: type(v) for k, v in vars(async_client).items() if not k.startswith("_")}
-    assert set(sync_attrs) == set(async_attrs) and len(sync_attrs) == len(SYNC_TO_ASYNC)
-    assert all(SYNC_TO_ASYNC[sync_attrs[k]] is async_attrs[k] for k in sync_attrs)
+    public = {k for k in vars(sync_client) if not k.startswith("_")}
+    assert public == {k for k in vars(async_client) if not k.startswith("_")}
+    assert public == {"storefront", "tenant", "platform"}
+    sync_attrs, async_attrs = _resources(sync_client), _resources(async_client)
+    assert set(sync_attrs) == set(async_attrs)
+    resource_keys = [k for k in sync_attrs if "." in k]
+    assert {sync_attrs[k] for k in resource_keys} | {g.resources.PlatformOperations} == set(SYNC_TO_ASYNC)
+    assert all(SYNC_TO_ASYNC[sync_attrs[k]] is async_attrs[k] for k in resource_keys)
+    assert issubclass(sync_attrs["platform"], g.resources.PlatformOperations)
+    assert issubclass(async_attrs["platform"], g.resources.AsyncPlatformOperations)
     sync_client.close()
     asyncio.run(async_client.close())
 
@@ -115,10 +135,10 @@ def test_async_retries_and_errors(api: MockAPI) -> None:
 
     async def main() -> None:
         async with make_async_client(api, sleeps) as client:
-            product = await client.products.get("sku-1")
+            product = await client.tenant.catalog.get("sku-1")
             assert product.external_id == "sku-1"
             with pytest.raises(g.NotFoundError):
-                await client.products.get("missing")
+                await client.tenant.catalog.get("missing")
 
     asyncio.run(main())
     assert sleeps == [2.0]
@@ -150,7 +170,7 @@ def test_async_timeout_maps_to_api_timeout_error(api: MockAPI) -> None:
     async def main() -> None:
         async with make_async_client(api) as client:
             with pytest.raises(g.APITimeoutError):
-                await client.training_jobs.create()
+                await client.tenant.training_jobs.create()
 
     asyncio.run(main())
     assert len(api.calls) == 1

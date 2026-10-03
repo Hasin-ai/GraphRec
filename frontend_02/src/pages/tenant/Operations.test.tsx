@@ -14,7 +14,7 @@ describe('operational state', () => {
     signInAsAdmin();
     mockFetch([{ path: '/v1/usage', body: usage }, { path: '/v1/subscription', body: { plan_code: 'free', status: 'active', limits: {} } }]);
     renderAt('/usage');
-    expect(await screen.findByText('1 limit is exhausted')).toBeInTheDocument();
+    expect(await screen.findByText('Training job limit reached')).toBeInTheDocument();
     expect(screen.getByRole('row', { name: /Training jobs/ })).toHaveTextContent('0 remaining');
     expect(screen.getByRole('row', { name: /Training jobs/ })).toHaveTextContent('Exhausted');
     expect(screen.getByRole('row', { name: /Stored products/ })).toHaveTextContent('Approaching limit');
@@ -53,9 +53,10 @@ describe('operational state', () => {
   });
   it('reads only permitted resources on a job detail and shows the actual failure', async () => {
     setTenantSession('reader@example.org', tokenPair({ scopes: ['training:read'] }));
-    const { calls } = mockFetch([{ path: '/v1/training-jobs', body: { items: [{ id: 'job-1', status: 'failed', configuration: { pretrained_artifact: 'checkpoint' }, model_version_id: 'model-1', failure_reason: 'Checkpoint has no compatible catalog items', created_at: '2026-09-18T00:00:00Z' }] } }]);
+    const { calls } = mockFetch([{ path: '/v1/training-jobs/job-1', body: { id: 'job-1', status: 'failed', configuration: { pretrained_artifact: 'checkpoint' }, model_version_id: 'model-1', failure_reason: 'Checkpoint has no compatible catalog items', created_at: '2026-09-18T00:00:00Z' } }]);
     renderAt('/training/job-1');
     expect(await screen.findByText('Checkpoint has no compatible catalog items')).toBeInTheDocument();
+    expect(calls.some(call => call.url.includes('/v1/training-jobs/job-1'))).toBe(true);
     expect(calls.some(call => call.url.includes('model-versions'))).toBe(false);
     expect(screen.queryByRole('button', { name: 'Cancel job' })).not.toBeInTheDocument();
   });
@@ -77,7 +78,7 @@ describe('operational state', () => {
     await act(async () => finish(new Response(JSON.stringify({ ...version, status: 'active' }))));
     expect(await screen.findByText('version-one activated.')).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(await screen.findByText('active', { selector: '.tag' })).toBeInTheDocument();
+    expect(await screen.findByText('Serving', { selector: '.tag' })).toBeInTheDocument();
   });
   it('clears catalog filters together without restoring either URL value', async () => {
     signInAsAdmin();
@@ -99,9 +100,19 @@ describe('operational state', () => {
     ]);
     renderAt('/products');
     await screen.findByText('First-page product');
-    await user.click(screen.getByRole('button', { name: 'Next' }));
+    await user.click(screen.getAllByRole('button', { name: 'Next' })[0]);
     await screen.findByText('Second page unavailable');
     expect(screen.queryByText('First-page product')).not.toBeInTheDocument();
     expect(calls.some(call => call.url.endsWith('offset=50'))).toBe(true);
+  });
+  it('shows the rate-limit store as degraded on Service Status when Redis is down (D16)', async () => {
+    signInAsAdmin();
+    mockFetch([{ path: '/v1/deployment', body: { status: 'stopped', active_model_version_id: null, last_transition_at: null, failure_reason: null,
+      rate_limiter: { backend: 'redis', status: 'degraded', fail_open_total: 7, last_error_at: '2026-10-01T17:00:00Z' } } }]);
+    renderAt('/service-status');
+    expect(await screen.findByText('Rate-limit store unavailable')).toBeInTheDocument();
+    expect(screen.getByText('degraded', { selector: '.tag' })).toBeInTheDocument();
+    expect(screen.getByText('Redis')).toBeInTheDocument();
+    expect(screen.getByText('7')).toBeInTheDocument();
   });
 });

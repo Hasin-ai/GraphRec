@@ -1,4 +1,0 @@
-tests/
-examples/
-tsconfig*.json
-vitest.config.ts

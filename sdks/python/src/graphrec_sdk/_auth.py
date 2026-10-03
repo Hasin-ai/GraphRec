@@ -8,8 +8,8 @@ GraphRec accepts two ``Authorization`` schemes:
   ``POST /v1/auth/login`` for tenant users. Required for API-key management.
 
 The API has no refresh endpoint, so :class:`PasswordAuth` transparently logs in
-again shortly before the access token expires or when the server answers
-``token_expired``.
+again shortly before the access token expires, and once more when the server
+rejects its token (expired, or revoked by a logout or password recovery).
 """
 
 from __future__ import annotations

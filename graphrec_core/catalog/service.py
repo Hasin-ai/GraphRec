@@ -7,13 +7,15 @@ from uuid import UUID, uuid4
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from graphrec_core.database.models import Product, UsageEvent
+from graphrec_core.database.models import CatalogSync, Product, UsageEvent
 from graphrec_core.errors import ApiError
+from graphrec_core.ingestion.idempotency import payload_hash
 from graphrec_core.usage.limits import lock_dimension, require_capacity
 from graphrec_core.schemas.products import (
     ProductBulkFailure,
     ProductBulkUpsertRequest,
     ProductBulkUpsertResponse,
+    CatalogSyncResource,
     ProductResource,
     ProductUpsert,
 )
@@ -27,6 +29,15 @@ class CatalogService:
         self, tenant_id: UUID, payload: ProductBulkUpsertRequest
     ) -> ProductBulkUpsertResponse:
         lock_dimension(self.db, tenant_id, "stored_products")
+        digest = payload_hash(payload)
+        if payload.request_id:
+            previous = self.db.scalar(select(CatalogSync).where(
+                CatalogSync.tenant_id == tenant_id, CatalogSync.request_id == payload.request_id,
+            ))
+            if previous is not None:
+                if previous.payload_hash != digest:
+                    raise ApiError(409, "idempotency_conflict", "Request ID was already used with different content.")
+                return self._sync_response(previous)
         identifiers = {item.external_id for item in payload.products}
         existing_ids = set(self.db.scalars(select(Product.external_id).where(
             Product.tenant_id == tenant_id, Product.external_id.in_(identifiers))))
@@ -37,6 +48,7 @@ class CatalogService:
         skipped_count = 0
         rejected_count = 0
         failures: list[ProductBulkFailure] = []
+        outcomes: list[dict[str, str]] = []
 
         seen_ids: set[str] = set()
 
@@ -49,6 +61,7 @@ class CatalogService:
                         reason="Duplicate item external_id within batch",
                     )
                 )
+                outcomes.append({"external_id": item.external_id, "status": "rejected", "reason": "duplicate_in_batch"})
                 continue
             seen_ids.add(item.external_id)
 
@@ -68,6 +81,7 @@ class CatalogService:
                 existing.metadata_json = item.metadata
                 existing.updated_at = now
                 updated_count += 1
+                outcomes.append({"external_id": item.external_id, "status": "updated"})
             else:
                 product = Product(
                     id=uuid4(),
@@ -85,6 +99,7 @@ class CatalogService:
                 )
                 self.db.add(product)
                 created_count += 1
+                outcomes.append({"external_id": item.external_id, "status": "created"})
 
         accepted_count = created_count + updated_count
 
@@ -100,16 +115,49 @@ class CatalogService:
             )
             self.db.add(usage_record)
 
+        sync = CatalogSync(
+            id=uuid4(), tenant_id=tenant_id, request_id=payload.request_id,
+            payload_hash=digest, status="completed", accepted_count=accepted_count,
+            created_count=created_count, updated_count=updated_count,
+            skipped_count=skipped_count, rejected_count=rejected_count,
+            outcomes=outcomes, created_at=now,
+        )
+        self.db.add(sync)
         self.db.commit()
 
         return ProductBulkUpsertResponse(
+            sync_id=sync.id, status=sync.status, request_id=sync.request_id,
             accepted_count=accepted_count,
             created_count=created_count,
             updated_count=updated_count,
             skipped_count=skipped_count,
             rejected_count=rejected_count,
             failures=failures,
+            outcomes=outcomes,
         )
+
+    @staticmethod
+    def _sync_response(sync: CatalogSync) -> ProductBulkUpsertResponse:
+        return ProductBulkUpsertResponse(
+            sync_id=sync.id, status=sync.status, request_id=sync.request_id,
+            accepted_count=sync.accepted_count, created_count=sync.created_count,
+            updated_count=sync.updated_count, skipped_count=sync.skipped_count,
+            rejected_count=sync.rejected_count,
+            failures=[ProductBulkFailure(external_id=o["external_id"], reason="Duplicate item external_id within batch")
+                      for o in sync.outcomes if o["status"] == "rejected"],
+            outcomes=sync.outcomes,
+        )
+
+    def list_syncs(self, tenant_id: UUID) -> list[CatalogSyncResource]:
+        rows = self.db.scalars(select(CatalogSync).where(CatalogSync.tenant_id == tenant_id)
+                               .order_by(CatalogSync.created_at.desc()).limit(100)).all()
+        return [CatalogSyncResource(**self._sync_response(row).model_dump(), created_at=row.created_at) for row in rows]
+
+    def get_sync(self, tenant_id: UUID, sync_id: UUID) -> CatalogSyncResource:
+        row = self.db.scalar(select(CatalogSync).where(CatalogSync.tenant_id == tenant_id, CatalogSync.id == sync_id))
+        if row is None:
+            raise ApiError(404, "resource_not_found", f"Catalog sync '{sync_id}' not found.")
+        return CatalogSyncResource(**self._sync_response(row).model_dump(), created_at=row.created_at)
 
     def count_products(self, tenant_id: UUID, external_ids: list[str] | None = None) -> int:
         query = select(func.count(Product.id)).where(Product.tenant_id == tenant_id)

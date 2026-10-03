@@ -40,7 +40,7 @@ def main() -> None:
         print("API health:", client.health())
 
         # 1. Keep the catalog in sync (split automatically to respect the 16 KiB body limit).
-        result = client.products.bulk_upsert(CATALOG)
+        result = client.tenant.catalog.bulk_upsert(CATALOG)
         print(f"catalog: created={result.created_count} updated={result.updated_count}")
 
         # 2. Record what shoppers do. Events are buffered and sent in batches.
@@ -59,7 +59,7 @@ def main() -> None:
             widget.convert(recs, clicked, value="59.00")
 
         try:
-            client.products.get("does-not-exist")
+            client.tenant.catalog.get("does-not-exist")
         except NotFoundError as exc:
             print("expected 404, correlation id:", exc.correlation_id)
 

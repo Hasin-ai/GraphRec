@@ -3,6 +3,7 @@ import {
   SESSION_EVENT,
   clearPlatformSession,
   clearTenantSession,
+  markExplicitSignOut,
   getPlatformSession,
   getTenantSession,
   hasScope,
@@ -45,7 +46,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       tenant,
       platform,
       can: (scope) => hasScope(tenant, scope),
-      signOutTenant: () => clearTenantSession(),
+      signOutTenant: () => {
+        // Revoke the session server-side (best effort) before dropping it locally.
+        const token = tenant?.accessToken;
+        if (token) {
+          const base = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+          void fetch(`${base}/v1/auth/logout`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+            keepalive: true,
+          }).catch(() => undefined);
+        }
+        markExplicitSignOut();
+        clearTenantSession();
+      },
       signOutPlatform: () => clearPlatformSession(),
       refresh,
     }),

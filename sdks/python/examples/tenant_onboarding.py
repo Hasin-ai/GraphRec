@@ -12,7 +12,7 @@ from graphrec_sdk import STOREFRONT_KEY_SCOPES, GraphRec
 
 def main(business_name: str, admin_email: str, password: str) -> None:
     with GraphRec(use_env=False) as public:
-        tenant = public.tenants.register(name=business_name, admin_email=admin_email)
+        tenant = public.tenant.auth.register(name=business_name, admin_email=admin_email)
         print(f"tenant {tenant.id} ({tenant.status}) - next step: {tenant.next_step}")
         if tenant.setup_token is None:
             raise SystemExit(
@@ -20,20 +20,20 @@ def main(business_name: str, admin_email: str, password: str) -> None:
                 "returned again. Issue a new one with: docker compose exec api "
                 f"python -m scripts.issue_account_setup_token {admin_email}"
             )
-        public.auth.setup_password(
+        public.tenant.auth.setup_password(
             setup_token=tenant.setup_token, password=password, email=admin_email
         )
 
         # The admin client logs in on demand and renews its 15-minute token automatically.
         admin = public.with_credentials(email=admin_email, password=password)
-        plan = admin.subscription.get()
+        plan = admin.tenant.subscription.get()
         print(f"plan={plan.plan_code} limits={plan.limits}")
 
-        key = admin.api_keys.create(name="storefront-backend", scopes=STOREFRONT_KEY_SCOPES)
+        key = admin.tenant.api_keys.create(name="storefront-backend", scopes=STOREFRONT_KEY_SCOPES)
         print("Store this secret now - it is shown only once:")
         print(f"  GRAPHREC_API_KEY={key.secret}")
 
-        usage = admin.usage.get()
+        usage = admin.tenant.usage.get()
         for dimension in usage.dimensions:
             limit = "unlimited" if dimension.limit is None else dimension.limit
             print(f"  {dimension.type:<26} {dimension.used} / {limit} {dimension.unit}")

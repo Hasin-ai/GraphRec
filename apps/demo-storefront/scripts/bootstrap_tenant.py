@@ -66,16 +66,16 @@ def main() -> int:
     print(public.health())
 
     step("register tenant")
-    tenant = public.tenants.register(name=f"{args.name} {suffix}", admin_email=email)
+    tenant = public.tenant.auth.register(name=f"{args.name} {suffix}", admin_email=email)
     if not tenant.setup_token:
         raise SystemExit("Registration replayed without a setup token; choose a different --email.")
-    public.auth.setup_password(setup_token=tenant.setup_token, password=password, email=email)
+    public.tenant.auth.setup_password(setup_token=tenant.setup_token, password=password, email=email)
     print(f"tenant {tenant.id} - admin {email}")
 
     admin = public.with_credentials(email=email, password=password)
     step("API keys")
-    storefront = admin.api_keys.create(name="facet-storefront", scopes=STOREFRONT_KEY_SCOPES)
-    seed = admin.api_keys.create(name="facet-seed", scopes=SEED_KEY_SCOPES)
+    storefront = admin.tenant.api_keys.create(name="facet-storefront", scopes=STOREFRONT_KEY_SCOPES)
+    seed = admin.tenant.api_keys.create(name="facet-seed", scopes=SEED_KEY_SCOPES)
     print(f"storefront key {storefront.prefix}... scopes={list(storefront.scopes)}")
     print(f"seed key       {seed.prefix}... scopes={list(seed.scopes)}")
 

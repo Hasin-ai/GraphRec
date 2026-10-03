@@ -1,3 +1,5 @@
+"""Tenant sign-up and tenant-user authentication (``/v1/tenants``, ``/v1/auth/*``)."""
+
 from __future__ import annotations
 
 from typing import Dict, Optional, cast
@@ -6,10 +8,25 @@ from .._ids import new_idempotency_key
 from ..models.auth import AuthTokenPair, TenantRegistration
 from ._base import AsyncResource, SyncResource
 
-__all__ = ["AsyncAuthentication", "AsyncTenants", "Authentication", "Tenants"]
+__all__ = ["AsyncAuthentication", "Authentication"]
 
 
-class Tenants(SyncResource):
+def _register_body(name: str, admin_email: str) -> Dict[str, str]:
+    return {"name": name, "admin_email": admin_email}
+
+
+def _setup_body(
+    setup_token: str, password: str, email: Optional[str], *, key: str = "setup_token"
+) -> Dict[str, str]:
+    body = {key: setup_token, "password": password}
+    if email is not None:
+        body["email"] = email
+    return body
+
+
+class Authentication(SyncResource):
+    """Registration, sign-in, account setup/recovery and sign-out for tenant users."""
+
     def register(
         self, *, name: str, admin_email: str, idempotency_key: Optional[str] = None
     ) -> TenantRegistration:
@@ -20,45 +37,25 @@ class Tenants(SyncResource):
         tenant. Pass your own key to stay idempotent across process restarts.
 
         The result carries a one-time ``setup_token`` that activates the
-        administrator through :meth:`Authentication.setup_password`. Keep it
-        secret. It is returned only once: a replayed registration has
-        ``setup_token=None``, and an operator has to issue a new one.
+        administrator through :meth:`setup_password`. Keep it secret. It is
+        returned only once: a replayed registration has ``setup_token=None``.
         """
 
         return cast(
             TenantRegistration,
             self._client.request(
                 "tenants.register",
-                json={"name": name, "admin_email": admin_email},
+                json=_register_body(name, admin_email),
                 idempotency_key=idempotency_key or new_idempotency_key(),
                 cast_to=TenantRegistration,
             ),
         )
 
-
-class AsyncTenants(AsyncResource):
-    async def register(
-        self, *, name: str, admin_email: str, idempotency_key: Optional[str] = None
-    ) -> TenantRegistration:
-        """Async variant of :meth:`Tenants.register`."""
-
-        return cast(
-            TenantRegistration,
-            await self._client.request(
-                "tenants.register",
-                json={"name": name, "admin_email": admin_email},
-                idempotency_key=idempotency_key or new_idempotency_key(),
-                cast_to=TenantRegistration,
-            ),
-        )
-
-
-class Authentication(SyncResource):
     def login(self, *, email: str, password: str) -> AuthTokenPair:
         """Exchange a tenant user's email and password for tokens (``POST /v1/auth/login``).
 
         Tip: create the client with ``email=``/``password=`` instead and the SDK
-        will log in and re-login automatically when the 15-minute token expires.
+        logs in, and logs in again when the 15-minute token expires.
         """
 
         return cast(
@@ -73,12 +70,11 @@ class Authentication(SyncResource):
     ) -> AuthTokenPair:
         """Activate an invited account with its one-time setup token and choose a password.
 
-        ``POST /v1/auth/setup-password`` - ``setup_token`` comes from
-        :attr:`TenantRegistration.setup_token` (or an operator reissue). It can be
-        used once, expires, and only activates accounts that are still invited.
-        Pass ``email`` to have the server confirm the token belongs to that
-        address. Passwords must be at least 8 characters. Every rejection is an
-        :class:`AuthenticationError` with code ``invalid_setup_token``.
+        ``POST /v1/auth/setup-password`` - ``setup_token`` comes from a
+        registration, an invitation or an operator reissue. It can be used once,
+        expires, and only activates accounts that are still invited. Pass
+        ``email`` to have the server confirm the token belongs to that address.
+        Every rejection is an :class:`~graphrec_sdk.AuthenticationError`.
         """
 
         return cast(
@@ -90,8 +86,55 @@ class Authentication(SyncResource):
             ),
         )
 
+    def recover_password(
+        self, *, recovery_token: str, password: str, email: Optional[str] = None
+    ) -> Dict[str, str]:
+        """Set a new password with an operator-issued recovery token.
+
+        ``POST /v1/auth/recover-password`` - public. Existing sessions of the
+        account are invalidated. Returns ``{"status": "completed"}``.
+        """
+
+        return cast(
+            Dict[str, str],
+            self._client.request(
+                "auth.recover_password",
+                json=_setup_body(recovery_token, password, email, key="recovery_token"),
+                cast_to=Dict[str, str],
+            ),
+        )
+
+    def logout(self) -> None:
+        """End every session of the signed-in user (``POST /v1/auth/logout``, bearer only).
+
+        All access tokens of the user stop working immediately and refresh
+        sessions are revoked. A client created with ``email=``/``password=``
+        forgets its cached token, so its next call signs in again.
+        """
+
+        self._client.request("auth.logout", cast_to=None)
+        if self._client.auth is not None:
+            self._client.auth.invalidate()
+
 
 class AsyncAuthentication(AsyncResource):
+    """Async variant of :class:`Authentication`."""
+
+    async def register(
+        self, *, name: str, admin_email: str, idempotency_key: Optional[str] = None
+    ) -> TenantRegistration:
+        """Async variant of :meth:`Authentication.register`."""
+
+        return cast(
+            TenantRegistration,
+            await self._client.request(
+                "tenants.register",
+                json=_register_body(name, admin_email),
+                idempotency_key=idempotency_key or new_idempotency_key(),
+                cast_to=TenantRegistration,
+            ),
+        )
+
     async def login(self, *, email: str, password: str) -> AuthTokenPair:
         """Async variant of :meth:`Authentication.login`."""
 
@@ -116,9 +159,23 @@ class AsyncAuthentication(AsyncResource):
             ),
         )
 
+    async def recover_password(
+        self, *, recovery_token: str, password: str, email: Optional[str] = None
+    ) -> Dict[str, str]:
+        """Async variant of :meth:`Authentication.recover_password`."""
 
-def _setup_body(setup_token: str, password: str, email: Optional[str]) -> Dict[str, str]:
-    body = {"setup_token": setup_token, "password": password}
-    if email is not None:
-        body["email"] = email
-    return body
+        return cast(
+            Dict[str, str],
+            await self._client.request(
+                "auth.recover_password",
+                json=_setup_body(recovery_token, password, email, key="recovery_token"),
+                cast_to=Dict[str, str],
+            ),
+        )
+
+    async def logout(self) -> None:
+        """Async variant of :meth:`Authentication.logout`."""
+
+        await self._client.request("auth.logout", cast_to=None)
+        if self._client.auth is not None:
+            self._client.auth.invalidate()

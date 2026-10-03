@@ -105,7 +105,7 @@ async def main(argv=None) -> int:
         else:
             step("4. dataset snapshot")
             try:
-                snapshot = await client.datasets.create_snapshot(description=f"{SEED_VERSION} {datetime.now(timezone.utc):%Y-%m-%d %H:%M}")
+                snapshot = await client.tenant.datasets.create_snapshot(description=f"{SEED_VERSION} {datetime.now(timezone.utc):%Y-%m-%d %H:%M}")
             except PermissionDeniedError as error:
                 raise SystemExit(
                     "The key lacks training scopes. Set GRAPHREC_SEED_API_KEY to a key with training:write, models:write and models:deploy "
@@ -115,15 +115,15 @@ async def main(argv=None) -> int:
             summary["snapshot"] = str(snapshot.id)
 
             step("5. training job (placeholder training: synchronous, random item vectors, no offline metrics)")
-            job = await client.training_jobs.create(dataset_snapshot_id=snapshot.id, configuration={"seed": SEED_VERSION})
-            job = await client.training_jobs.wait(job.id, timeout=300, poll_interval=2)
+            job = await client.tenant.training_jobs.create(dataset_snapshot_id=snapshot.id, configuration={"seed": SEED_VERSION})
+            job = await client.tenant.training_jobs.wait(job.id, timeout=300, poll_interval=2)
             print(f"job {job.id}: {job.status}; model version {job.model_version_id}")
             if job.status != "succeeded" or not job.model_version_id:
                 raise SystemExit(f"Training did not succeed: {job.failure_reason}")
             summary["job"] = str(job.id)
 
             step("6. activate model version")
-            version = await client.model_versions.activate(job.model_version_id)
+            version = await client.tenant.model_versions.activate(job.model_version_id)
             print(f"version {version.version_tag} ({version.id}) is {version.status}; metrics={version.metrics or 'none reported'}")
             summary["model_version"] = str(version.id)
 
@@ -131,9 +131,9 @@ async def main(argv=None) -> int:
         statuses = set()
         for key, persona in PERSONAS.items():
             if persona.user_id:
-                recs = await client.recommendations.get(user_id=persona.user_id, top_n=args.top_n)
+                recs = await client.storefront.recommendations.get(user_id=persona.user_id, top_n=args.top_n)
             else:
-                recs = await client.recommendations.for_session("sess_seed_check", top_n=args.top_n)
+                recs = await client.storefront.recommendations.for_session("sess_seed_check", top_n=args.top_n)
             label = proof_label(recs, verified_version)
             statuses.add(label)
             print(f"  {persona.name:<12} {label:<16} strategy={recs.strategy:<17} version={recs.model_version_id} -> {recs.product_ids}")

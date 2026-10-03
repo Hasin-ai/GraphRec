@@ -17,6 +17,8 @@ from apps.api.routes.model_versions import router as model_versions_router
 from apps.api.routes.platform import router as platform_router
 from apps.api.routes.products import router as products_router
 from apps.api.routes.recommendations import router as recommendations_router
+from apps.api.routes.retraining import router as retraining_router
+from apps.api.routes.recommendation_policy import router as recommendation_policy_router
 from apps.api.routes.subscriptions import router as subscriptions_router
 from apps.api.routes.tenant_users import router as tenant_users_router
 from apps.api.routes.tenants import router as tenants_router
@@ -47,6 +49,8 @@ app.include_router(datasets_router)
 app.include_router(model_versions_router)
 app.include_router(deployment_router)
 app.include_router(recommendations_router)
+app.include_router(retraining_router)
+app.include_router(recommendation_policy_router)
 app.include_router(platform_router)
 
 

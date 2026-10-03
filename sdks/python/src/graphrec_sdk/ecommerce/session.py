@@ -16,7 +16,7 @@
 Clicks are linked to the impression automatically and positions are looked up
 from the original response. Store ``recs.request_id`` (e.g. in the page or the
 cart line) if the click happens in another process, then call
-``client.feedback.click(request_id, product_id, position=...)`` directly.
+``client.storefront.feedback.click(request_id, product_id, position=...)`` directly.
 """
 
 from __future__ import annotations
@@ -94,23 +94,23 @@ class RecommendationSession:
 
         args = _request_args(user_id, top_n, context, exclude_product_ids)
         if session_id is not None:
-            recs = self._client.recommendations.for_session(
+            recs = self._client.storefront.recommendations.for_session(
                 session_id, recent_product_ids=recent_product_ids, **args
             )
         else:
-            recs = self._client.recommendations.get(**args)
+            recs = self._client.storefront.recommendations.get(**args)
         if self.auto_impression and recs.items:
             self.impression(recs)
         return recs
 
     def impression(self, recs: Recommendations, **options: Any) -> FeedbackReceipt:
-        receipt = self._client.feedback.impression(recs, **options)
+        receipt = self._client.storefront.feedback.impression(recs, **options)
         self._impressions.put(recs.request_id, receipt.event_id)
         return receipt
 
     def click(self, recs: Recommendations, product_id: str, **options: Any) -> FeedbackReceipt:
         options.setdefault("impression_event_id", self._impressions.get(recs.request_id))
-        return self._client.feedback.click(recs, product_id, **options)
+        return self._client.storefront.feedback.click(recs, product_id, **options)
 
     def convert(
         self,
@@ -120,7 +120,7 @@ class RecommendationSession:
         value: Optional[Money] = None,
         **options: Any,
     ) -> FeedbackReceipt:
-        return self._client.feedback.conversion(recs, product_id, value=value, **options)
+        return self._client.storefront.feedback.conversion(recs, product_id, value=value, **options)
 
 
 class AsyncRecommendationSession:
@@ -145,17 +145,17 @@ class AsyncRecommendationSession:
     ) -> Recommendations:
         args = _request_args(user_id, top_n, context, exclude_product_ids)
         if session_id is not None:
-            recs = await self._client.recommendations.for_session(
+            recs = await self._client.storefront.recommendations.for_session(
                 session_id, recent_product_ids=recent_product_ids, **args
             )
         else:
-            recs = await self._client.recommendations.get(**args)
+            recs = await self._client.storefront.recommendations.get(**args)
         if self.auto_impression and recs.items:
             await self.impression(recs)
         return recs
 
     async def impression(self, recs: Recommendations, **options: Any) -> FeedbackReceipt:
-        receipt = await self._client.feedback.impression(recs, **options)
+        receipt = await self._client.storefront.feedback.impression(recs, **options)
         self._impressions.put(recs.request_id, receipt.event_id)
         return receipt
 
@@ -163,7 +163,7 @@ class AsyncRecommendationSession:
         self, recs: Recommendations, product_id: str, **options: Any
     ) -> FeedbackReceipt:
         options.setdefault("impression_event_id", self._impressions.get(recs.request_id))
-        return await self._client.feedback.click(recs, product_id, **options)
+        return await self._client.storefront.feedback.click(recs, product_id, **options)
 
     async def convert(
         self,
@@ -173,4 +173,5 @@ class AsyncRecommendationSession:
         value: Optional[Money] = None,
         **options: Any,
     ) -> FeedbackReceipt:
-        return await self._client.feedback.conversion(recs, product_id, value=value, **options)
+        feedback = self._client.storefront.feedback
+        return await feedback.conversion(recs, product_id, value=value, **options)

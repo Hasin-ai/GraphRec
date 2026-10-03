@@ -1,10 +1,4 @@
-"""Serving status schemas.
-
-Every field here is either read from tenant state in PostgreSQL or measured
-from the ``serving_requests`` ledger. Fields the platform does not observe —
-replica counts, autoscaling bounds, capacity — are deliberately absent rather
-than reported with nominal values.
-"""
+"""Serving transition and measured traffic schemas."""
 from __future__ import annotations
 
 from datetime import datetime
@@ -14,13 +8,25 @@ from uuid import UUID
 from pydantic import BaseModel
 
 
+class RateLimiterStatus(BaseModel):
+    """D16: shared admission-control backend (Redis) as seen by this API process."""
+
+    backend: str
+    status: str  # ok | degraded (Redis unreachable; failing open) | disabled
+    fail_open_total: int = 0
+    last_error_at: str | None = None
+
+
 class DeploymentStatus(BaseModel):
-    #: "available" when a model version is active, otherwise "stopped".
+    id: UUID | None = None
+    desired_model_version_id: UUID | None = None
     status: str
     active_model_version_id: UUID | None = None
-    #: When the active version was activated; null when nothing is active.
+    desired_capacity: int = 1
+    ready_capacity: int = 0
     last_transition_at: datetime | None = None
     failure_reason: str | None = None
+    rate_limiter: RateLimiterStatus | None = None
 
 
 class QualitySummary(BaseModel):
@@ -50,3 +56,33 @@ class MetricsSummary(BaseModel):
     p95_latency_ms: int | None = None
     active_model_version_id: UUID | None = None
     quality: QualitySummary | None = None
+
+
+class CapacityEventResource(BaseModel):
+    id: UUID
+    model_version_id: UUID | None = None
+    from_capacity: int
+    to_capacity: int
+    reason: str
+    measured_rpm: int
+    peak_rpm: int
+    max_capacity: int
+    occurred_at: datetime
+
+
+class ScalingStatus(BaseModel):
+    """XR-F-08: capacity policy, current capacity, live demand and recent scaling events."""
+
+    managed: bool
+    desired_capacity: int
+    ready_capacity: int
+    min_capacity: int = 1
+    max_capacity: int
+    serving_slots: int | None
+    target_rpm_per_replica: int
+    scale_down_stabilization_seconds: int
+    measured_rpm: int
+    peak_rpm: int
+    last_scaled_at: datetime | None = None
+    events: list[CapacityEventResource]
+    limitation: str

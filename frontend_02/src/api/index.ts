@@ -22,10 +22,12 @@ import type {
   PlatformTenant,
   PlatformTenantStatus,
   ProductBulkUpsertResponse,
+  CatalogSyncResource,
   ProductListResponse,
   ProductResource,
   ProductUpsert,
   SetupPasswordInput,
+  RecoverPasswordInput,
   SubscriptionResult,
   TenantRegistrationInput,
   TenantRegistrationResult,
@@ -35,6 +37,14 @@ import type {
   TenantUserResource,
   TenantUserInvitation,
   TenantUserRole,
+  RetrainingPolicy,
+  RetrainingPolicyInput,
+  RecommendationPolicy,
+  RecommendationPolicyInput,
+  UsageTrend,
+  TrendGranularity,
+  ScalingStatus,
+  RecommendationResult,
 } from "./types";
 
 const enc = encodeURIComponent;
@@ -43,6 +53,7 @@ export const tenantUsers = {
   list: () => request<{ items: TenantUserResource[]; total: number }>("/v1/tenant/users"),
   invite: (input: { email: string; display_name?: string; role: TenantUserRole }) =>
     request<TenantUserInvitation>("/v1/tenant/users", { method: "POST", json: input }),
+  revokeInvitation: (id: string) => request<TenantUserResource>(`/v1/tenant/users/${enc(id)}/invitation`, { method: "DELETE" }),
 };
 
 // ── public ─────────────────────────────────────────────────────
@@ -51,6 +62,8 @@ export const auth = {
     request<AuthTokenPair>("/v1/auth/login", { method: "POST", json: input, realm: "public" }),
   setupPassword: (input: SetupPasswordInput) =>
     request<AuthTokenPair>("/v1/auth/setup-password", { method: "POST", json: input, realm: "public" }),
+  recoverPassword: (input: RecoverPasswordInput) =>
+    request<{ status: string }>("/v1/auth/recover-password", { method: "POST", json: input, realm: "public" }),
   registerTenant: (input: TenantRegistrationInput, idempotencyKey: string) =>
     request<TenantRegistrationResult>("/v1/tenants", {
       method: "POST",
@@ -74,6 +87,30 @@ export const apiKeys = {
 export const billing = {
   subscription: () => request<SubscriptionResult>("/v1/subscription"),
   usage: () => request<UsageSummaryResult>("/v1/usage"),
+  /** XR-F-07: ledger sums per bucket. `start`/`end` are ISO-8601 with offset. */
+  trends: (params: { granularity: TrendGranularity; start?: string; end?: string; types?: string[] }) => {
+    const query = new URLSearchParams({ granularity: params.granularity });
+    if (params.start) query.set("start", params.start);
+    if (params.end) query.set("end", params.end);
+    if (params.types?.length) query.set("types", params.types.join(","));
+    return request<UsageTrend>(`/v1/usage/trends?${query.toString()}`);
+  },
+};
+
+export const retraining = {
+  get: () => request<RetrainingPolicy>("/v1/retraining-policy"),
+  put: (input: RetrainingPolicyInput) => request<RetrainingPolicy>("/v1/retraining-policy", { method: "PUT", json: input }),
+};
+
+/** Live recommendations. Each call counts toward the recommendation_requests quota. */
+export const recommendations = {
+  get: (input: { user_id?: string; top_n?: number; context?: Record<string, unknown> }) =>
+    request<RecommendationResult>("/v1/recommendations", { method: "POST", json: input }),
+};
+
+export const recommendationRules = {
+  get: () => request<RecommendationPolicy>("/v1/recommendation-policy"),
+  put: (input: RecommendationPolicyInput) => request<RecommendationPolicy>("/v1/recommendation-policy", { method: "PUT", json: input }),
 };
 
 export const products = {
@@ -91,14 +128,16 @@ export const products = {
     request<ProductResource>(`/v1/products/${enc(externalId)}`, { method: "PUT", json: input }),
   disable: (externalId: string) =>
     request<ProductResource>(`/v1/products/${enc(externalId)}:disable`, { method: "POST" }),
-  bulkUpsert: (items: ProductUpsert[]) =>
-    request<ProductBulkUpsertResponse>("/v1/products:bulk-upsert", { method: "POST", json: { products: items } }),
+  bulkUpsert: (items: ProductUpsert[], requestId?: string) =>
+    request<ProductBulkUpsertResponse>("/v1/products:bulk-upsert", { method: "POST", json: { products: items, ...(requestId ? { request_id: requestId } : {}) } }),
+  listSyncs: () => request<CatalogSyncResource[]>("/v1/catalog-syncs"),
+  getSync: (id: string) => request<CatalogSyncResource>(`/v1/catalog-syncs/${enc(id)}`),
 };
 
 export const events = {
   submit: (input: EventSubmit) => request<EventSubmitResponse>("/v1/events", { method: "POST", json: input }),
-  submitBatch: (items: EventSubmit[]) =>
-    request<EventBatchResponse>("/v1/events/batches", { method: "POST", json: { events: items } }),
+  submitBatch: (items: EventSubmit[], requestId?: string) =>
+    request<EventBatchResponse>("/v1/events/batches", { method: "POST", json: { events: items, ...(requestId ? { request_id: requestId } : {}) } }),
   listBatches: () => request<EventBatchResponse[]>("/v1/events/batches"),
   getBatch: (id: string) => request<EventBatchResponse>(`/v1/events/batches/${enc(id)}`),
 };
@@ -128,6 +167,7 @@ export const models = {
 
 export const training = {
   cancel: (id: string) => request<TrainingJobResource>(`/v1/training-jobs/${encodeURIComponent(id)}:cancel`, { method: "POST" }),
+  get: (id: string) => request<TrainingJobResource>(`/v1/training-jobs/${enc(id)}`),
   list: () => request<{ items: TrainingJobResource[] }>("/v1/training-jobs"),
   create: (input: TrainingJobCreate) =>
     request<TrainingJobResource>("/v1/training-jobs", { method: "POST", json: input }),
@@ -135,6 +175,7 @@ export const training = {
 
 export const serving = {
   deployment: () => request<DeploymentStatus>("/v1/deployment"),
+  scaling: () => request<ScalingStatus>("/v1/deployment/scaling"),
   /** Measured over the last `windowMinutes` (the API defaults to 60). */
   metrics: (windowMinutes?: number) =>
     request<MetricsSummary>(
@@ -147,7 +188,9 @@ const platformRealm = { realm: "platform" as const };
 
 export const platform = {
   getTenantQuota: (id: string) => request<PlatformQuotaOverride & { plan_id: string; plan_code: string }>(`/v1/platform/tenants/${enc(id)}/quotas`, platformRealm),
-  assignTenantPlan: (id: string, planId: string) => request<PlatformQuotaOverride & { plan_id: string; plan_code: string }>(`/v1/platform/tenants/${enc(id)}/plan`, { ...platformRealm, method: 'POST', json: { plan_id: planId } }),
+  getTenantUsage: (id: string) => request<UsageSummaryResult>(`/v1/platform/tenants/${enc(id)}/usage`, platformRealm),
+  issueRecovery: (id: string, email: string) => request<{ recovery_token: string; expires_at: string }>(`/v1/platform/tenants/${enc(id)}/recovery`, { ...platformRealm, method: "POST", json: { email } }),
+  assignTenantPlan: (id: string, planId: string, acknowledge = false) => request<PlatformQuotaOverride & { plan_id: string; plan_code: string }>(`/v1/platform/tenants/${enc(id)}/plan`, { ...platformRealm, method: 'POST', json: { plan_id: planId, acknowledge_below_usage: acknowledge } }),
   status: (token?: string) =>
     request<PlatformStatus>("/v1/platform/status", {
       realm: token ? "public" : "platform",
@@ -161,13 +204,15 @@ export const platform = {
       method: "POST",
       json: { status },
     }),
-  setQuotaOverrides: (id: string, overrides: Record<string, unknown>) =>
+  setQuotaOverrides: (id: string, overrides: Record<string, unknown>, acknowledge = false) =>
     request<PlatformQuotaOverride>(`/v1/platform/tenants/${enc(id)}/quotas`, {
       ...platformRealm,
       method: "POST",
-      json: { overrides },
+      json: { overrides, acknowledge_below_usage: acknowledge },
     }),
   listPlans: () => request<PlatformPlan[]>("/v1/platform/plans", platformRealm),
+  updatePlan: (id: string, value: Pick<PlatformPlan, "name" | "limits" | "is_active">, acknowledge = false) =>
+    request<PlatformPlan>(`/v1/platform/plans/${enc(id)}`, { ...platformRealm, method: "PUT", json: { ...value, acknowledge_below_usage: acknowledge } }),
   listFailures: () => request<{ items: PlatformFailure[] }>("/v1/platform/failures", platformRealm),
   listAudit: () => request<{ items: PlatformAudit[] }>("/v1/platform/audit", platformRealm),
 };

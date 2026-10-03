@@ -109,7 +109,9 @@ rabbitmq_data/
 # ==========================================
 # Documentation & Diagrams
 # ==========================================
-docs/
+docs/*
+!docs/srs-implementation-matrix.md
+!docs/srs-implementation-report.md
 diagrams/
 
 
@@ -134,3 +136,14 @@ movielens/
 .claude/
 Claude outputs/
 
+
+# Generated UI-audit screenshots (regenerate with frontend_02/docs/ui-audit/capture.mjs)
+frontend_02/docs/ui-audit/before/
+frontend_02/docs/ui-audit/after/
+
+# Local archives, Redis dumps and ad-hoc QA scratch scripts
+*.tgz
+*.tar.gz
+*.rdb
+/qa_*.ps1
+/qa_*.py

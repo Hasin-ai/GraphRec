@@ -32,6 +32,10 @@ class Recommendations(GraphRecModel):
     fallback_used: bool
     #: ``none``, ``tenant_popular``...
     fallback_tier: str
+    #: Re-ranking rules from the tenant's recommendation policy that changed this list.
+    applied_rules: List[str] = Field(default_factory=list)
+    #: Version of the recommendation policy in force; ``None`` before one is configured.
+    rules_version: Optional[int] = None
 
     @property
     def product_ids(self) -> List[str]:

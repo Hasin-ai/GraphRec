@@ -25,6 +25,15 @@ services:
         condition: service_healthy
     restart: "no"
 
+  redis:
+    image: redis:7.4.2-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+
   qdrant:
     image: qdrant/qdrant:v1.12.0
     ports:
@@ -69,8 +78,16 @@ services:
       MAX_IDEMPOTENCY_KEY_LENGTH: ${MAX_IDEMPOTENCY_KEY_LENGTH}
       MAX_PASSWORD_LENGTH: ${MAX_PASSWORD_LENGTH}
       ACCOUNT_SETUP_TOKEN_TTL_SECONDS: ${ACCOUNT_SETUP_TOKEN_TTL_SECONDS:-86400}
+      TRAINING_COOLDOWN_SECONDS: ${TRAINING_COOLDOWN_SECONDS:-60}
+      RETRAINING_MIN_INTERVAL_MINUTES: ${RETRAINING_MIN_INTERVAL_MINUTES:-60}
+      CAPACITY_TARGET_RPM_PER_REPLICA: ${CAPACITY_TARGET_RPM_PER_REPLICA:-120}
+      CAPACITY_SCALE_DOWN_STABILIZATION_SECONDS: ${CAPACITY_SCALE_DOWN_STABILIZATION_SECONDS:-120}
       PLATFORM_ADMIN_TOKEN: ${PLATFORM_ADMIN_TOKEN:-}
       QDRANT_URL: ${QDRANT_URL:-http://qdrant:6334}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      REDIS_TIMEOUT_MS: ${REDIS_TIMEOUT_MS:-30}
+      SLOT_WAIT_MS: ${SLOT_WAIT_MS:-100}
+      SLOT_LEASE_SECONDS: ${SLOT_LEASE_SECONDS:-30}
       QDRANT_COLLECTION_PREFIX: ${QDRANT_COLLECTION_PREFIX:-graphrec}
       QDRANT_EMBEDDING_DIM: ${QDRANT_EMBEDDING_DIM:-128}
       QDRANT_TOP_K: ${QDRANT_TOP_K:-100}
@@ -86,11 +103,25 @@ services:
         condition: service_completed_successfully
       qdrant:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
       interval: 5s
       timeout: 3s
       retries: 20
+
+  scheduler:
+    build: .
+    # XR-F-02/03 retraining policies and XR-F-08 capacity controller.
+    command: ["python", "-m", "graphrec_core.scheduler"]
+    environment:
+      <<: *api-environment
+      SCHEDULER_TICK_SECONDS: ${SCHEDULER_TICK_SECONDS:-15}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
 
   worker:
     build: .

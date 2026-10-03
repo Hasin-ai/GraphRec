@@ -2,20 +2,21 @@ from __future__ import annotations
 
 import logging
 import json
+import hashlib
+import math
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
 import numpy as np
-from qdrant_client.http import models as qmodels
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from graphrec_core.database.models import AuditLog, CustomerEvent, DatasetSnapshot, DatasetSnapshotContent, ModelVersion, Product, TrainingJob, UsageEvent
+from graphrec_core.database.models import AuditLog, CustomerEvent, DatasetSnapshot, DatasetSnapshotContent, ModelDeployment, ModelVersion, Product, TrainingJob, UsageEvent
 from graphrec_core.usage.limits import require_capacity
 from graphrec_core.feedback import payload_hash
 from graphrec_core.errors import ApiError
@@ -162,9 +163,15 @@ class ModelRegistryService:
         required_status = "retired" if rollback else "eligible"
         if target.status != required_status:
             raise ApiError(409, "model_not_eligible", f"The target must be {required_status} for this operation.")
+        previous_active = self.db.scalar(select(ModelVersion).where(
+            ModelVersion.tenant_id == tenant_id, ModelVersion.status == "active",
+        ))
         try:
             self._validate_activation(tenant_id, target)
         except ApiError:
+            self._set_deployment(tenant_id, desired=target.id,
+                                 active=previous_active.id if previous_active else None,
+                                 status="degraded", failure_reason="model_not_ready", at=now)
             self._audit(tenant_id, "model_rollback" if rollback else "model_activation", target.id,
                         outcome="failed", details={"reason": "model_not_ready"})
             self.db.commit()
@@ -188,11 +195,29 @@ class ModelRegistryService:
 
         target.status = "active"
         target.activated_at = now
+        self._set_deployment(tenant_id, desired=target.id, active=target.id,
+                             status="available", failure_reason=None, at=now)
         self._audit(tenant_id, "model_rollback" if rollback else "model_activation", target.id,
                     details={"previous_version_ids": [str(active.id) for active in actives]})
         self.db.commit()
 
         return ModelVersionResource.model_validate(target)
+
+    def _set_deployment(self, tenant_id: UUID, *, desired: UUID, active: UUID | None,
+                        status: str, failure_reason: str | None, at: datetime) -> None:
+        deployment = self.db.scalar(select(ModelDeployment).where(ModelDeployment.tenant_id == tenant_id))
+        if deployment is None:
+            deployment = ModelDeployment(id=uuid4(), tenant_id=tenant_id,
+                                         desired_capacity=1, ready_capacity=0,
+                                         last_transition_at=at, status=status)
+            self.db.add(deployment)
+        deployment.desired_model_version_id = desired
+        deployment.active_model_version_id = active
+        deployment.status = status
+        # XR-NF-01: activation keeps the scaled capacity bound to the active version.
+        deployment.ready_capacity = deployment.desired_capacity if active is not None else 0
+        deployment.failure_reason = failure_reason
+        deployment.last_transition_at = at
 
     def rollback_model(self, tenant_id: UUID, model_id: UUID) -> ModelVersionResource:
         return self.activate_model_version(tenant_id, model_id, rollback=True)
@@ -226,6 +251,9 @@ class ModelRegistryService:
                 probe = artifact.encode_known(0)
                 if not np.isfinite(probe.query).all():
                     raise ValueError("Artifact produced an invalid query")
+                info = get_qdrant_client().get_collection(collection_name(tenant_id, target.id))
+                if not info.points_count:
+                    raise ValueError("The version has no indexed products")
                 evict_artifact(directory)
             else:
                 # Development placeholders are usable only when their index was
@@ -255,6 +283,16 @@ class ModelRegistryService:
                 "Cannot archive currently active model version. Activate another version first.",
             )
 
+        if target.status == "retired":
+            active = self.db.scalar(select(ModelVersion.id).where(
+                ModelVersion.tenant_id == tenant_id, ModelVersion.status == "active",
+            ))
+            protected = self.db.scalar(select(ModelVersion.id).where(
+                ModelVersion.tenant_id == tenant_id, ModelVersion.status == "retired",
+            ).order_by(ModelVersion.activated_at.desc().nulls_last(), ModelVersion.created_at.desc()).limit(1))
+            if active is not None and protected == target.id:
+                raise ApiError(409, "protected_rollback_target", "This version is retained as the current rollback target.")
+
         target.status = "archived"
         self._audit(tenant_id, "model_archived", target.id)
         self.db.commit()
@@ -277,7 +315,6 @@ class ModelRegistryService:
         self, tenant_id: UUID, payload: TrainingJobCreate
     ) -> TrainingJobResource:
         if payload.request_id:
-            import hashlib
             key = int.from_bytes(hashlib.sha256(f"training:{tenant_id}:{payload.request_id}".encode()).digest()[:8], "big", signed=True)
             self.db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": key})
             previous = self.db.scalar(select(TrainingJob).where(
@@ -286,6 +323,8 @@ class ModelRegistryService:
                 if previous.payload_hash != payload_hash(payload.model_dump(mode="json")):
                     raise ApiError(409, "idempotency_conflict", "This training identifier was already used with different input.")
                 return TrainingJobResource.model_validate(previous)
+        tenant_lock = int.from_bytes(hashlib.sha256(f"training-tenant:{tenant_id}".encode()).digest()[:8], "big", signed=True)
+        self.db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": tenant_lock})
         if payload.dataset_snapshot_id is not None:
             snapshot = self.db.scalar(select(DatasetSnapshot).where(
                 DatasetSnapshot.tenant_id == tenant_id, DatasetSnapshot.id == payload.dataset_snapshot_id))
@@ -293,9 +332,10 @@ class ModelRegistryService:
                 raise ApiError(404, "resource_not_found", "Dataset snapshot not found.")
         require_capacity(self.db, tenant_id, "training_jobs")
         artifact_name = (payload.configuration or {}).get("pretrained_artifact")
+        mode = (payload.configuration or {}).get("mode", "train")
+        self._check_training_eligibility(tenant_id, cooldown=artifact_name is not None or mode == "train")
         if artifact_name is not None:
             return self.import_pretrained_artifact(tenant_id, payload, str(artifact_name))
-        mode = (payload.configuration or {}).get("mode", "train")
         if mode == "train":
             return self._queue_training(tenant_id, payload)
         if mode != "placeholder":
@@ -363,11 +403,9 @@ class ModelRegistryService:
         # ----------------------------------------------------------------
         # Fetch all active product external IDs for this tenant so that the
         # Qdrant collection is populated with real product identifiers.
-        # The embedding matrix is synthetic (random float32) here because the
-        # real DGSR-lite GNN weights are produced by the Celery training worker
-        # (future vertical slice). The collection structure, payload schema,
-        # and indexing contract are established now so the inference path is
-        # immediately testable.
+        # This explicit development-placeholder mode uses synthetic vectors.
+        # Real DGSR training and prepared-artifact import index their learned
+        # item embeddings through separate paths.
         coll_name: str | None = None
         try:
             product_ids: list[str] = list(
@@ -432,8 +470,8 @@ class ModelRegistryService:
         and checked for compatibility with the tenant: its item ids must be this
         tenant's product external ids and its user ids this tenant's event
         user ids. Coverage is recorded in the version metrics; an artifact that
-        matches none of the catalog is rejected. The real item embedding table
-        is indexed into Qdrant with dot-product distance.
+        matches none of the catalog is rejected. Normalized item embeddings
+        are indexed into its tenant/version Qdrant collection.
         """
         from graphrec_core.dgsr.serving import ArtifactError, load_artifact
 
@@ -549,13 +587,16 @@ class ModelRegistryService:
         try:
             table = artifact.item_embeddings()
             rows = np.asarray([artifact.item_index(item) for item in covered_items], dtype=np.int64)
+            vectors = table[rows]
+            norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+            if not np.isfinite(vectors).all() or np.any(norms <= 0):
+                raise ValueError("Artifact item embeddings cannot be indexed")
             n_indexed = index_item_embeddings(
                 client=get_qdrant_client(),
                 tenant_id=tenant_id,
                 version_id=mv.id,
                 external_ids=covered_items,
-                embedding_matrix=table[rows],
-                distance=qmodels.Distance.DOT,
+                embedding_matrix=vectors / norms,
             )
             coll_name = collection_name(tenant_id, mv.id)
             logger.info("Indexed %d DGSR item embeddings into %s", n_indexed, coll_name)
@@ -584,6 +625,28 @@ class ModelRegistryService:
         logger.warning("Training job %s failed: %s", job.id, reason)
         return TrainingJobResource.model_validate(job)
 
+    def _check_training_eligibility(self, tenant_id: UUID, *, cooldown: bool) -> None:
+        active = self.db.scalar(select(TrainingJob.id).where(
+            TrainingJob.tenant_id == tenant_id,
+            TrainingJob.status.in_(["queued", "running"]),
+        ).limit(1))
+        if active:
+            raise ApiError(409, "training_in_progress", "Wait for or cancel this tenant's current training job.")
+        seconds = get_settings().training_cooldown_seconds if cooldown else 0
+        if not seconds:
+            return
+        last_completed = self.db.scalar(select(TrainingJob.completed_at).where(
+            TrainingJob.tenant_id == tenant_id,
+            TrainingJob.model_type == DGSR_MODEL_TYPE,
+            TrainingJob.completed_at.is_not(None),
+        ).order_by(TrainingJob.completed_at.desc()).limit(1))
+        if last_completed is None:
+            return
+        remaining = math.ceil((last_completed + timedelta(seconds=seconds) - datetime.now(timezone.utc)).total_seconds())
+        if remaining > 0:
+            raise ApiError(409, "training_cooldown", "Wait before starting another DGSR training job.",
+                           retryable=True, retry_after_seconds=remaining)
+
     def _queue_training(self, tenant_id: UUID, payload: TrainingJobCreate) -> TrainingJobResource:
         from graphrec_core.datasets.service import DatasetService
         from graphrec_core.schemas.datasets import DatasetSnapshotCreate
@@ -593,9 +656,6 @@ class ModelRegistryService:
         epochs = configuration.get("epochs", 3)
         if isinstance(epochs, bool) or not isinstance(epochs, int) or not 1 <= epochs <= 10:
             raise ApiError(422, "validation_failed", "Training epochs must be an integer from 1 to 10.")
-        active = self.db.scalar(select(TrainingJob.id).where(TrainingJob.tenant_id == tenant_id, TrainingJob.status.in_(["queued", "running"])).limit(1))
-        if active:
-            raise ApiError(409, "training_in_progress", "Wait for or cancel this tenant's current training job.")
         snapshot_id = payload.dataset_snapshot_id
         if snapshot_id is None:
             snapshot_id = DatasetService(self.db).create_snapshot(tenant_id, DatasetSnapshotCreate(), commit=False).id
@@ -625,8 +685,6 @@ class ModelRegistryService:
         job = self.db.scalar(select(TrainingJob).where(TrainingJob.tenant_id == tenant_id, TrainingJob.id == job_id).with_for_update())
         if job is None:
             raise ApiError(404, "resource_not_found", "Training job not found.")
-        if job.status == "cancelled":
-            return TrainingJobResource.model_validate(job)
         if job.status not in {"queued", "running"}:
             raise ApiError(409, "job_terminal", "Only queued or running jobs can be cancelled.")
         job.cancel_requested = True
@@ -647,3 +705,11 @@ class ModelRegistryService:
             .all()
         )
         return [TrainingJobResource.model_validate(j) for j in jobs]
+
+    def get_training_job(self, tenant_id: UUID, job_id: UUID) -> TrainingJobResource:
+        job = self.db.scalar(select(TrainingJob).where(
+            TrainingJob.tenant_id == tenant_id, TrainingJob.id == job_id,
+        ))
+        if job is None:
+            raise ApiError(404, "resource_not_found", "Training job not found.")
+        return TrainingJobResource.model_validate(job)

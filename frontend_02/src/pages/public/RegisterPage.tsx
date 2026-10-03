@@ -41,11 +41,18 @@ export function RegisterPage() {
       setResult(await auth.registerTenant(input, attempt.current.key));
     } catch (caught) {
       if (isApiError(caught) && caught.status === 409) {
+        // D15: show the reason the API gives for each field instead of assuming
+        // that both the name and the email were already registered together.
+        const mapped: Record<string, string> = {};
+        for (const f of caught.fields) mapped[f.field === "admin_email" ? "email" : f.field] = f.message;
         setError({
           title: "This registration already exists",
-          body: `A tenant named “${name.trim()}” with this administrator email was already registered. Sign in with that account, or ask your operator for a fresh setup link if it was never activated.`,
+          body: mapped.name && mapped.email ? "Both the business name and the administrator email are already in use. Sign in with your existing account, or ask your operator for a fresh setup link."
+            : mapped.name ? "Choose a different business name and submit again."
+            : mapped.email ? "Use a different administrator email, or sign in with your existing account."
+            : "Correct the highlighted fields and submit again.",
         });
-        setFieldErrors({ email: "Already registered for this business." });
+        setFieldErrors(mapped);
       } else if (isApiError(caught) && caught.code === "validation_failed") {
         setError({ title: "Registration could not be completed", body: "Correct the highlighted field and submit again." });
         const mapped: Record<string, string> = {};
@@ -110,7 +117,7 @@ export function RegisterPage() {
 
   return (
     <Page kicker="GraphRec" title="Register a tenant" subtitle="Create your tenant and its first administrator account.">
-      <Form onSubmit={submit} error={error} submitLabel="Create tenant" busy={busy} width={520} secondary={{ label: "Sign in instead", to: "/login" }}>
+      <Form onSubmit={submit} error={error} submitLabel="Create tenant" busy={busy} width={460} secondary={{ label: "Already have a tenant? Sign in", to: "/login", variant: "link" }}>
         <Field id="name" label="Business name" wide error={fieldErrors.name}>
           <TextInput id="name" value={name} onChange={setName} placeholder="Northgate Supply" autoComplete="organization" required />
         </Field>

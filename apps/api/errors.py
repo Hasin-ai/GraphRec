@@ -30,6 +30,7 @@ def error_response(
     retryable: bool = False,
     retry_after_seconds: int | None = None,
     details: dict[str, Any] | None = None,
+    extra_headers: dict[str, str] | None = None,
 ) -> JSONResponse:
     error: dict[str, Any] = {
         "code": code,
@@ -41,7 +42,7 @@ def error_response(
         error["retry_after_seconds"] = retry_after_seconds
     if details:
         error["details"] = details
-    headers = {"X-Correlation-ID": str(correlation_id)}
+    headers = {**(extra_headers or {}), "X-Correlation-ID": str(correlation_id)}
     if retry_after_seconds is not None:
         headers["Retry-After"] = str(retry_after_seconds)
     return JSONResponse(status_code=status_code, content={"error": error}, headers=headers)
@@ -60,6 +61,7 @@ async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
         retryable=exc.retryable,
         retry_after_seconds=exc.retry_after_seconds,
         details=exc.details,
+        extra_headers=getattr(exc, "headers", None),
     )
 
 

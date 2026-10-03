@@ -25,20 +25,25 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy import select, text, func
 from sqlalchemy.orm import Session
 
 from graphrec_core.auth.principal import AuthenticatedPrincipal, authenticated_principal
 from graphrec_core.database.models import (
     CustomerEvent,
+    ModelDeployment,
     ModelVersion,
     Product,
     ServingRequest,
     UsageEvent,
     RecommendationRecord,
+    RecommendationResult,
 )
 from graphrec_core.database.session import get_db
+from graphrec_core.customers import ensure_customers
+from graphrec_core.recommendation_policy_service import load_rules
+from graphrec_core.recommendation_rules import rerank
 from graphrec_core.models_reg.service import artifact_directory
 from graphrec_core.schemas.recommendations import (
     ClickFeedback,
@@ -52,7 +57,9 @@ from graphrec_core.schemas.recommendations import (
 from graphrec_core.settings import get_settings
 from graphrec_core.errors import ApiError
 from graphrec_core.feedback import payload_hash, submit_feedback
-from graphrec_core.usage.limits import require_capacity
+from graphrec_core.capacity import effective_limits, serving_slots
+from graphrec_core.usage.admission import get_admission
+from graphrec_core.usage.limits import ledger_usage, month_bounds
 from graphrec_core.vector_store.client import get_qdrant_client
 from graphrec_core.vector_store.retriever import retrieve_candidates
 
@@ -64,11 +71,8 @@ router = APIRouter(tags=["recommendations"])
 def _zero_query_vector(dim: int) -> list[float]:
     """Return a deterministic placeholder query vector.
 
-    In production this is replaced by the GNN-assembled user/session
-    embedding from the DGSR-lite forward pass running inside the
-    tenant-pinned inference pod. Until that Celery worker slice is built,
-    a unit-first vector is used so that Qdrant returns a stable ordering
-    without all-zero cosine issues.
+    This is used only by explicit development-placeholder versions. Real DGSR
+    versions encode the user's history with the trained artifact.
     """
     vec = [0.0] * dim
     vec[0] = 1.0
@@ -225,6 +229,7 @@ def _dgsr_candidates(
 @router.post("/v1/recommendations", response_model=RecommendationResponse)
 def get_recommendations(
     payload: RecommendationRequest,
+    response: Response,
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> RecommendationResponse:
@@ -248,9 +253,40 @@ def get_recommendations(
             if returned_ids != eligible_ids:
                 raise ApiError(409, "recommendation_expired", "Catalog eligibility changed. Submit a new request identifier.")
             return RecommendationResponse.model_validate(existing.response)
-    require_capacity(db, principal.tenant_id, "concurrent_recommendation_requests")
-    require_capacity(db, principal.tenant_id, "recommendation_requests")
-    require_capacity(db, principal.tenant_id, "requests_per_minute")
+    tenant_id = principal.tenant_id
+    limits = effective_limits(db, tenant_id)
+    if any(limits.get(k) is None for k in ("concurrent_recommendation_requests", "requests_per_minute",
+                                            "recommendation_requests")):
+        raise ApiError(503, "quota_unavailable", "Usage limits are temporarily unavailable.", retryable=True)
+    # XR-F-08: an active deployment serves with the slots its scaled capacity
+    # provides; without one the plan limit applies unchanged. D16: admission
+    # state is shared in Redis, so every API replica sees the same slots.
+    ready = db.scalar(select(ModelDeployment.ready_capacity).where(
+        ModelDeployment.tenant_id == tenant_id, ModelDeployment.active_model_version_id.is_not(None)))
+    slots = (serving_slots(limits, ready) if ready else None) or limits["concurrent_recommendation_requests"]
+    admission = get_admission()
+    period_start, period_end = month_bounds(datetime.now(timezone.utc))
+    lease = admission.acquire_slot(tenant_id, slots)
+    quota_taken = served = False
+    try:
+        rate = admission.check_rate(tenant_id, limits["requests_per_minute"])
+        admission.consume_quota(tenant_id, "recommendation_requests", limits["recommendation_requests"],
+                                period_start, period_end,
+                                seed=lambda: ledger_usage(db, tenant_id, "recommendation_requests",
+                                                          period_start, period_end))
+        quota_taken = True
+        result = _serve_and_record(payload, principal, db, fingerprint)
+        response.headers.update(rate.headers())
+        served = True
+        return result
+    finally:
+        if quota_taken and not served:
+            admission.refund_quota(tenant_id, "recommendation_requests", period_start)
+        admission.release(lease)
+
+
+def _serve_and_record(payload: RecommendationRequest, principal: AuthenticatedPrincipal, db: Session,
+                      fingerprint: str) -> RecommendationResponse:
     started = time.perf_counter()
     try:
         response = _serve(payload, principal.tenant_id, db)
@@ -267,8 +303,19 @@ def get_recommendations(
             latency_ms=_elapsed_ms(started),
         )
         raise
+    created_at = datetime.now(timezone.utc)
+    if payload.user_id:
+        ensure_customers(db, principal.tenant_id, {payload.user_id})
     db.add(RecommendationRecord(tenant_id=principal.tenant_id, request_id=response.request_id,
-        payload_hash=fingerprint, response=response.model_dump(mode="json"), created_at=datetime.now(timezone.utc)))
+        external_customer_id=payload.user_id, payload_hash=fingerprint,
+        response=response.model_dump(mode="json"), created_at=created_at))
+    for item in response.items:
+        db.add(RecommendationResult(
+            id=uuid4(), tenant_id=principal.tenant_id, request_id=response.request_id,
+            external_product_id=item.external_product_id, rank_position=item.position,
+            candidate_source=response.fallback_tier if response.fallback_used else "model_retrieval",
+            strategy=response.strategy, created_at=created_at,
+        ))
     recorded = _record_serving_request(
         db,
         principal.tenant_id,
@@ -345,7 +392,7 @@ def _serve(
             ).scalars()
         )
         # Preserve Qdrant ranking order (Stage 3 proxy score)
-        filtered_ids = [eid for eid in candidate_ids if eid in active_set]
+        filtered_ids = list(dict.fromkeys(eid for eid in candidate_ids if eid in active_set))
     else:
         filtered_ids = []
 
@@ -355,29 +402,47 @@ def _serve(
     # Qdrant already returns results in descending cosine similarity order.
     # Stable tie-break: sort equal-score items by external_id lexicographically.
     # Truncate to top_n.
-    top_ids = filtered_ids[: payload.top_n]
+    rules = load_rules(db, tenant_id)
+    if rules and filtered_ids:
+        top_ids = rerank(filtered_ids, _rule_meta(db, tenant_id, filtered_ids), rules,
+                         top_n=payload.top_n, now=datetime.now(timezone.utc))
+    else:
+        top_ids = filtered_ids[: payload.top_n]
 
     # Fallback: if Qdrant returned nothing, pull most recent servable products
     fallback_used = False
     fallback_tier = "none"
 
     if not top_ids:
+        if not payload.fallback_allowed:
+            raise ApiError(
+                503,
+                "recommendation_unavailable",
+                "Personalized recommendations are unavailable for this customer or session. Enable fallback or provide usable history.",
+            )
         fallback_used = True
         fallback_tier = "tenant_popular"
         strategy = "popular_fallback"
         popularity = select(CustomerEvent.external_product_id.label("product_id"), func.count().label("events")).where(CustomerEvent.tenant_id == tenant_id).group_by(CustomerEvent.external_product_id).subquery()
         fallback_query = (
-            select(Product.external_id)
+            select(Product.external_id, func.coalesce(popularity.c.events, 0))
             .outerjoin(popularity, popularity.c.product_id == Product.external_id)
             .where(Product.tenant_id == tenant_id, *_servable())
             .order_by(func.coalesce(popularity.c.events, 0).desc(), Product.external_id.asc())
-            .limit(payload.top_n)
+            # Re-ranking needs a wider eligible pool than the final list (bounded).
+            .limit(min(max(payload.top_n * 5, 50), 500) if rules else payload.top_n)
         )
         if payload.exclude_product_ids:
             fallback_query = fallback_query.where(
                 Product.external_id.not_in(payload.exclude_product_ids)
             )
-        top_ids = list(db.execute(fallback_query).scalars())
+        rows = db.execute(fallback_query).all()
+        top_ids = [row[0] for row in rows]
+        if rules and top_ids:
+            popularity_scores = {row[0]: float(row[1]) for row in rows}
+            top_ids = rerank(top_ids, _rule_meta(db, tenant_id, top_ids), rules,
+                             top_n=payload.top_n, now=datetime.now(timezone.utc),
+                             scores=popularity_scores)
 
     items = [
         RecommendationItem(external_product_id=eid, position=idx + 1)
@@ -391,17 +456,26 @@ def _serve(
         strategy=strategy,
         fallback_used=fallback_used,
         fallback_tier=fallback_tier,
+        applied_rules=rules.applied() if rules else [],
+        rules_version=rules.version if rules else None,
     )
+
+
+def _rule_meta(db: Session, tenant_id: UUID, ids: list[str]) -> dict[str, tuple[str | None, datetime]]:
+    rows = db.execute(select(Product.external_id, Product.category, Product.created_at).where(
+        Product.tenant_id == tenant_id, Product.external_id.in_(ids)))
+    return {external_id: (category, created_at) for external_id, category, created_at in rows}
 
 
 @router.post("/v1/recommendations/session", response_model=RecommendationResponse)
 def get_session_recommendations(
     payload: RecommendationRequest,
+    response: Response,
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),
 ) -> RecommendationResponse:
     principal.require_scope("recommendations:read")
-    return get_recommendations(payload, principal, db)
+    return get_recommendations(payload, response, principal, db)
 
 
 @router.post("/v1/feedback/impressions", response_model=FeedbackResponse)

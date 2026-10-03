@@ -21,6 +21,7 @@ import { ModelVersionPage, ModelsPage } from "./pages/tenant/ModelsPages";
 import { ProductDetailPage, ProductNewPage } from "./pages/tenant/ProductFormPages";
 import { ProductSyncPage } from "./pages/tenant/ProductSyncPage";
 import { ProductsPage } from "./pages/tenant/ProductsPage";
+import { RecommendationRulesPage } from "./pages/tenant/RecommendationRulesPage";
 import { ServiceStatusPage } from "./pages/tenant/ServiceStatusPage";
 import { SubmissionPage } from "./pages/tenant/SubmissionPage";
 import { TrainingJobPage, TrainingPage } from "./pages/tenant/TrainingPages";
@@ -72,6 +73,7 @@ export function AppRoutes() {
           <Route path="/training/:jobId" element={scoped("training:read", <TrainingJobPage />)} />
           <Route path="/models" element={scoped("models:read", <ModelsPage />)} />
           <Route path="/models/:versionId" element={scoped("models:read", <ModelVersionPage />)} />
+          <Route path="/recommendation-rules" element={scoped("models:read", <RecommendationRulesPage />)} />
           <Route path="/usage" element={scoped("usage:read", <UsagePage />)} />
           <Route path="/service-status" element={scoped("deployments:read", <ServiceStatusPage />)} />
         </Route>

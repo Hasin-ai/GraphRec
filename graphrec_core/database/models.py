@@ -27,8 +27,11 @@ class Base(DeclarativeBase):
 
 class RecommendationRecord(Base):
     __tablename__ = "recommendation_records"
+    __table_args__ = (ForeignKeyConstraint(["tenant_id", "external_customer_id"],
+        ["customers.tenant_id", "customers.external_id"], name="fk_recommendation_record_customer"),)
     tenant_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), primary_key=True)
     request_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    external_customer_id: Mapped[str | None] = mapped_column(Text)
     payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     response: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -36,14 +39,48 @@ class RecommendationRecord(Base):
 
 class RecommendationFeedback(Base):
     __tablename__ = "recommendation_feedback"
-    __table_args__ = (ForeignKeyConstraint(["tenant_id", "request_id"], ["recommendation_records.tenant_id", "recommendation_records.request_id"]),)
+    __table_args__ = (
+        ForeignKeyConstraint(["tenant_id", "request_id"], ["recommendation_records.tenant_id", "recommendation_records.request_id"]),
+        ForeignKeyConstraint(["tenant_id", "recommendation_result_id"],
+                             ["recommendation_results.tenant_id", "recommendation_results.id"],
+                             name="fk_recommendation_feedback_result_tenant"),
+    )
     tenant_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), primary_key=True)
     event_id: Mapped[str] = mapped_column(String(128), primary_key=True)
     request_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    recommendation_result_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     feedback_type: Mapped[str] = mapped_column(String(16), nullable=False)
     payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class RecommendationResult(Base):
+    __tablename__ = "recommendation_results"
+    __table_args__ = (
+        ForeignKeyConstraint(["tenant_id", "request_id"],
+                             ["recommendation_records.tenant_id", "recommendation_records.request_id"],
+                             ondelete="CASCADE", name="fk_recommendation_result_request"),
+        ForeignKeyConstraint(["tenant_id", "external_product_id"],
+                             ["products.tenant_id", "products.external_id"],
+                             name="fk_recommendation_result_product"),
+        UniqueConstraint("tenant_id", "request_id", "rank_position", name="uq_recommendation_result_rank"),
+        UniqueConstraint("tenant_id", "request_id", "external_product_id", name="uq_recommendation_result_product"),
+        UniqueConstraint("tenant_id", "id", name="uq_recommendation_result_tenant_id"),
+        CheckConstraint("rank_position >= 1", name="ck_recommendation_result_position"),
+        Index("ix_recommendation_results_tenant_product", "tenant_id", "external_product_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    request_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    external_product_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    rank_position: Mapped[int] = mapped_column(nullable=False)
+    model_score: Mapped[Decimal | None] = mapped_column(Numeric)
+    final_order_score: Mapped[Decimal | None] = mapped_column(Numeric)
+    candidate_source: Mapped[str] = mapped_column(String(48), nullable=False)
+    strategy: Mapped[str] = mapped_column(String(48), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class PricingPlan(Base):
@@ -92,6 +129,7 @@ class TenantUser(Base):
     email: Mapped[str] = mapped_column(CITEXT(), nullable=False)
     display_name: Mapped[str] = mapped_column(Text, nullable=False)
     credential_digest: Mapped[str | None] = mapped_column(Text)
+    auth_epoch: Mapped[int] = mapped_column(nullable=False, default=0)
     role: Mapped[str] = mapped_column(String(32), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -231,6 +269,29 @@ class AccountSetupToken(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class AccountRecoveryToken(Base):
+    """Single-use reset proof; only the SHA-256 digest is persisted."""
+
+    __tablename__ = "account_recovery_tokens"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id", "user_id"], ["tenant_users.tenant_id", "tenant_users.id"],
+            ondelete="CASCADE", name="fk_account_recovery_tokens_user",
+        ),
+        CheckConstraint("expires_at > created_at", name="ck_account_recovery_tokens_expiry"),
+        Index("ix_account_recovery_tokens_user", "tenant_id", "user_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class UsageEvent(Base):
     __tablename__ = "usage_events"
     __table_args__ = (
@@ -315,10 +376,22 @@ class Product(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class Customer(Base):
+    __tablename__ = "customers"
+    __table_args__ = (UniqueConstraint("tenant_id", "external_id", name="uq_customers_tenant_external"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    external_id: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class CustomerEvent(Base):
     __tablename__ = "customer_events"
     __table_args__ = (
         UniqueConstraint("tenant_id", "event_id", name="uq_customer_events_tenant_event"),
+        ForeignKeyConstraint(["tenant_id", "user_id"], ["customers.tenant_id", "customers.external_id"],
+                             name="fk_customer_event_customer"),
         Index("ix_customer_events_tenant_time", "tenant_id", "occurred_at"),
     )
 
@@ -346,9 +419,30 @@ class EventBatch(Base):
         PGUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="completed")
+    request_id: Mapped[str | None] = mapped_column(String(128))
+    payload_hash: Mapped[str | None] = mapped_column(String(64))
+    outcomes: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)
     accepted_count: Mapped[int] = mapped_column(nullable=False, default=0)
     duplicate_count: Mapped[int] = mapped_column(nullable=False, default=0)
     rejected_count: Mapped[int] = mapped_column(nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class CatalogSync(Base):
+    __tablename__ = "catalog_syncs"
+    __table_args__ = (Index("ix_catalog_syncs_tenant_created", "tenant_id", "created_at"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    request_id: Mapped[str | None] = mapped_column(String(128))
+    payload_hash: Mapped[str | None] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    accepted_count: Mapped[int] = mapped_column(nullable=False)
+    created_count: Mapped[int] = mapped_column(nullable=False)
+    updated_count: Mapped[int] = mapped_column(nullable=False)
+    skipped_count: Mapped[int] = mapped_column(nullable=False)
+    rejected_count: Mapped[int] = mapped_column(nullable=False)
+    outcomes: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
@@ -370,6 +464,27 @@ class ModelVersion(Base):
     artifact_uri: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ModelDeployment(Base):
+    __tablename__ = "model_deployments"
+    __table_args__ = (
+        ForeignKeyConstraint(["tenant_id", "desired_model_version_id"],
+                             ["model_versions.tenant_id", "model_versions.id"], name="fk_deployment_desired"),
+        ForeignKeyConstraint(["tenant_id", "active_model_version_id"],
+                             ["model_versions.tenant_id", "model_versions.id"], name="fk_deployment_active"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), unique=True, nullable=False)
+    desired_model_version_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    active_model_version_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    desired_capacity: Mapped[int] = mapped_column(nullable=False, default=1)
+    ready_capacity: Mapped[int] = mapped_column(nullable=False, default=0)
+    last_transition_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    failure_reason: Mapped[str | None] = mapped_column(Text)
+    last_scaled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class TrainingJob(Base):
@@ -452,4 +567,63 @@ class ServingRequest(Base):
     fallback_used: Mapped[bool] = mapped_column(Boolean, nullable=False)
     item_count: Mapped[int] = mapped_column(nullable=False, default=0)
     latency_ms: Mapped[int] = mapped_column(nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class RetrainingPolicy(Base):
+    """XR-F-02/XR-F-03: one scheduled / event-triggered retraining policy per tenant."""
+
+    __tablename__ = "retraining_policies"
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), primary_key=True
+    )
+    schedule_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    interval_minutes: Mapped[int] = mapped_column(nullable=False, default=1440)
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    event_trigger_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    event_threshold: Mapped[int] = mapped_column(nullable=False, default=1000)
+    epochs: Mapped[int] = mapped_column(nullable=False, default=3)
+    last_evaluated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_trigger: Mapped[str | None] = mapped_column(String(16))
+    last_outcome: Mapped[str | None] = mapped_column(String(48))
+    last_outcome_detail: Mapped[str | None] = mapped_column(Text)
+    last_outcome_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_job_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class RecommendationPolicy(Base):
+    """XR-F-04 / XR-NF-02: bounded, versioned diversity and freshness rules per tenant."""
+
+    __tablename__ = "recommendation_policies"
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), primary_key=True
+    )
+    version: Mapped[int] = mapped_column(nullable=False, default=1)
+    diversity_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    max_per_category: Mapped[int] = mapped_column(nullable=False, default=3)
+    freshness_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    freshness_weight: Mapped[Decimal] = mapped_column(Numeric(4, 3), nullable=False, default=Decimal("0.2"))
+    freshness_half_life_days: Mapped[int] = mapped_column(nullable=False, default=30)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class CapacityEvent(Base):
+    """XR-F-08: one observable serving-capacity change for a tenant."""
+
+    __tablename__ = "capacity_events"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    model_version_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    from_capacity: Mapped[int] = mapped_column(nullable=False)
+    to_capacity: Mapped[int] = mapped_column(nullable=False)
+    reason: Mapped[str] = mapped_column(String(32), nullable=False)
+    measured_rpm: Mapped[int] = mapped_column(nullable=False)
+    peak_rpm: Mapped[int] = mapped_column(nullable=False)
+    max_capacity: Mapped[int] = mapped_column(nullable=False)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

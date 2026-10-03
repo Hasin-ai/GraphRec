@@ -123,6 +123,8 @@ export function describeError(error: unknown): string {
   if (error.code === "network_error") return "GraphRec could not be reached. Check that the API is running.";
   if (error.code === "rate_limit_exceeded")
     return `Too many requests. Try again in ${error.retryAfterSeconds ?? "a few"} seconds.`;
+  if (error.code === "training_cooldown")
+    return `Training is cooling down. Try again in ${error.retryAfterSeconds ?? "a few"} seconds.`;
   if (error.code === "insufficient_scope") return "Your credential does not grant this operation.";
   if (error.code === "token_expired") return "Your session expired. Sign in again.";
   if (error.code === "validation_failed" && error.fields.length) {

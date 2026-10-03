@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from pydantic import Field
@@ -11,14 +11,34 @@ from ._base import GraphRecModel, ItemList
 __all__ = [
     "AuditRecord",
     "AuditRecordList",
+    "LimitConflict",
     "PlatformFailure",
     "PlatformFailureList",
+    "PlatformStatus",
     "PlatformTenant",
     "PlatformTenantList",
     "PricingPlan",
     "PricingPlanList",
     "QuotaOverride",
+    "RecoveryToken",
+    "TenantQuota",
 ]
+
+
+class LimitConflict(GraphRecModel):
+    """An inventory limit that a tenant already exceeds after a limit change.
+
+    Returned in ``warnings`` when the change was applied with
+    ``acknowledge_below_usage=True``, and in the error details of a refused change.
+    """
+
+    limit_name: str
+    limit: int
+    used: int
+    over_by: int
+    #: Set for plan updates, which can affect several tenants.
+    tenant_id: Optional[UUID] = None
+    tenant_name: Optional[str] = None
 
 
 class PlatformTenant(GraphRecModel):
@@ -39,6 +59,8 @@ class PricingPlan(GraphRecModel):
     name: str
     limits: Dict[str, Any] = Field(default_factory=dict)
     is_active: bool
+    #: Tenants left above an inventory limit by an acknowledged update.
+    warnings: List[LimitConflict] = Field(default_factory=list)
 
 
 class PricingPlanList(ItemList[PricingPlan]):
@@ -48,6 +70,13 @@ class PricingPlanList(ItemList[PricingPlan]):
 class QuotaOverride(GraphRecModel):
     limits: Dict[str, Any] = Field(default_factory=dict)
     overrides: Dict[str, Any] = Field(default_factory=dict)
+    #: Inventory limits the tenant exceeds after an acknowledged change.
+    warnings: List[LimitConflict] = Field(default_factory=list)
+
+
+class TenantQuota(QuotaOverride):
+    plan_id: UUID
+    plan_code: str
 
 
 class PlatformFailure(GraphRecModel):
@@ -75,3 +104,23 @@ class AuditRecord(GraphRecModel):
 
 class AuditRecordList(ItemList[AuditRecord]):
     pass
+
+
+class RecoveryToken(GraphRecModel):
+    """One-time account-recovery proof issued by an operator."""
+
+    recovery_token: str
+    expires_at: datetime
+
+
+class PlatformStatus(GraphRecModel):
+    """Shared service health (``GET /v1/platform/status``)."""
+
+    #: ``healthy`` or ``degraded``.
+    status: str
+    api_cluster: str
+    database: str
+    worker_pool: str
+    deployments: Optional[Any] = None
+    rate_limiter: Optional[Dict[str, Any]] = None
+    timestamp: datetime

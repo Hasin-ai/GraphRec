@@ -1,6 +1,6 @@
 import { screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { mockFetch, signInAsAdmin, signInAsDeveloper, signInAsPlatform } from "../test/helpers";
+import { mockFetch, signInAsAdmin, signInAsDeveloper, signInAsPlatform, tokenPair } from "../test/helpers";
 import { renderAt } from "../test/render";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -31,7 +31,7 @@ describe("authorization gates", () => {
     renderAt("/home");
     const nav = await screen.findByRole("navigation", { name: "Primary" });
     expect(nav).toHaveTextContent("Products");
-    expect(nav).toHaveTextContent("Submit Events");
+    expect(nav).toHaveTextContent("Events");
     expect(nav).toHaveTextContent("Training");
     expect(nav).not.toHaveTextContent("Model Versions");
     expect(nav).not.toHaveTextContent("Usage & Quotas");
@@ -54,7 +54,7 @@ describe("authorization gates", () => {
       { path: /\/v1\/.*/, body: { items: [] } },
     ]);
     renderAt("/models/v-99");
-    expect(await screen.findByRole("heading", { name: "Not found" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Page not found" })).toBeInTheDocument();
     expect(screen.queryByText(/v-99/)).not.toBeInTheDocument();
   });
 
@@ -63,5 +63,22 @@ describe("authorization gates", () => {
     mockFetch([{ path: /\/v1\/platform\/.*/, body: { items: [], status: "healthy", api_cluster: "online", database: "connected", worker_pool: "not_deployed", timestamp: "2026-09-12T00:00:00Z" } }]);
     renderAt("/");
     expect(await screen.findByRole("heading", { name: "Platform Status" })).toBeInTheDocument();
+  });
+
+  it("D13: after an explicit sign-out the next user lands on Overview, not the previous user's page", async () => {
+    const user = (await import("@testing-library/user-event")).default.setup();
+    signInAsAdmin();
+    mockFetch([
+      { path: /\/v1\/auth\/logout/, method: "POST", status: 204 },
+      { path: "/v1/auth/login", method: "POST", body: tokenPair({ user_role: "tenant_developer", scopes: ["catalog:read"] }) },
+      { path: /\/v1\/.*/, body: { items: [], total: 0 } },
+    ]);
+    renderAt("/credentials");
+    await user.click(await screen.findByRole("button", { name: "Sign out" }));
+    await user.type(await screen.findByLabelText("Email"), "ruben@northgate.example");
+    await user.type(screen.getByLabelText("Password"), "pw");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(await screen.findByRole("heading", { name: "Overview" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Not permitted" })).not.toBeInTheDocument();
   });
 });

@@ -17,6 +17,7 @@ export class GraphRecApiError extends Error {
   readonly correlationId?: string;
   readonly retryAfterSeconds?: number;
   readonly fields: { field: string; message: string }[];
+  readonly details: Record<string, unknown>;
 
   constructor(status: number, body: ErrorBody | null, fallbackCorrelationId?: string) {
     super(body?.error?.message ?? "GraphRec could not process this request");
@@ -26,8 +27,12 @@ export class GraphRecApiError extends Error {
     this.correlationId = body?.error?.correlation_id ?? fallbackCorrelationId;
     this.retryAfterSeconds = body?.error?.retry_after_seconds;
     this.fields = body?.error?.details?.fields ?? [];
+    this.details = body?.error?.details ?? {};
   }
 }
+
+/** A limit change that would put a tenant below what it already stores (409 limit_below_usage). */
+export interface LimitConflict { limit_name: string; limit: number; used: number; over_by: number; tenant_id?: string; tenant_name?: string }
 
 // ── tenants / auth ─────────────────────────────────────────────
 export interface TenantRegistrationInput {
@@ -54,6 +59,12 @@ export interface LoginInput {
 
 export interface SetupPasswordInput {
   setup_token: string;
+  password: string;
+  email?: string;
+}
+
+export interface RecoverPasswordInput {
+  recovery_token: string;
   password: string;
   email?: string;
 }
@@ -184,12 +195,22 @@ export interface ProductBulkFailure {
 }
 
 export interface ProductBulkUpsertResponse {
+  sync_id?: string | null;
+  status?: string;
+  request_id?: string | null;
   accepted_count: number;
   created_count: number;
   updated_count: number;
   skipped_count: number;
   rejected_count: number;
   failures: ProductBulkFailure[];
+  outcomes?: { external_id: string; status: string; reason?: string }[];
+}
+
+export interface CatalogSyncResource extends ProductBulkUpsertResponse {
+  sync_id: string;
+  status: string;
+  created_at: string;
 }
 
 export interface ProductResource {
@@ -231,9 +252,11 @@ export interface EventSubmitResponse {
 export interface EventBatchResponse {
   id: string;
   status: string;
+  request_id?: string | null;
   accepted_count: number;
   duplicate_count: number;
   rejected_count: number;
+  outcomes?: { event_id: string; status: string; reason?: string }[];
   created_at: string;
 }
 
@@ -272,8 +295,8 @@ export interface ModelVersionResource {
   activated_at: string | null;
 }
 
-/** A job runs synchronously inside the request that created it. */
-export type TrainingJobStatus = "running" | "succeeded" | "failed" | string;
+/** Training requests are durable; a separate worker advances the job. */
+export type TrainingJobStatus = "queued" | "running" | "cancelling" | "cancelled" | "succeeded" | "failed" | string;
 
 export interface TrainingJobCreate {
   request_id?: string;
@@ -299,13 +322,24 @@ export interface TrainingJobResource {
 }
 
 // ── serving ────────────────────────────────────────────────────
+/** D16: shared admission-control backend; "degraded" means Redis is unreachable and limits fail open per process. */
+export interface RateLimiterStatus {
+  backend: string;
+  status: "ok" | "degraded" | "disabled" | string;
+  fail_open_total: number;
+  last_error_at: string | null;
+}
+
 export interface DeploymentStatus {
-  /** "available" when a model version is active, otherwise "stopped". */
+  id?: string | null;
+  desired_model_version_id?: string | null;
   status: string;
   active_model_version_id: string | null;
-  /** When the active version took over; null when nothing is active. */
+  desired_capacity?: number;
+  ready_capacity?: number;
   last_transition_at: string | null;
   failure_reason: string | null;
+  rate_limiter?: RateLimiterStatus | null;
 }
 
 /** Offline measures recorded for the active version at training time. */
@@ -345,14 +379,16 @@ export interface PlatformTenant {
 }
 
 export interface PlatformPlan {
+  warnings?: LimitConflict[];
   id: string;
   code: string;
   name: string;
-  limits: Record<string, unknown>;
+  limits: Record<string, number>;
   is_active: boolean;
 }
 
 export interface PlatformQuotaOverride {
+  warnings?: LimitConflict[];
   limits: Record<string, unknown>;
   overrides: Record<string, unknown>;
 }
@@ -381,5 +417,99 @@ export interface PlatformStatus {
   api_cluster: string;
   database: string;
   worker_pool: string;
+  rate_limiter?: RateLimiterStatus | null;
+  deployments?: { available_tenants: number; degraded_tenants: number; desired_capacity: number; ready_capacity: number } | null;
   timestamp: string;
+}
+
+// ── XR-F-02/03: retraining policy ─────────────────────────────
+export interface RetrainingPolicyInput {
+  schedule_enabled: boolean;
+  interval_minutes: number;
+  event_trigger_enabled: boolean;
+  event_threshold: number;
+  epochs: number;
+}
+export interface RetrainingPolicy extends RetrainingPolicyInput {
+  tenant_id: string;
+  configured: boolean;
+  next_run_at: string | null;
+  new_events_since_last_training: number;
+  last_training_requested_at: string | null;
+  training_in_progress: boolean;
+  minimum_interval_minutes: number;
+  last_evaluated_at: string | null;
+  last_trigger: string | null;
+  last_outcome: string | null;
+  last_outcome_detail: string | null;
+  last_outcome_at: string | null;
+  last_job_id: string | null;
+  updated_at: string | null;
+}
+
+// ── XR-F-04: recommendation rules ─────────────────────────────
+export interface RecommendationPolicyInput {
+  diversity_enabled: boolean;
+  max_per_category: number;
+  freshness_enabled: boolean;
+  freshness_weight: number;
+  freshness_half_life_days: number;
+}
+export interface RecommendationPolicy extends RecommendationPolicyInput {
+  tenant_id: string;
+  configured: boolean;
+  version: number;
+  updated_at: string | null;
+}
+
+// ── XR-F-07: usage trends ─────────────────────────────────────
+export type TrendGranularity = "hour" | "day" | "week";
+export interface UsageTrend {
+  tenant_id: string;
+  start: string;
+  end: string;
+  granularity: TrendGranularity;
+  usage_types: string[];
+  buckets: { start: string; values: Record<string, number> }[];
+  totals: Record<string, number>;
+}
+
+// ── XR-F-08: serving capacity ─────────────────────────────────
+export interface CapacityEvent {
+  id: string;
+  model_version_id: string | null;
+  from_capacity: number;
+  to_capacity: number;
+  reason: string;
+  measured_rpm: number;
+  peak_rpm: number;
+  max_capacity: number;
+  occurred_at: string;
+}
+export interface ScalingStatus {
+  managed: boolean;
+  desired_capacity: number;
+  ready_capacity: number;
+  min_capacity: number;
+  max_capacity: number;
+  serving_slots: number | null;
+  target_rpm_per_replica: number;
+  scale_down_stabilization_seconds: number;
+  measured_rpm: number;
+  peak_rpm: number;
+  last_scaled_at: string | null;
+  events: CapacityEvent[];
+  limitation: string;
+}
+
+// ── recommendations ────────────────────────────────────────────
+export interface RecommendationResult {
+  request_id: string;
+  items: { external_product_id: string; position: number }[];
+  model_version_id: string | null;
+  strategy: string;
+  fallback_used: boolean;
+  fallback_tier: string;
+  applied_rules: string[];
+  rules_version: number | null;
 }

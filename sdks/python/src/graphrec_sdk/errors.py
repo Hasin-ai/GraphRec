@@ -36,6 +36,7 @@ __all__ = [
     "IdempotencyConflictError",
     "InputValidationError",
     "InternalServerError",
+    "LimitBelowUsageError",
     "MalformedRequestError",
     "NotFoundError",
     "PayloadTooLargeError",
@@ -199,6 +200,21 @@ class StateConflictError(ConflictError):
     """HTTP 409 ``state_conflict`` / ``conflict`` - the resource is in the wrong state."""
 
 
+class LimitBelowUsageError(ConflictError):
+    """HTTP 409 ``limit_below_usage`` - a platform limit change would leave tenants above an
+    inventory limit. Nothing was changed; resend with ``acknowledge_below_usage=True`` to apply.
+    """
+
+    @property
+    def conflicts(self) -> List[Dict[str, Any]]:
+        """The limits that would be exceeded (``limit_name``, ``limit``, ``used``, ``over_by``)."""
+
+        items = self.details.get("conflicts")
+        if not isinstance(items, list):
+            return []
+        return [dict(item) for item in items if isinstance(item, Mapping)]
+
+
 class PayloadTooLargeError(APIStatusError):
     """HTTP 413 ``payload_too_large`` - the body exceeded the server's limit."""
 
@@ -261,6 +277,10 @@ _CODE_MAP: Dict[str, Type[APIStatusError]] = {
     "duplicate_resource": DuplicateResourceError,
     "idempotency_conflict": IdempotencyConflictError,
     "state_conflict": StateConflictError,
+    "limit_below_usage": LimitBelowUsageError,
+    "invalid_recovery_token": AuthenticationError,
+    "insufficient_role": PermissionDeniedError,
+    "artifact_not_found": NotFoundError,
     "conflict": StateConflictError,
     "payload_too_large": PayloadTooLargeError,
     "validation_failed": RequestValidationError,

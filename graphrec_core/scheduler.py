@@ -1,0 +1,82 @@
+"""Background controller for XR-F-02/03 (retraining policies) and XR-F-08 (capacity).
+
+Runs as its own Compose service so it keeps ticking while the training worker
+is busy. Each tick discovers candidate tenants through SECURITY DEFINER
+functions that return only tenant ids, then does all work inside that
+tenant's row-level-security context. A Postgres advisory lock keeps a single
+active scheduler; extra replicas wait as hot standbys.
+"""
+from __future__ import annotations
+
+import logging
+import time
+
+from sqlalchemy import text
+
+from graphrec_core.capacity import evaluate_capacity
+from graphrec_core.database.session import SessionLocal, engine
+from graphrec_core.database.tenancy import set_local_tenant
+from graphrec_core.retraining.service import RetrainingService
+from graphrec_core.settings import get_settings
+
+logger = logging.getLogger("graphrec.scheduler")
+SCHEDULER_LOCK = 714629382
+
+
+def _tenants(function: str) -> list:
+    with SessionLocal() as db:
+        rows = list(db.scalars(text(f"SELECT * FROM public.{function}()")))
+        db.commit()
+    return rows
+
+
+def run_retraining_tick() -> int:
+    triggered = 0
+    for tenant_id in _tenants("retraining_policy_tenants"):
+        try:
+            with SessionLocal() as db:
+                set_local_tenant(db, tenant_id)
+                if RetrainingService(db).evaluate(tenant_id).trigger:
+                    triggered += 1
+        except Exception:
+            logger.exception("Retraining evaluation failed for tenant %s", tenant_id)
+    return triggered
+
+
+def run_capacity_tick() -> int:
+    changes = 0
+    for tenant_id in _tenants("capacity_controller_tenants"):
+        try:
+            with SessionLocal() as db:
+                set_local_tenant(db, tenant_id)
+                decision = evaluate_capacity(db, tenant_id)
+                changes += int(bool(decision and decision.reason))
+        except Exception:
+            logger.exception("Capacity evaluation failed for tenant %s", tenant_id)
+    return changes
+
+
+def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    tick = get_settings().scheduler_tick_seconds
+    with engine.connect() as guard:
+        while not guard.scalar(text("SELECT pg_try_advisory_lock(:k)"), {"k": SCHEDULER_LOCK}):
+            guard.commit()
+            logger.info("Another scheduler is active; standing by")
+            time.sleep(tick)
+        guard.commit()
+        logger.info("Scheduler active (tick %ss)", tick)
+        while True:
+            started = time.monotonic()
+            try:
+                guard.execute(text("SELECT 1"))
+                guard.commit()
+                run_capacity_tick()
+                run_retraining_tick()
+            except Exception:
+                logger.exception("Scheduler tick failed")
+            time.sleep(max(1.0, tick - (time.monotonic() - started)))
+
+
+if __name__ == "__main__":
+    main()

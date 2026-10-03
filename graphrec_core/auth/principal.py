@@ -7,7 +7,7 @@ from uuid import UUID
 
 import jwt
 from fastapi import Depends, Request
-from sqlalchemy import select, text
+from sqlalchemy import select, text, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -112,6 +112,7 @@ def _bearer_principal(token: str, db: Session, settings: Settings) -> Authentica
             select(
                 TenantUser.role.label("role"),
                 TenantUser.status.label("user_status"),
+                TenantUser.auth_epoch.label("auth_epoch"),
                 Tenant.status.label("tenant_status"),
             )
             .join(Tenant, Tenant.id == TenantUser.tenant_id)
@@ -127,6 +128,7 @@ def _bearer_principal(token: str, db: Session, settings: Settings) -> Authentica
         or identity.tenant_status != "active"
         or identity.role != claimed_role
         or identity.role not in ROLE_SCOPES
+        or claims.get("av", 0) != identity.auth_epoch
     ):
         raise _authentication_failed()
 
@@ -138,6 +140,23 @@ def _bearer_principal(token: str, db: Session, settings: Settings) -> Authentica
         scopes=frozenset(claimed_scopes).intersection(ROLE_SCOPES[identity.role]),
         credential_type="bearer",
     )
+
+
+#: last_used_at is written at most once per key per minute (bounded write load).
+LAST_USED_RESOLUTION_SECONDS = 60
+
+
+def _record_api_key_use(tenant_id: UUID, key_id: UUID, now: datetime) -> None:
+    """D11: record use in its own transaction so read-only endpoints, which never
+    commit the request session, still update "last used". Best effort."""
+    from graphrec_core.database.session import SessionLocal
+    try:
+        with SessionLocal() as session, session.begin():
+            set_local_tenant(session, tenant_id)
+            session.execute(update(ApiKey).where(ApiKey.tenant_id == tenant_id, ApiKey.id == key_id)
+                            .values(last_used_at=now))
+    except SQLAlchemyError:
+        pass
 
 
 def _api_key_principal(secret: str, db: Session, settings: Settings) -> AuthenticatedPrincipal:
@@ -182,7 +201,8 @@ def _api_key_principal(secret: str, db: Session, settings: Settings) -> Authenti
             or not set(row.scopes).issubset(API_KEY_COMPATIBLE_SCOPES)
         ):
             raise _authentication_failed()
-        row.last_used_at = now
+        if row.last_used_at is None or (now - row.last_used_at).total_seconds() >= LAST_USED_RESOLUTION_SECONDS:
+            _record_api_key_use(tenant_id, key_id, now)
     except ApiError:
         db.rollback()
         raise

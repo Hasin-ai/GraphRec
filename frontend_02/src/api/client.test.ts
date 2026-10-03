@@ -75,6 +75,11 @@ describe("request", () => {
     expect(describeError(apiError)).toContain("7 seconds");
   });
 
+  it("shows the server's training cooldown retry time", () => {
+    const error = new GraphRecApiError(409, { error: { code: "training_cooldown", retry_after_seconds: 42 } });
+    expect(describeError(error)).toBe("Training is cooling down. Try again in 42 seconds.");
+  });
+
   it("ends the tenant session on 401 so the guards route to sign-in", async () => {
     signInAsAdmin();
     mockFetch([{ path: "/v1/api-keys", status: 401, body: { error: { code: "token_expired", message: "Access token expired" } } }]);

@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import text, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -105,6 +105,32 @@ class RegistrationService:
                 )
                 self.session.commit()
                 raise self._duplicate_error()
+
+            # UC-01: an administrator email that already belongs to a tenant user
+            # is a duplicate registration. Without this check an anonymous caller
+            # could register another tenant with someone's email and make their
+            # sign-in ambiguous (login resolves users by email across tenants).
+            existing_user = self.session.execute(
+                text("SELECT 1 FROM resolve_login_identities(:email) LIMIT 1"),
+                {"email": request.admin_email},
+            ).first()
+            # D10: tenant names are unique case-insensitively (SRS gap: the SRS
+            # only says duplicate registrations are rejected).
+            name_taken = bool(self.session.scalar(
+                text("SELECT public.tenant_name_in_use(:name)"), {"name": request.name}))
+            if existing_user is not None or name_taken:
+                self._add_security_event(
+                    tenant_id=None,
+                    event_type="registration_duplicate_denied",
+                    severity="warning",
+                    source=source,
+                    detail={
+                        "correlation_id": str(correlation_id),
+                        "administrator_email_hash": self._protected_hash(request.admin_email),
+                    },
+                )
+                self.session.commit()
+                raise self._duplicate_error(name_taken=name_taken, email_taken=existing_user is not None)
 
             return self._create_registration(
                 request,
@@ -355,9 +381,17 @@ class RegistrationService:
         return f"{base[:48]}-{tenant_id.hex[:8]}"
 
     @staticmethod
-    def _duplicate_error() -> ApiError:
+    def _duplicate_error(name_taken: bool = True, email_taken: bool = True) -> ApiError:
+        # D15: say which field needs correcting (UC-01 "correction guidance")
+        # without echoing the submitted values back.
+        fields = []
+        if name_taken:
+            fields.append({"field": "name", "message": "This business name is already registered. Choose a different name."})
+        if email_taken:
+            fields.append({"field": "admin_email", "message": "This email cannot be used to register a new tenant. If you already have an account, sign in, or ask your operator for a new setup link."})
         return ApiError(
             409,
             "duplicate_resource",
             "This registration cannot be completed with the supplied information",
+            details={"fields": fields},
         )

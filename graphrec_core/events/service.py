@@ -9,6 +9,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from graphrec_core.database.models import CustomerEvent, EventBatch, Product, UsageEvent
+from graphrec_core.customers import ensure_customers
+from graphrec_core.ingestion.idempotency import payload_hash
 from graphrec_core.usage.limits import lock_dimension, require_capacity
 from graphrec_core.errors import ApiError
 from graphrec_core.schemas.events import EventBatchResponse, EventBatchSubmit, EventSubmit
@@ -37,6 +39,7 @@ class EventService:
 
         self._validate_product(tenant_id, payload.external_product_id)
         require_capacity(self.db, tenant_id, "accepted_events")
+        ensure_customers(self.db, tenant_id, {payload.user_id} if payload.user_id else set())
         event = CustomerEvent(
             id=uuid4(),
             tenant_id=tenant_id,
@@ -71,27 +74,41 @@ class EventService:
 
     def submit_batch(self, tenant_id: UUID, payload: EventBatchSubmit) -> EventBatchResponse:
         lock_dimension(self.db, tenant_id, "accepted_events")
+        digest = payload_hash(payload)
+        if payload.request_id:
+            previous = self.db.scalar(select(EventBatch).where(
+                EventBatch.tenant_id == tenant_id, EventBatch.request_id == payload.request_id,
+            ))
+            if previous is not None:
+                if previous.payload_hash != digest:
+                    raise ApiError(409, "idempotency_conflict", "Request ID was already used with different content.")
+                return EventBatchResponse.model_validate(previous)
         identifiers = {item.event_id for item in payload.events}
         existing_ids = set(self.db.scalars(select(CustomerEvent.event_id).where(
             CustomerEvent.tenant_id == tenant_id, CustomerEvent.event_id.in_(identifiers))))
-        for item in payload.events:
-            if item.event_id not in existing_ids:
-                self._validate_product(tenant_id, item.external_product_id)
-        require_capacity(self.db, tenant_id, "accepted_events", len(identifiers - existing_ids))
+        product_ids = {item.external_product_id for item in payload.events if item.external_product_id}
+        known_products = set(self.db.scalars(select(Product.external_id).where(
+            Product.tenant_id == tenant_id, Product.external_id.in_(product_ids)))) if product_ids else set()
+        valid_new_ids = {item.event_id for item in payload.events
+                         if item.event_id not in existing_ids
+                         and (item.external_product_id is None or item.external_product_id in known_products)}
+        require_capacity(self.db, tenant_id, "accepted_events", len(valid_new_ids))
         now = datetime.now(timezone.utc)
         accepted = 0
         duplicates = 0
         rejected = 0
+        outcomes: list[dict[str, str]] = []
+        seen_ids = set(existing_ids)
+        accepted_customers: set[str] = set()
+        new_events: list[CustomerEvent] = []
 
         for item in payload.events:
-            existing = self.db.execute(
-                select(CustomerEvent).where(
-                    CustomerEvent.tenant_id == tenant_id, CustomerEvent.event_id == item.event_id
-                )
-            ).scalar_one_or_none()
-
-            if existing:
+            if item.event_id in seen_ids:
                 duplicates += 1
+                outcomes.append({"event_id": item.event_id, "status": "duplicate"})
+            elif item.external_product_id is not None and item.external_product_id not in known_products:
+                rejected += 1
+                outcomes.append({"event_id": item.event_id, "status": "rejected", "reason": "unknown_product"})
             else:
                 evt = CustomerEvent(
                     id=uuid4(),
@@ -104,13 +121,22 @@ class EventService:
                     occurred_at=item.occurred_at,
                     created_at=now,
                 )
-                self.db.add(evt)
+                new_events.append(evt)
+                seen_ids.add(item.event_id)
+                if item.user_id:
+                    accepted_customers.add(item.user_id)
                 accepted += 1
+                outcomes.append({"event_id": item.event_id, "status": "accepted"})
 
+        ensure_customers(self.db, tenant_id, accepted_customers)
+        self.db.add_all(new_events)
         batch = EventBatch(
             id=uuid4(),
             tenant_id=tenant_id,
             status="completed",
+            request_id=payload.request_id,
+            payload_hash=digest,
+            outcomes=outcomes,
             accepted_count=accepted,
             duplicate_count=duplicates,
             rejected_count=rejected,

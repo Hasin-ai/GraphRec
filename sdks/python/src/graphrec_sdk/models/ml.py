@@ -41,6 +41,9 @@ class ModelVersionList(ItemList[ModelVersion]):
 
 
 class TrainingJob(GraphRecModel):
+    progress: int = 0
+    stage: str = "queued"
+    cancel_requested: bool = False
     id: UUID
     model_type: str
     #: ``queued``, ``preparing_data``, ``training``, ``succeeded``, ``failed`` (or ``cancelled``).

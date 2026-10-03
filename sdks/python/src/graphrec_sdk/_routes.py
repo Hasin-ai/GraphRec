@@ -78,6 +78,8 @@ ROUTES: Dict[str, Route] = dict(
         _r(Route("tenants.register", "POST", "/v1/tenants", auth="none", idempotent=True, body="json")),
         _r(Route("auth.login", "POST", "/v1/auth/login", auth="none", idempotent=True, body="json")),
         _r(Route("auth.setup_password", "POST", "/v1/auth/setup-password", auth="none", idempotent=True, body="json")),
+        _r(Route("auth.recover_password", "POST", "/v1/auth/recover-password", auth="none", body="json")),
+        _r(Route("auth.logout", "POST", "/v1/auth/logout", auth="bearer", idempotent=True)),
         # -- API keys (bearer tokens only) -------------------------------------------------
         _r(Route("api_keys.list", "GET", "/v1/api-keys", auth="bearer", scope="keys:write", scope_enforced=True, idempotent=True)),
         _r(Route("api_keys.get", "GET", "/v1/api-keys/{key_id}", auth="bearer", scope="keys:write", scope_enforced=True, idempotent=True)),
@@ -87,11 +89,15 @@ ROUTES: Dict[str, Route] = dict(
         # -- tenant users (administrator bearer tokens only) -------------------------------
         _r(Route("tenant_users.list", "GET", "/v1/tenant/users", auth="bearer", scope="users:write", scope_enforced=True, idempotent=True)),
         _r(Route("tenant_users.invite", "POST", "/v1/tenant/users", auth="bearer", scope="users:write", scope_enforced=True, body="json")),
+        _r(Route("tenant_users.revoke_invitation", "DELETE", "/v1/tenant/users/{user_id}/invitation", auth="bearer", scope="users:write", scope_enforced=True, idempotent=True)),
         # -- billing -----------------------------------------------------------------------
         _r(Route("subscription.get", "GET", "/v1/subscription", scope="billing:read", scope_enforced=True, idempotent=True)),
         _r(Route("usage.get", "GET", "/v1/usage", scope="usage:read", scope_enforced=True, idempotent=True)),
+        _r(Route("usage.trends", "GET", "/v1/usage/trends", scope="usage:read", scope_enforced=True, idempotent=True)),
         # -- catalog -----------------------------------------------------------------------
         _r(Route("products.bulk_upsert", "POST", "/v1/products:bulk-upsert", scope="catalog:write", scope_enforced=True, idempotent=True, body="json")),
+        _r(Route("products.list_syncs", "GET", "/v1/catalog-syncs", scope="catalog:read", scope_enforced=True, idempotent=True)),
+        _r(Route("products.get_sync", "GET", "/v1/catalog-syncs/{sync_id}", scope="catalog:read", scope_enforced=True, idempotent=True)),
         _r(Route("products.list", "GET", "/v1/products", scope="catalog:read", scope_enforced=True, idempotent=True)),
         _r(Route("products.get", "GET", "/v1/products/{external_id}", scope="catalog:read", scope_enforced=True, idempotent=True)),
         _r(Route("products.upsert", "PUT", "/v1/products/{external_id}", scope="catalog:write", scope_enforced=True, idempotent=True, body="json")),
@@ -116,8 +122,13 @@ ROUTES: Dict[str, Route] = dict(
         _r(Route("model_versions.rollback", "POST", "/v1/models/{model_id}:rollback", scope="models:deploy", scope_enforced=True, idempotent=True)),
         _r(Route("training_jobs.create", "POST", "/v1/training-jobs", scope="training:write", scope_enforced=True, body="json")),
         _r(Route("training_jobs.list", "GET", "/v1/training-jobs", scope="training:read", scope_enforced=True, idempotent=True)),
+        _r(Route("training_jobs.get", "GET", "/v1/training-jobs/{job_id}", scope="training:read", scope_enforced=True, idempotent=True)),
+        _r(Route("training_jobs.cancel", "POST", "/v1/training-jobs/{job_id}:cancel", scope="training:write", scope_enforced=True, idempotent=True)),
+        _r(Route("retraining_policy.get", "GET", "/v1/retraining-policy", scope="training:read", scope_enforced=True, idempotent=True)),
+        _r(Route("retraining_policy.update", "PUT", "/v1/retraining-policy", scope="training:write", scope_enforced=True, idempotent=True, body="json")),
         # -- serving status ----------------------------------------------------------------
         _r(Route("deployment.get", "GET", "/v1/deployment", scope="deployments:read", scope_enforced=True, idempotent=True)),
+        _r(Route("deployment.scaling", "GET", "/v1/deployment/scaling", scope="deployments:read", scope_enforced=True, idempotent=True)),
         _r(Route("metrics.summary", "GET", "/v1/metrics/summary", scope="metrics:read", scope_enforced=True, idempotent=True)),
         # -- recommendations & feedback ----------------------------------------------------
         _r(Route("recommendations.get", "POST", "/v1/recommendations", scope="recommendations:read", scope_enforced=True, idempotent=True, body="json")),
@@ -125,11 +136,18 @@ ROUTES: Dict[str, Route] = dict(
         _r(Route("feedback.impression", "POST", "/v1/feedback/impressions", scope="events:write", scope_enforced=True, idempotent=True, body="json")),
         _r(Route("feedback.click", "POST", "/v1/feedback/clicks", scope="events:write", scope_enforced=True, idempotent=True, body="json")),
         _r(Route("feedback.conversion", "POST", "/v1/feedback/conversions", scope="events:write", scope_enforced=True, idempotent=True, body="json")),
+        _r(Route("recommendation_policy.get", "GET", "/v1/recommendation-policy", scope="models:read", scope_enforced=True, idempotent=True)),
+        _r(Route("recommendation_policy.update", "PUT", "/v1/recommendation-policy", scope="models:deploy", scope_enforced=True, idempotent=True, body="json")),
         # -- platform administration (PLATFORM_ADMIN_TOKEN bearer) -------------------------
         _r(Route("platform.list_tenants", "GET", "/v1/platform/tenants", auth="bearer", scope="platform:admin", idempotent=True)),
         _r(Route("platform.get_tenant", "GET", "/v1/platform/tenants/{tenant_id}", auth="bearer", scope="platform:admin", idempotent=True)),
+        _r(Route("platform.get_tenant_quota", "GET", "/v1/platform/tenants/{tenant_id}/quotas", auth="bearer", scope="platform:admin", idempotent=True)),
+        _r(Route("platform.get_tenant_usage", "GET", "/v1/platform/tenants/{tenant_id}/usage", auth="bearer", scope="platform:admin", idempotent=True)),
+        _r(Route("platform.assign_tenant_plan", "POST", "/v1/platform/tenants/{tenant_id}/plan", auth="bearer", scope="platform:admin", body="json")),
         _r(Route("platform.set_tenant_status", "POST", "/v1/platform/tenants/{tenant_id}/status", auth="bearer", scope="platform:admin", idempotent=True, body="json")),
         _r(Route("platform.list_plans", "GET", "/v1/platform/plans", auth="bearer", scope="platform:admin", idempotent=True)),
+        _r(Route("platform.update_plan", "PUT", "/v1/platform/plans/{plan_id}", auth="bearer", scope="platform:admin", idempotent=True, body="json")),
+        _r(Route("platform.issue_recovery", "POST", "/v1/platform/tenants/{tenant_id}/recovery", auth="bearer", scope="platform:admin", body="json")),
         _r(Route("platform.set_quota_override", "POST", "/v1/platform/tenants/{tenant_id}/quotas", auth="bearer", scope="platform:admin", idempotent=True, body="json")),
         _r(Route("platform.list_failures", "GET", "/v1/platform/failures", auth="bearer", scope="platform:admin", idempotent=True)),
         _r(Route("platform.list_audit_logs", "GET", "/v1/platform/audit", auth="bearer", scope="platform:admin", idempotent=True)),
