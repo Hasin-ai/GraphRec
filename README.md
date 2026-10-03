@@ -289,7 +289,8 @@ require the Compose PostgreSQL database; the unit tests run without it.
 
 ## SDKs
 
-Client libraries for Python (`sdks/python`) and TypeScript (`sdks/typescript`)
-cover every API route, with retries, body-size splitting and e-commerce
-helpers. See [`sdks/README.md`](sdks/README.md); each has an end-to-end smoke
-test that runs against the Compose stack.
+The Python SDK (`sdks/python`, `graphrec-sdk` 1.x) covers every API route,
+grouped by audience (`client.storefront`, `client.tenant`, `client.platform`),
+with retries, body-size splitting and e-commerce helpers. See
+[`sdks/python/README.md`](sdks/python/README.md). It has an end-to-end smoke test
+for the Compose stack and a live integration suite (`tests/integration/test_sdk_live.py`).
