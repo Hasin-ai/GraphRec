@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { platform } from "../../api";
 import { isApiError } from "../../api/client";
-import type { PlatformPlan, PlatformQuotaOverride, PlatformTenant, PlatformTenantStatus } from "../../api/types";
+import type { LimitConflict, PlatformPlan, PlatformQuotaOverride, PlatformTenant, PlatformTenantStatus } from "../../api/types";
 import { useClearQuery, useQueryState } from "../../hooks/useQueryState";
 import { useResource } from "../../hooks/useResource";
 import { useToast } from "../../hooks/useToast";
@@ -12,6 +12,7 @@ import { Field, Select, TextInput } from "../../ui/Form";
 import { Page } from "../../ui/Page";
 import { ActionsCell, Badge, Cell, DataTable, DefinitionList, ErrorBanner, FilterBar, Footnote, Panel, PanelTable, Skeleton, Tag } from "../../ui/primitives";
 import { NotFoundPage } from "../errors/ErrorPages";
+import { humanizeKey } from "../../lib/labels";
 
 const STATUSES: PlatformTenantStatus[] = ["active", "suspended", "deleting", "deleted"];
 const USAGE_TYPES = ["accepted_events", "recommendation_requests", "training_jobs", "training_cpu_seconds", "stored_products", "artifact_storage_bytes", "active_model_versions", "inference_replicas", "replica_runtime_minutes"];
@@ -97,9 +98,41 @@ export function PlatformTenantsPage() {
   );
 }
 
+/**
+ * Two-step confirmation for limit changes. The first attempt is sent without
+ * acknowledgement; if the API answers 409 limit_below_usage, the conflicts are
+ * shown and the operator must tick the box before the change is resent.
+ */
+function useBelowUsageGuard() {
+  const [conflicts, setConflicts] = useState<LimitConflict[] | null>(null);
+  const [acknowledged, setAcknowledged] = useState(false);
+  async function attempt<T>(send: (acknowledge: boolean) => Promise<T>): Promise<T | string> {
+    if (conflicts && !acknowledged) return "Confirm that you want to apply limits below current usage, or change the values.";
+    try {
+      return await send(!!conflicts && acknowledged);
+    } catch (caught) {
+      if (isApiError(caught) && caught.code === "limit_below_usage") {
+        setConflicts((caught.details.conflicts as LimitConflict[] | undefined) ?? []);
+        setAcknowledged(false);
+        return "These limits are below what is already stored. Review the impact below.";
+      }
+      throw caught;
+    }
+  }
+  const reset = () => { setConflicts(null); setAcknowledged(false); };
+  const notice = conflicts ? <div className="limit-conflicts" role="alert">
+    <strong>Below current usage</strong>
+    <p>Nothing is deleted, but each tenant below cannot add more until its usage drops under the new limit. Edits to existing data keep working.</p>
+    <ul>{conflicts.map((c, i) => <li key={i}>{c.tenant_name ? <b>{c.tenant_name}: </b> : null}{humanize(c.limit_name)} — {fmtNumber(c.used)} stored, new limit {fmtNumber(c.limit)} ({fmtNumber(c.over_by)} over)</li>)}</ul>
+    <label className="check"><input type="checkbox" checked={acknowledged} onChange={e => setAcknowledged(e.target.checked)} /> Apply anyway and block further growth</label>
+  </div> : null;
+  return { attempt, notice, reset, isResult: <T,>(value: T | string): value is T => typeof value !== "string" };
+}
+
 function OverrideDialog({ tenant, onClose, onDone }: { tenant: PlatformTenant; onClose: () => void; onDone: (r: PlatformQuotaOverride) => void }) {
   const [type, setType] = useState(USAGE_TYPES[0]);
   const [value, setValue] = useState("");
+  const guard = useBelowUsageGuard();
   return (
     <Dialog
       title={`Approve quota override for ${tenant.slug}`}
@@ -108,16 +141,19 @@ function OverrideDialog({ tenant, onClose, onDone }: { tenant: PlatformTenant; o
       body="An override replaces the plan limit for one usage type. Overrides already in force for other usage types are kept."
       onConfirm={async () => {
         if (value.trim() === "" || !Number.isInteger(Number(value)) || Number(value) < 0) return "The override limit must be a non-negative integer.";
-        onDone(await platform.setQuotaOverrides(tenant.id, { [type]: Number(value) }));
+        const result = await guard.attempt(ack => platform.setQuotaOverrides(tenant.id, { [type]: Number(value) }, ack));
+        if (!guard.isResult(result)) return result;
+        onDone(result);
       }}
       onClose={onClose}
     >
       <Field id="d-type" label="Usage type">
-        <Select id="d-type" value={type} onChange={setType} options={USAGE_TYPES} />
+        <Select id="d-type" value={type} onChange={v => { setType(v); guard.reset(); }} options={USAGE_TYPES} />
       </Field>
       <Field id="d-value" label="Override limit">
-        <TextInput id="d-value" value={value} onChange={setValue} mono placeholder="8000000" type="number" min={0} />
+        <TextInput id="d-value" value={value} onChange={v => { setValue(v); guard.reset(); }} mono placeholder="8000000" type="number" min={0} />
       </Field>
+      {guard.notice}
     </Dialog>
   );
 }
@@ -153,6 +189,7 @@ function PlatformTenantDetail() {
   const tenantUsage = useResource(() => platform.getTenantUsage(tenantId), [tenantId]);
   const quota = quotaResource.data;
   const [selectedPlan, setSelectedPlan] = useState('');
+  const planGuard = useBelowUsageGuard();
   const crumbs = [{ label: "Platform", to: "/admin/status" }, { label: "Tenants", to: "/admin/tenants" }, { label: shortId(tenantId), mono: true }];
 
   if (tenant.error && isApiError(tenant.error) && (tenant.error.status === 404 || tenant.error.status === 422)) return <NotFoundPage />;
@@ -197,7 +234,7 @@ function PlatformTenantDetail() {
               columns={["Usage type", { label: "Effective limit", align: "right" }, { label: "Override", align: "right" }]}
               rows={Object.entries(quota.limits).map(([k, v]) => (
                 <tr key={k}>
-                  <Cell mono>{k}</Cell>
+                  <td title={k}>{humanizeKey(k)}</td>
                   <Cell mono align="right">
                     {typeof v === "number" ? fmtNumber(v) : String(v)}
                   </Cell>
@@ -218,7 +255,7 @@ function PlatformTenantDetail() {
                 <Cell>{humanize(d.type)}</Cell>
                 <Cell mono align="right">{fmtQuantity(d.used, d.unit)}</Cell>
                 <Cell mono align="right">{d.limit === null ? 'No limit' : fmtQuantity(d.limit, d.unit)}</Cell>
-                <Cell mono align="right">{d.remaining === null ? '—' : fmtQuantity(d.remaining, d.unit)}</Cell>
+                <Cell align="right">{d.remaining === null ? '—' : d.limit !== null && d.used > d.limit ? <span className="over-by">{fmtQuantity(d.used - d.limit, d.unit)} over</span> : fmtQuantity(d.remaining, d.unit)}</Cell>
               </tr>)} />
             <p className="footnote">Period {fmtDateTime(tenantUsage.data.period_start)} – {fmtDateTime(tenantUsage.data.period_end)}. Reconciled {fmtDateTime(tenantUsage.data.last_reconciled_at)}.</p>
           </> : null}
@@ -269,12 +306,14 @@ function PlatformTenantDetail() {
           }}
         />
       ) : null}
-      {dialog === 'plan' ? <Dialog title={`Assign plan for ${t.slug}`} body="The new base limits apply immediately. This does not reset usage or remove existing overrides." confirmLabel="Assign plan" onClose={() => setDialog(null)} onConfirm={async () => {
+      {dialog === 'plan' ? <Dialog title={`Assign plan for ${t.slug}`} body="The new base limits apply immediately. This does not reset usage or remove existing overrides." confirmLabel="Assign plan" onClose={() => { setDialog(null); planGuard.reset(); }} onConfirm={async () => {
         if (!selectedPlan) return 'Select an active plan.';
-        quotaResource.setData(await platform.assignTenantPlan(t.id, selectedPlan));
+        const result = await planGuard.attempt(ack => platform.assignTenantPlan(t.id, selectedPlan, ack));
+        if (!planGuard.isResult(result)) return result;
+        quotaResource.setData(result);
         void tenantUsage.reload();
-        setDialog(null); flash('Tenant plan updated.');
-      }}><Field id="tenant-plan" label="Plan"><Select id="tenant-plan" value={selectedPlan} onChange={setSelectedPlan} options={[{ value: '', label: 'Choose a plan' }, ...(plans.data ?? []).filter(p => p.is_active).map(p => ({ value: p.id, label: p.name }))]} /></Field></Dialog> : null}
+        setDialog(null); planGuard.reset(); flash(result.warnings?.length ? 'Tenant plan updated. The tenant is now over a storage limit.' : 'Tenant plan updated.');
+      }}><Field id="tenant-plan" label="Plan"><Select id="tenant-plan" value={selectedPlan} onChange={v => { setSelectedPlan(v); planGuard.reset(); }} options={[{ value: '', label: 'Choose a plan' }, ...(plans.data ?? []).filter(p => p.is_active).map(p => ({ value: p.id, label: p.name }))]} /></Field>{planGuard.notice}</Dialog> : null}
       {dialog === "recovery" ? <RecoveryDialog tenant={t} onClose={() => setDialog(null)} onDone={(token, expires) => {
         setDialog(null); setRecovery({ token, expires }); flash("One-time recovery token issued.");
       }} /> : null}
@@ -293,7 +332,7 @@ export function PlatformPlansPage() {
         </Link>
       </td>
       <Cell>{p.name}</Cell>
-      <Cell muted>{Object.keys(p.limits).length} limits</Cell>
+      <Cell muted>{typeof p.limits.stored_products === "number" ? `${fmtNumber(p.limits.stored_products)} products` : ""}{typeof p.limits.accepted_events === "number" ? ` · ${fmtNumber(p.limits.accepted_events)} events/period` : ""}{typeof p.limits.stored_products !== "number" && typeof p.limits.accepted_events !== "number" ? `${Object.keys(p.limits).length} limits` : ""}</Cell>
       <td>
         <Tag tone={p.is_active ? "ok" : "warn"}>{p.is_active ? "open" : "closed"}</Tag>
       </td>
@@ -313,6 +352,7 @@ export function PlatformPlanPage() {
   const plans = useResource(() => platform.listPlans(), []);
   const { flash } = useToast();
   const [editing, setEditing] = useState(false);
+  const editGuard = useBelowUsageGuard();
   const [name, setName] = useState("");
   const [active, setActive] = useState("true");
   const [limits, setLimits] = useState<Record<string, string>>({});
@@ -333,9 +373,9 @@ export function PlatformPlanPage() {
       setLimits(Object.fromEntries(Object.entries(plan.limits).map(([key, value]) => [key, String(value)])));
       setEditing(true);
     } }]}>
-      <DefinitionList items={[{ label: "Plan code", value: plan.code, mono: true, copy: plan.code }, { label: "Plan identifier", value: plan.id, mono: true, copy: plan.id }, ...Object.entries(plan.limits).map(([k, v]) => ({ label: k, value: typeof v === "number" ? fmtNumber(v) : String(v), mono: true }))]} />
+      <DefinitionList items={[{ label: "Plan code", value: plan.code, mono: true, copy: plan.code }, { label: "Plan identifier", value: plan.id, mono: true, copy: plan.id }, ...Object.entries(plan.limits).map(([k, v]) => ({ label: humanizeKey(k), value: typeof v === "number" ? fmtNumber(v) : String(v) }))]} />
       <Footnote>Editing a plan updates base limits for every assigned tenant without resetting usage or removing approved overrides. Changes are audited.</Footnote>
-      {editing ? <Dialog title={`Edit ${plan.code} plan`} width={680} body="Review base limits carefully; changes apply to all tenants assigned to this plan." confirmLabel="Apply plan changes" onClose={() => setEditing(false)} onConfirm={async () => {
+      {editing ? <Dialog title={`Edit ${plan.code} plan`} width={680} body="Review base limits carefully; changes apply to all tenants assigned to this plan." confirmLabel="Apply plan changes" onClose={() => { setEditing(false); editGuard.reset(); }} onConfirm={async () => {
         const parsed: Record<string, number> = {};
         for (const [key, value] of Object.entries(limits)) {
           const number = Number(value);
@@ -343,14 +383,17 @@ export function PlatformPlanPage() {
           parsed[key] = number;
         }
         if (!name.trim()) return "Enter a plan name.";
-        const updated: PlatformPlan = await platform.updatePlan(plan.id, { name: name.trim(), is_active: active === "true", limits: parsed });
+        const result = await editGuard.attempt(ack => platform.updatePlan(plan.id, { name: name.trim(), is_active: active === "true", limits: parsed }, ack));
+        if (!editGuard.isResult(result)) return result;
+        const updated: PlatformPlan = result;
         plans.setData(previous => previous ? previous.map(item => item.id === updated.id ? updated : item) : null);
-        setEditing(false);
-        flash(`${updated.code} plan updated.`);
+        setEditing(false); editGuard.reset();
+        flash(updated.warnings?.length ? `${updated.code} plan updated. ${updated.warnings.length} tenant limit(s) are now below usage.` : `${updated.code} plan updated.`);
       }}>
         <Field id="plan-name" label="Plan name"><TextInput id="plan-name" value={name} onChange={setName} /></Field>
         <Field id="plan-active" label="Open to new assignments"><Select id="plan-active" value={active} onChange={setActive} options={[{ value: "true", label: "Open" }, { value: "false", label: "Closed" }]} /></Field>
-        {Object.keys(plan.limits).map(key => <Field key={key} id={`limit-${key}`} label={humanize(key)}><TextInput id={`limit-${key}`} value={limits[key] ?? ""} onChange={value => setLimits(current => ({ ...current, [key]: value }))} type="number" min={0} max={9_000_000_000_000_000} /></Field>)}
+        {Object.keys(plan.limits).map(key => <Field key={key} id={`limit-${key}`} label={humanizeKey(key)}><TextInput id={`limit-${key}`} value={limits[key] ?? ""} onChange={value => { setLimits(current => ({ ...current, [key]: value })); editGuard.reset(); }} type="number" min={0} max={9_000_000_000_000_000} /></Field>)}
+        {editGuard.notice}
       </Dialog> : null}
     </Page>
   );

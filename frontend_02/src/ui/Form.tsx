@@ -132,7 +132,7 @@ export function Form({
   error?: FormError | null;
   submitLabel: string;
   busy?: boolean;
-  secondary?: { label: string; to: string };
+  secondary?: { label: string; to: string; variant?: "button" | "link" };
   note?: ReactNode;
   width?: number;
   children: ReactNode;
@@ -159,7 +159,7 @@ export function Form({
           {busy ? "Working…" : submitLabel}
         </button>
         {secondary ? (
-          <Link to={secondary.to} className="btn btn-secondary">
+          <Link to={secondary.to} className={secondary.variant === "link" ? "text-link" : "btn btn-secondary"}>
             {secondary.label}
           </Link>
         ) : null}

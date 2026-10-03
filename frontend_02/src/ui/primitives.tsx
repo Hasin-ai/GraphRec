@@ -3,6 +3,9 @@ import { describeError, isApiError } from "../api/client";
 import { useToast } from "../hooks/useToast";
 import { toneFor, type Tone } from "../lib/status";
 import { quotaState } from "../lib/quota";
+import { isCodeLike, STATUS_HELP } from "../lib/labels";
+
+const REFRESH_SVG = <svg aria-hidden="true" viewBox="0 0 16 16" width="14" height="14"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 
 const TONE_STYLE: Record<Tone, CSSProperties> = {
   ok: { background: "var(--ok-bg)", color: "var(--ok)" },
@@ -34,12 +37,43 @@ export function Tag({
 }
 
 /** A state badge: the value in mono, with its fixed semantic colour and a status dot. */
-export function Badge({ group, value }: { group: string; value: string }) {
+/** Display labels where the API vocabulary isn't what an operator thinks in. */
+const BADGE_LABEL: Record<string, Record<string, string>> = { model: { active: "Serving", retired: "Rollback available", eligible: "Ready to activate", archived: "Archived" } };
+const COMPLETION_GROUPS = new Set(["job", "outcome", "batch"]);
+/**
+ * A state badge with a shape that matches its meaning: completed work gets a
+ * check or cross, live states (serving, keys, tenants) get a status dot.
+ */
+export function Badge({ group, value: raw }: { group: string; value: string }) {
+  const value = String(raw ?? "unknown");
+  const tone = toneFor(group, value);
+  const kind = COMPLETION_GROUPS.has(group) && (tone === "ok" || tone === "danger") ? (tone === "ok" ? "check" : "cross") : (tone === "info" && (value === "running" || value === "queued")) ? "spin" : "dot";
   return (
-    <Tag tone={toneFor(group, value)} mono dot>
-      {value}
-    </Tag>
+    <span className={`tag badge badge-${tone} badge-${kind}${BADGE_LABEL[group]?.[value] ? " no-cap" : ""}`} data-value={value} title={STATUS_HELP[group]?.[value]}>
+      {kind === "check" ? <svg aria-hidden="true" viewBox="0 0 16 16" width="12" height="12"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        : kind === "cross" ? <svg aria-hidden="true" viewBox="0 0 16 16" width="12" height="12"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+        : <span className="dot" aria-hidden="true" />}
+      {BADGE_LABEL[group]?.[value] ?? value.replace(/_/g, " ")}
+    </span>
   );
+}
+
+/**
+ * A copyable identifier (audit X-6/X-7): shortened, monospace, copies the full
+ * value on click. Replaces "value + [Copy]" button pairs everywhere.
+ */
+export function IdChip({ value, display, length = 12, label = "ID" }: { value: string; display?: string; length?: number; label?: string }) {
+  const { copy } = useToast();
+  const shown = display ?? (value.length > length + 1 ? `${value.slice(0, length)}…` : value);
+  return <button type="button" className="id-chip" title={`Copy ${label.toLowerCase()}: ${value}`} aria-label={`Copy ${label.toLowerCase()} ${value}`} onClick={() => copy(value)}>
+    <span>{shown}</span>
+    <svg aria-hidden="true" viewBox="0 0 16 16" width="12" height="12"><rect x="5" y="5" width="8.5" height="8.5" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.5" /><path d="M10.5 3.5V3A1.5 1.5 0 0 0 9 1.5H3A1.5 1.5 0 0 0 1.5 3v6A1.5 1.5 0 0 0 3 10.5h.5" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>
+  </button>;
+}
+
+/** One-line legend explaining a status vocabulary (audit X-5). */
+export function StatusLegend({ group, values }: { group: string; values: string[] }) {
+  return <dl className="status-legend">{values.map(v => <div key={v}><dt><span className={`badge badge-${toneFor(group, v)} badge-dot legend-badge`}><span className="dot" aria-hidden="true" />{BADGE_LABEL[group]?.[v] ?? v.replace(/_/g, " ")}</span></dt><dd>{STATUS_HELP[group]?.[v] ?? ""}</dd></div>)}</dl>;
 }
 
 // ── meter ──────────────────────────────────────────────────────
@@ -110,16 +144,11 @@ export function ErrorBanner({ error, title = "The request could not be completed
   const ref = isApiError(error) ? error.correlationId : undefined;
   return (
     <Banner tone={isApiError(error) && error.status === 429 ? "warn" : "danger"} title={title}>
-      {describeError(error)}
-      {onRetry ? <button type="button" className="btn btn-secondary btn-sm" onClick={onRetry} style={{ marginLeft: 12 }}>Try again</button> : null}
-      {ref ? (
-        <>
-          {" "}
-          <span className="mono" style={{ fontSize: 12 }}>
-            ref {ref}
-          </span>
-        </>
-      ) : null}
+      <span className="err-line">{describeError(error)}</span>
+      {onRetry || ref ? <span className="err-actions">
+        {onRetry ? <button type="button" className="btn btn-secondary btn-sm" onClick={onRetry}>Try again</button> : null}
+        {ref ? <span className="err-ref">Reference <IdChip value={ref} length={8} label="Error reference" /></span> : null}
+      </span> : null}
     </Banner>
   );
 }
@@ -177,7 +206,7 @@ export interface FilterSpec {
 
 export function FilterBar({ filters, onClear }: { filters: FilterSpec[]; onClear: () => void }) {
   return (
-    <div className="filters">
+    <div className={`filters${filters.length === 1 ? " single" : ""}`}>
       {filters.map((f) => (
         <div className="field" key={f.id}>
           <label htmlFor={`f-${f.id}`}>{f.label}</label>
@@ -253,8 +282,9 @@ function DlEntries({ items }: { items: DlItem[] }) {
           <dt>{d.label}</dt>
           <dd>
             {d.badge}
-            {d.value !== undefined && d.value !== null && d.value !== "" ? <span className={`v${d.mono ? " mono" : ""}`}>{d.value}</span> : null}
-            {d.copy ? <CopyButton value={d.copy} /> : null}
+            {d.copy && d.mono && d.value === d.copy ? <IdChip value={d.copy} length={d.copy.length > 24 ? 13 : 40} label={d.label} />
+              : <>{d.value !== undefined && d.value !== null && d.value !== "" ? <span className={`v${d.mono && (typeof d.value !== "string" || isCodeLike(d.value)) ? " mono" : ""}`}>{d.value}</span> : null}
+                {d.copy ? <IdChip value={d.copy} display="Copy" label={d.label} /> : null}</>}
           </dd>
         </div>
       ))}
@@ -291,7 +321,7 @@ export function Cell({
 }) {
   return (
     <td className={align === "right" ? "right" : undefined}>
-      <span className={`${mono ? "td-mono" : ""}${muted ? " td-muted" : ""}`.trim() || undefined}>{children}</span>
+      <span className={`${mono && (typeof children !== "string" || isCodeLike(children)) ? "td-mono" : mono ? "td-num" : ""}${muted ? " td-muted" : ""}`.trim() || undefined}>{children}</span>
       {sub ? <div className="sub">{sub}</div> : null}
     </td>
   );
@@ -426,7 +456,7 @@ export function Panel({
                 title={a.reason}
                 onClick={a.onClick}
               >
-                {a.label}
+                {/^refresh/i.test(a.label) ? REFRESH_SVG : null}{a.label}
               </button>
               {a.reason ? <span className="reason">{a.reason}</span> : null}
             </span>

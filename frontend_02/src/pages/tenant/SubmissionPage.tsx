@@ -25,7 +25,7 @@ export function SubmissionPage() {
   const received = b.accepted_count + b.duplicate_count + b.rejected_count;
   const done = b.status === "completed";
   return (
-    <Page crumbs={crumbs} kicker="event batch" title={`Submission ${b.id}`} badge={<Badge group="batch" value={b.status} />} subtitle={done ? "The batch was applied in the request that submitted it; these are its final counts." : "Reload to update the counts."} actions={[{ label: "Refresh", onClick: () => void batch.reload() }]}>
+    <Page crumbs={crumbs} kicker="event batch" title={`Event batch · ${fmtDateTime(b.created_at)}`} badge={<Badge group="batch" value={b.status} />} subtitle={done ? "The batch was applied in the request that submitted it; these are its final counts." : "Reload to update the counts."} actions={[{ label: "Refresh", onClick: () => void batch.reload() }]}>
       {batch.error ? <ErrorBanner error={batch.error} onRetry={batch.reload} /> : null}
       <Stats
         items={[

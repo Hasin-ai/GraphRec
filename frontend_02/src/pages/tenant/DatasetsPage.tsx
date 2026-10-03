@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { datasets } from "../../api";
+import { datasets, training } from "../../api";
 import { describeError } from "../../api/client";
 import type { DatasetUploadResponse } from "../../api/types";
 import { useResource } from "../../hooks/useResource";
@@ -9,12 +9,14 @@ import { fmtBytes, fmtDateTime, fmtNumber, shortId } from "../../lib/format";
 import { Dialog } from "../../ui/Dialog";
 import { Field, TextInput } from "../../ui/Form";
 import { Page } from "../../ui/Page";
-import { Banner, Cell, CopyButton, DataTable, ErrorBanner, Footnote, Panel, Skeleton, Stats } from "../../ui/primitives";
+import { Banner, DataTable, IdChip, ErrorBanner, Footnote, Panel, Skeleton, Stats } from "../../ui/primitives";
 
 export function DatasetsPage() {
   const { can } = useSession();
   const { flash } = useToast();
   const snapshots = useResource(() => datasets.listSnapshots(), []);
+  const { can: canDo } = useSession();
+  const runs = useResource(() => canDo("training:read") ? training.list() : Promise.resolve(null), [canDo("training:read")]);
   const input = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -44,27 +46,25 @@ export function DatasetsPage() {
     }
   }
 
-  const rows = (snapshots.data?.items ?? []).map((s) => (
+  // Usage comes from the training runs: the API leaves snapshot.training_job_id empty (backend list).
+  const usedBy = (id: string) => (runs.data?.items ?? []).filter(j => j.dataset_snapshot_id === id).length;
+  const snaps = (snapshots.data?.items ?? []).slice().sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+  const rows = snaps.map((s, i) => {
+    const prev = snaps[i + 1];
+    const n = usedBy(s.id) || (s.training_job_id ? 1 : 0);
+    const delta = prev ? [s.event_count - prev.event_count ? `${s.event_count - prev.event_count > 0 ? "+" : ""}${fmtNumber(s.event_count - prev.event_count)} events` : null, s.product_count - prev.product_count ? `${s.product_count - prev.product_count > 0 ? "+" : ""}${fmtNumber(s.product_count - prev.product_count)} products` : null].filter(Boolean).join(", ") : "";
+    return (
     <tr key={s.id}>
-      <Cell mono sub={s.training_job_id ? `job ${shortId(s.training_job_id)}` : undefined}>
-        {shortId(s.id, 13)} <CopyButton value={s.id} label="Copy id" />
-      </Cell>
-      <Cell mono>{fmtDateTime(s.cutoff_at)}</Cell>
-      <Cell mono align="right">
-        {fmtNumber(s.event_count)}
-      </Cell>
-      <Cell mono align="right">
-        {fmtNumber(s.product_count)}
-      </Cell>
-      <Cell mono align="right">
-        {fmtNumber(s.user_count)}
-      </Cell>
-      <Cell mono muted>
-        <span title={s.checksum}>{s.checksum.slice(0, 12)}…</span>
-      </Cell>
-      <Cell mono>{fmtDateTime(s.created_at)}</Cell>
+      <td>
+        <div className="row" style={{ gap: 8 }}><IdChip value={s.id} label="Snapshot ID" />{i === 0 ? <span className="tag" style={{ background: "var(--info-bg)", color: "var(--info)" }}>Latest</span> : null}</div>
+        <div className="sub">{n ? `Used by ${n} training ${n === 1 ? "run" : "runs"}` : "Not used yet"}{delta ? ` · ${delta} vs previous` : prev ? " · same counts as previous" : ""}</div>
+      </td>
+      <td data-hide-mobile>{fmtDateTime(s.cutoff_at)}</td>
+      <td className="num">{fmtNumber(s.event_count)}</td>
+      <td className="num">{fmtNumber(s.product_count)}</td>
+      <td className="num" data-hide-mobile>{fmtNumber(s.user_count)}</td>
     </tr>
-  ));
+  ); });
 
   return (
     <Page
@@ -121,7 +121,7 @@ export function DatasetsPage() {
         <DataTable
           title="Dataset snapshots"
           minWidth={820}
-          columns={["Snapshot", "Cutoff", { label: "Events", align: "right" }, { label: "Products", align: "right" }, { label: "Users", align: "right" }, "Checksum", "Created"]}
+          columns={["Snapshot", "Data up to", { label: "Events", align: "right" }, { label: "Products", align: "right" }, { label: "Users", align: "right" }]}
           rows={rows}
           count={`${rows.length} snapshots`}
           empty={{ title: "No snapshots yet", body: "Upload a dataset or take a snapshot of the current catalog and events.", action: canSnapshot ? { label: "Take snapshot", onClick: () => setCreating(true) } : undefined }}

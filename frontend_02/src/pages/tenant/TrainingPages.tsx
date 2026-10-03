@@ -7,6 +7,14 @@ import { useResource } from "../../hooks/useResource";
 import { useSession } from "../../hooks/useSession";
 import { useToast } from "../../hooks/useToast";
 import { fmtDateTime, fmtNumber, shortId, flattenMetrics } from "../../lib/format";
+import { humanizeKey, jobLabel, modelTypeLabel } from "../../lib/labels";
+import { IdChip } from "../../ui/primitives";
+
+function durationLabel(start: string, end: string): string {
+  const s = Math.max(0, Math.round((Date.parse(end) - Date.parse(start)) / 1000));
+  return s < 60 ? `Completed in ${s} s` : s < 3600 ? `Completed in ${Math.round(s / 60)} min` : `Completed in ${(s / 3600).toFixed(1)} h`;
+}
+const humanizeValue = (key: string, value: string) => key === "mode" ? humanizeKey(value) : value;
 import { quotaState } from "../../lib/quota";
 import { useQueryState } from "../../hooks/useQueryState";
 import { JOB_STATES } from "../../lib/status";
@@ -14,7 +22,7 @@ import { Dialog } from "../../ui/Dialog";
 import { Field, Select, TextArea, TextInput } from "../../ui/Form";
 import { Page } from "../../ui/Page";
 import { QualitySummary } from "../../ui/QualitySummary";
-import { ActionsCell, Badge, Cell, DataTable, DefinitionList, ErrorBanner, FilterBar, Footnote, Panel, Skeleton, Banner } from "../../ui/primitives";
+import { ActionsCell, Badge, Cell, DataTable, DefinitionList, ErrorBanner, FilterBar, Panel, Skeleton, Banner } from "../../ui/primitives";
 import { NotFoundPage } from "../errors/ErrorPages";
 import { RetrainingPolicyPanel } from "./RetrainingPolicyPanel";
 
@@ -29,7 +37,7 @@ interface Eligibility {
 export function eligibility(jobs: TrainingJobResource[] | undefined, trainingRemaining: number | null | undefined, canWrite: boolean): Eligibility {
   if (!canWrite) return { ok: false, reason: "Requesting training requires training:write." };
   const running = jobs?.find((j) => ACTIVE_STATES.includes(j.status));
-  if (running) return { ok: false, reason: `Job ${shortId(running.id)} is still running. Wait for it to finish before starting another.` };
+  if (running) return { ok: false, reason: 'Another training run is still in progress. Wait for it to finish before starting a new one.' };
   if (trainingRemaining === 0) return { ok: false, reason: "The training quota for this period is exhausted." };
   return { ok: true, reason: "" };
 }
@@ -114,18 +122,17 @@ export function TrainingPage() {
   const rows = list.map((j) => (
     <tr key={j.id}>
       <td>
-        <Link to={`/training/${j.id}`} className="td-mono">
-          {shortId(j.id, 13)}
-        </Link>
+        <Link to={`/training/${j.id}`}>{jobLabel(j, jobs.data?.items ?? [])}</Link>
+        <div className="sub mono">{shortId(j.id)}</div>
       </td>
       <td>
         <Badge group="job" value={j.status} />
       </td>
-      <Cell mono>{j.model_type}</Cell>
-      <Cell mono>{fmtDateTime(j.created_at)}</Cell>
-      <Cell mono>{fmtDateTime(j.completed_at)}</Cell>
-      <Cell mono muted>
-        {j.dataset_snapshot_id ? shortId(j.dataset_snapshot_id) : "live data"}
+      <Cell>{modelTypeLabel(j.model_type)}</Cell>
+      <Cell>{fmtDateTime(j.created_at)}</Cell>
+      <Cell sub={j.status === "failed" && j.failure_reason ? j.failure_reason : undefined}>{j.completed_at ? fmtDateTime(j.completed_at) : ACTIVE_STATES.includes(j.status) ? "In progress" : "—"}</Cell>
+      <Cell muted>
+        {j.dataset_snapshot_id ? <span className="mono">{shortId(j.dataset_snapshot_id)}</span> : "Live data"}
       </Cell>
       <ActionsCell actions={[{ label: "Open", onClick: () => navigate(`/training/${j.id}`) }]} />
     </tr>
@@ -141,7 +148,7 @@ export function TrainingPage() {
     >
       {jobs.error ? <ErrorBanner error={jobs.error} onRetry={jobs.reload} /> : null}
       {usage.error ? <ErrorBanner error={usage.error} title="Usage unavailable" onRetry={usage.reload} /> : null}
-      <Banner tone="info" title="Training source">Train a DGSR model from tenant data, or import a prepared checkpoint for a larger dataset. Jobs report progress and can be cancelled before completion.</Banner>
+      <p className="footnote">Start a run to train a DGSR model on your tenant data, or to import a prepared checkpoint. New versions are registered as eligible; activating one is a separate step.</p>
       {trainingDim ? <p className="footnote">Training jobs this period: {fmtNumber(trainingDim.used)} / {trainingDim.limit === null ? 'no limit' : fmtNumber(trainingDim.limit)}. Resets {fmtDateTime(usage.data?.reset_at)}.</p> : !can('usage:read') ? <p className="footnote">Your session cannot read quotas. The API checks limits when you submit.</p> : null}
       <FilterBar filters={[{ id: "state", label: "State", value: state, onChange: setState, options: ["all states", ...JOB_STATES] }]} onClear={() => setState("all states")} />
       {!jobs.data ? (jobs.loading ? <Skeleton /> : null) : (
@@ -160,7 +167,7 @@ export function TrainingPage() {
           onClose={() => setStarting(false)}
           onStarted={(job) => {
             setStarting(false);
-            flash(`Training job ${shortId(job.id)} ${job.status}.`);
+            flash(`Training run ${job.status}.`);
             navigate(`/training/${job.id}`);
           }}
         />
@@ -201,8 +208,8 @@ export function TrainingJobPage() {
   return (
     <Page
       crumbs={crumbs}
-      kicker="Training job"
-      title={shortId(job.id, 13)}
+      kicker="Training run"
+      title={`${modelTypeLabel(job.model_type)} training run`}
       badge={<Badge group="job" value={job.status} />}
       subtitle={active ? "The job is running. Status updates automatically while this page is visible." : done ? "The job completed and registered a model version. Activation is a separate, deliberate action." : failed ? "The job stopped before producing a version." : undefined}
       actions={[
@@ -215,35 +222,30 @@ export function TrainingJobPage() {
       {!job.configuration?.pretrained_artifact && job.configuration?.mode !== 'train' ? <Banner tone="warn" title="Development placeholder">This job uses synthetic embeddings. A succeeded status confirms the backend operation, not a trained recommendation model.</Banner> : null}
       <DefinitionList
         items={[
-          { label: 'Progress', value: `${job.progress ?? 0}% · ${job.stage ?? job.status}`, mono: true },
-          { label: "Requested model type", value: job.model_type, mono: true },
-          { label: "Requested at", value: fmtDateTime(job.created_at), mono: true },
-          { label: "Completed at", value: fmtDateTime(job.completed_at), mono: true },
-          { label: "Dataset snapshot", value: job.dataset_snapshot_id ?? "live data", mono: true, copy: job.dataset_snapshot_id ?? undefined },
-          { label: "Produced version", value: v ? <Link to={`/models/${v.id}`}>{v.version_tag}</Link> : job.model_version_id ? shortId(job.model_version_id) : "none", mono: true },
-          { label: "Job identifier", value: job.id, mono: true, copy: job.id },
+          active ? { label: 'Progress', value: `${job.progress ?? 0}% · ${String(job.stage ?? job.status).replace(/_/g, ' ')}` } : { label: 'Duration', value: job.completed_at ? durationLabel(job.created_at, job.completed_at) : '—' },
+          { label: 'Source', value: job.configuration?.mode === 'pretrained_import' ? <>Imported checkpoint {typeof job.configuration?.pretrained_artifact === 'string' ? <IdChip value={job.configuration.pretrained_artifact as string} length={40} label="Checkpoint" /> : null}</> : 'Trained on tenant data' },
+          { label: "Model type", value: modelTypeLabel(job.model_type) },
+          { label: "Requested", value: fmtDateTime(job.created_at) },
+          { label: "Completed", value: job.completed_at ? fmtDateTime(job.completed_at) : active ? "In progress" : "—" },
+          { label: "Dataset snapshot", value: job.dataset_snapshot_id ?? "Live data", mono: !!job.dataset_snapshot_id, copy: job.dataset_snapshot_id ?? undefined },
+          { label: "Produced version", value: v ? <><Link to={`/models/${v.id}`}>{v.version_tag}</Link> <Badge group="model" value={v.status} /></> : job.model_version_id ? shortId(job.model_version_id) : "None" },
+          { label: "Run ID", value: job.id, mono: true, copy: job.id },
         ]}
       />
       <div className="panels">
         {done && v ? (
-          <Panel title="Quality measures" badge={<Badge group="model" value={v.status} />} note={`produced ${v.version_tag}`} body={metricEntries.length ? 'Held-out model metrics and the recorded popularity baseline. Higher ranking scores are better; sample size and evaluation protocol affect comparisons.' : "No offline metrics were recorded for this version. Train a DGSR model or import a checkpoint to record validation quality."} actions={[{ label: `Open model version ${v.version_tag}`, variant: "primary", onClick: () => navigate(`/models/${v.id}`) }]}>
+          <Panel title="Quality measures" badge={<Badge group="model" value={v.status} />} note={undefined} body={metricEntries.length ? 'Offline ranking scores for the version this run produced. Higher is better.' : "No offline metrics were recorded for this version. Train a DGSR model or import a checkpoint to record validation quality."} actions={[{ label: "Open model version", onClick: () => navigate(`/models/${v.id}`) }]}>
             {metricEntries.length ? <QualitySummary metrics={v.metrics} /> : null}
           </Panel>
         ) : null}
         {failed ? <Panel title="Failure reason" badge={<Badge group="job" value="failed" />} body={job.failure_reason ?? "No reason was recorded."} /> : null}
-        <Panel title="Configuration" body="The configuration the job ran with.">
-          <pre className="secret-value" style={{ fontSize: 12.5 }}>
-            {JSON.stringify(job.configuration ?? {}, null, 2)}
-          </pre>
-          {job.qdrant_collection ? (
-            <p className="p-body">
-              Embedding index: <span className="mono">{job.qdrant_collection}</span>
-            </p>
-          ) : null}
+        <Panel title="Configuration" body="Settings this run used.">
+          <dl className="kv-grid">{Object.entries(job.configuration ?? {}).map(([k, val]) => <div key={k}><dt>{humanizeKey(k)}</dt><dd className="small">{typeof val === 'string' ? humanizeValue(k, val) : JSON.stringify(val)}</dd></div>)}</dl>
+          <details className="details-section"><summary>View as JSON</summary><pre className="secret-value" style={{ fontSize: 12.5 }}>{JSON.stringify(job.configuration ?? {}, null, 2)}</pre></details>
+          {job.qdrant_collection ? <p className="p-body">Embedding index: <span className="mono">{job.qdrant_collection}</span></p> : null}
         </Panel>
       </div>
       {cancelling ? <Dialog title="Cancel training job" body="The worker stops at its next processing boundary. No model version is activated." confirmLabel="Cancel job" onClose={() => setCancelling(false)} onConfirm={async () => { await training.cancel(job.id); setCancelling(false); await jobResource.reload(); }} /> : null}
-      <Footnote>Training uses the captured tenant snapshot. Validation selects the checkpoint; test metrics use held-out next-item targets. Local worker capacity is bounded and queued work survives restarts.</Footnote>
     </Page>
   );
 }

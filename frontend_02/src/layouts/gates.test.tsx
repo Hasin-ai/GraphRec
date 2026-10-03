@@ -31,7 +31,7 @@ describe("authorization gates", () => {
     renderAt("/home");
     const nav = await screen.findByRole("navigation", { name: "Primary" });
     expect(nav).toHaveTextContent("Products");
-    expect(nav).toHaveTextContent("Submit Events");
+    expect(nav).toHaveTextContent("Events");
     expect(nav).toHaveTextContent("Training");
     expect(nav).not.toHaveTextContent("Model Versions");
     expect(nav).not.toHaveTextContent("Usage & Quotas");
@@ -54,7 +54,7 @@ describe("authorization gates", () => {
       { path: /\/v1\/.*/, body: { items: [] } },
     ]);
     renderAt("/models/v-99");
-    expect(await screen.findByRole("heading", { name: "Not found" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Page not found" })).toBeInTheDocument();
     expect(screen.queryByText(/v-99/)).not.toBeInTheDocument();
   });
 

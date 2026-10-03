@@ -1,15 +1,15 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { products } from "../../api";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { billing, products } from "../../api";
 import { isApiError } from "../../api/client";
 import type { ProductResource, ProductUpsert } from "../../api/types";
 import { useResource } from "../../hooks/useResource";
 import { useSession } from "../../hooks/useSession";
 import { useToast } from "../../hooks/useToast";
-import { fmtDateTime, fmtPrice } from "../../lib/format";
+import { fmtDateTime, fmtNumber, fmtPrice, humanize } from "../../lib/format";
 import { Field, Form, Select, TextArea, TextInput, type FormError } from "../../ui/Form";
 import { Page } from "../../ui/Page";
-import { DefinitionList, ErrorBanner, Footnote, Skeleton, Tag } from "../../ui/primitives";
+import { DefinitionList, ErrorBanner, Footnote, IdChip, Skeleton, Tag } from "../../ui/primitives";
 import { AVAILABILITY, DisableProductDialog, eligibility } from "./ProductsPage";
 import { NotFoundPage } from "../errors/ErrorPages";
 
@@ -119,6 +119,10 @@ export function ProductNewPage() {
   const navigate = useNavigate();
   const { flash } = useToast();
   const [draft, setDraft] = useState<Draft>(EMPTY);
+  const { can: canUse } = useSession();
+  const usage = useResource(() => canUse("usage:read") ? billing.usage() : Promise.resolve(null), [canUse("usage:read")]);
+  const stored = usage.data?.dimensions?.find(d => d.type === "stored_products");
+  const overLimit = !!stored && stored.limit !== null && stored.used >= stored.limit;
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<FormError | null>(null);
   const [busy, setBusy] = useState(false);
@@ -146,6 +150,7 @@ export function ProductNewPage() {
 
   return (
     <Page crumbs={[{ label: "Home", to: "/home" }, { label: "Products", to: "/products" }, { label: "New" }]} kicker="Catalog" title="Add product" subtitle="Save a product by external ID. An existing ID updates that product.">
+      {overLimit && stored ? <div className="callout warn" role="status"><p><strong>Your catalog is over its product limit ({fmtNumber(stored.used)} of {fmtNumber(stored.limit)}).</strong> A new external ID will be refused; saving an existing ID still updates that product. <Link to="/usage">Review usage</Link></p></div> : null}
       <Form onSubmit={submit} error={error} submitLabel="Save product" busy={busy} width={760} secondary={{ label: "Cancel", to: "/products" }}>
         <ProductFields draft={draft} set={set} errors={fieldErrors} idEditable />
       </Form>
@@ -214,28 +219,24 @@ function ProductDetail() {
       crumbs={[{ label: "Home", to: "/home" }, { label: "Products", to: "/products" }, { label: p.external_id, mono: true }]}
       kicker="Catalog"
       title={p.title}
-      badge={<Tag tone={e.served ? "ok" : "warn"}>{e.served ? "Eligible" : "Excluded"}</Tag>}
-      subtitle={e.served ? undefined : e.why}
-      actions={[{ label: "Disable product", disabled: !p.is_active || !writable, reason: !writable ? "Requires catalog:write." : p.is_active ? undefined : "This product is already disabled.", onClick: () => setDisabling(true) }]}
+      badge={<Tag tone={e.served ? "ok" : "warn"}>{p.is_active ? humanize(p.availability_status) : "Inactive"}</Tag>}
+      subtitle={<>{e.served ? "Eligible for recommendations." : e.why + "."} External ID <IdChip value={p.external_id} length={30} label="External ID" /> · updated {fmtDateTime(p.updated_at)}</>}
+      actions={[{ label: "Disable product", disabled: !p.is_active || !writable, reason: !writable ? "Your role cannot change the catalog." : p.is_active ? undefined : "This product is already disabled.", onClick: () => setDisabling(true) }]}
     >
       {product.error ? <ErrorBanner error={product.error} onRetry={product.reload} /> : null}
-      <DefinitionList
+      {writable ? null : <DefinitionList
         items={[
-          { label: "External product id", value: p.external_id, mono: true, copy: p.external_id },
-          { label: "Category", value: p.category ?? "—" },
-          { label: "Price", value: fmtPrice(p.price), mono: true },
-          { label: "Active", badge: <Tag tone={p.is_active ? "ok" : "neu"}>{p.is_active ? "active" : "inactive"}</Tag> },
-          { label: "Availability", value: p.availability_status, mono: true },
-          { label: "Created at", value: fmtDateTime(p.created_at), mono: true },
-          { label: "Updated at", value: fmtDateTime(p.updated_at), mono: true },
+          { label: "Category", value: p.category ?? "Not set" },
+          { label: "Price", value: Number(p.price) > 0 ? fmtPrice(p.price) : "Not set" },
+          { label: "Created", value: fmtDateTime(p.created_at) },
         ]}
-      />
+      />}
       {writable ? (
         <Form onSubmit={submit} error={error} submitLabel="Update product" busy={busy} width={760} secondary={{ label: "Back to products", to: "/products" }}>
           <ProductFields draft={draft} set={set} errors={fieldErrors} idEditable={false} />
         </Form>
       ) : (
-        <Footnote>Your credential reads the catalog but does not hold catalog:write, so no edits are offered here.</Footnote>
+        <Footnote>Your role can view the catalog but not edit it.</Footnote>
       )}
       {disabling ? (
         <DisableProductDialog

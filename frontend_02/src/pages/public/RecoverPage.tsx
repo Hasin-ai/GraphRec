@@ -51,8 +51,8 @@ export function RecoverPage() {
     }
   }
 
-  return <Page kicker="GraphRec · account recovery" title="Recover access" subtitle="Ask your platform operator for a one-time recovery token, then choose a new password.">
-    <Form onSubmit={submit} error={error} submitLabel="Change password" busy={busy} width={440} secondary={{ label: "Back to sign in", to: "/login" }}>
+  return <Page kicker="GraphRec · account recovery" title="Reset your password" subtitle="Ask your platform operator for a one-time recovery token, then choose a new password.">
+    <Form onSubmit={submit} error={error} submitLabel="Change password" busy={busy} width={460} secondary={{ label: "Back to sign in", to: "/login", variant: "link" }}>
       <Field id="recovery-token" label="Recovery token" wide>
         <TextInput id="recovery-token" type="password" value={token} onChange={setToken} mono autoComplete="off" required />
       </Field>

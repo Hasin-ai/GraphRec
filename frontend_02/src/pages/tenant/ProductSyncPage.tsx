@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { products } from "../../api";
+import { billing, products } from "../../api";
+import { useSession } from "../../hooks/useSession";
 import { isApiError } from "../../api/client";
 import type { ProductBulkUpsertResponse, ProductUpsert } from "../../api/types";
 import { useResource } from "../../hooks/useResource";
@@ -36,6 +37,10 @@ export function parseProductCollection(text: string): { items?: ProductUpsert[];
 }
 
 export function ProductSyncPage() {
+  const { can: canUse } = useSession();
+  const usage = useResource(() => canUse("usage:read") ? billing.usage() : Promise.resolve(null), [canUse("usage:read")]);
+  const stored = usage.data?.dimensions?.find(d => d.type === "stored_products");
+  const overLimit = !!stored && stored.limit !== null && stored.used >= stored.limit;
   const [payload, setPayload] = useState("");
   const [error, setError] = useState<FormError | null>(null);
   const [fieldError, setFieldError] = useState<string | undefined>();
@@ -109,7 +114,8 @@ export function ProductSyncPage() {
   }
 
   return (
-    <Page crumbs={crumbs} kicker="Phase 1 of 2" title="Synchronize catalog" subtitle="Submit a product collection. Each external identifier is upserted: new ones are created, known ones updated, and invalid items are reported without discarding the rest.">
+    <Page crumbs={crumbs} kicker="Phase 1 of 2" title="Synchronize catalog" subtitle="Paste up to 1,000 products. New external IDs are created, known ones updated; invalid items are reported without discarding the rest.">
+      {overLimit && stored ? <div className="callout warn" role="status"><p><strong>Your catalog is over its product limit ({fmtNumber(stored.used)} of {fmtNumber(stored.limit)}).</strong> A sync that only updates existing products is accepted; one that adds new products is refused. <Link to="/usage">Review usage</Link></p></div> : null}
       <Form onSubmit={submit} error={error} submitLabel="Submit synchronization" busy={busy} width={860} secondary={{ label: "Cancel", to: "/products" }}>
         <Field id="payload" label="Product collection (JSON)" wide error={fieldError} hint="Bounded by the request body limit the API is configured with. Larger catalogs go through a dataset upload.">
           <TextArea id="payload" rows={12} value={payload} onChange={setPayload} mono placeholder={EXAMPLE} />

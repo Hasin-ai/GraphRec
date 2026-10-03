@@ -44,6 +44,7 @@ import type {
   UsageTrend,
   TrendGranularity,
   ScalingStatus,
+  RecommendationResult,
 } from "./types";
 
 const enc = encodeURIComponent;
@@ -99,6 +100,12 @@ export const billing = {
 export const retraining = {
   get: () => request<RetrainingPolicy>("/v1/retraining-policy"),
   put: (input: RetrainingPolicyInput) => request<RetrainingPolicy>("/v1/retraining-policy", { method: "PUT", json: input }),
+};
+
+/** Live recommendations. Each call counts toward the recommendation_requests quota. */
+export const recommendations = {
+  get: (input: { user_id?: string; top_n?: number; context?: Record<string, unknown> }) =>
+    request<RecommendationResult>("/v1/recommendations", { method: "POST", json: input }),
 };
 
 export const recommendationRules = {
@@ -183,7 +190,7 @@ export const platform = {
   getTenantQuota: (id: string) => request<PlatformQuotaOverride & { plan_id: string; plan_code: string }>(`/v1/platform/tenants/${enc(id)}/quotas`, platformRealm),
   getTenantUsage: (id: string) => request<UsageSummaryResult>(`/v1/platform/tenants/${enc(id)}/usage`, platformRealm),
   issueRecovery: (id: string, email: string) => request<{ recovery_token: string; expires_at: string }>(`/v1/platform/tenants/${enc(id)}/recovery`, { ...platformRealm, method: "POST", json: { email } }),
-  assignTenantPlan: (id: string, planId: string) => request<PlatformQuotaOverride & { plan_id: string; plan_code: string }>(`/v1/platform/tenants/${enc(id)}/plan`, { ...platformRealm, method: 'POST', json: { plan_id: planId } }),
+  assignTenantPlan: (id: string, planId: string, acknowledge = false) => request<PlatformQuotaOverride & { plan_id: string; plan_code: string }>(`/v1/platform/tenants/${enc(id)}/plan`, { ...platformRealm, method: 'POST', json: { plan_id: planId, acknowledge_below_usage: acknowledge } }),
   status: (token?: string) =>
     request<PlatformStatus>("/v1/platform/status", {
       realm: token ? "public" : "platform",
@@ -197,15 +204,15 @@ export const platform = {
       method: "POST",
       json: { status },
     }),
-  setQuotaOverrides: (id: string, overrides: Record<string, unknown>) =>
+  setQuotaOverrides: (id: string, overrides: Record<string, unknown>, acknowledge = false) =>
     request<PlatformQuotaOverride>(`/v1/platform/tenants/${enc(id)}/quotas`, {
       ...platformRealm,
       method: "POST",
-      json: { overrides },
+      json: { overrides, acknowledge_below_usage: acknowledge },
     }),
   listPlans: () => request<PlatformPlan[]>("/v1/platform/plans", platformRealm),
-  updatePlan: (id: string, value: Pick<PlatformPlan, "name" | "limits" | "is_active">) =>
-    request<PlatformPlan>(`/v1/platform/plans/${enc(id)}`, { ...platformRealm, method: "PUT", json: value }),
+  updatePlan: (id: string, value: Pick<PlatformPlan, "name" | "limits" | "is_active">, acknowledge = false) =>
+    request<PlatformPlan>(`/v1/platform/plans/${enc(id)}`, { ...platformRealm, method: "PUT", json: { ...value, acknowledge_below_usage: acknowledge } }),
   listFailures: () => request<{ items: PlatformFailure[] }>("/v1/platform/failures", platformRealm),
   listAudit: () => request<{ items: PlatformAudit[] }>("/v1/platform/audit", platformRealm),
 };

@@ -70,7 +70,7 @@ export function SetupPage() {
 
   return (
     <Page kicker="GraphRec · account setup" title="Activate your account" subtitle="Choose a password to activate your invited account.">
-      <Form onSubmit={submit} error={error} submitLabel="Activate account" busy={busy} width={440} secondary={{ label: "Back to sign in", to: "/login" }}>
+      <Form onSubmit={submit} error={error} submitLabel="Activate account" busy={busy} width={460} secondary={{ label: "Back to sign in", to: "/login", variant: "link" }}>
         <Field id="token" label="Setup token" wide error={fieldErrors.token} hint={linkToken ? "Read from your setup link." : "Paste the token from your setup link."}>
           <TextInput id="token" type="password" value={token} onChange={setToken} mono placeholder="one-time token" autoComplete="off" required />
         </Field>

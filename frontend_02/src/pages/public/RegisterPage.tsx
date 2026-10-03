@@ -117,7 +117,7 @@ export function RegisterPage() {
 
   return (
     <Page kicker="GraphRec" title="Register a tenant" subtitle="Create your tenant and its first administrator account.">
-      <Form onSubmit={submit} error={error} submitLabel="Create tenant" busy={busy} width={520} secondary={{ label: "Sign in instead", to: "/login" }}>
+      <Form onSubmit={submit} error={error} submitLabel="Create tenant" busy={busy} width={460} secondary={{ label: "Already have a tenant? Sign in", to: "/login", variant: "link" }}>
         <Field id="name" label="Business name" wide error={fieldErrors.name}>
           <TextInput id="name" value={name} onChange={setName} placeholder="Northgate Supply" autoComplete="organization" required />
         </Field>

@@ -17,6 +17,7 @@ export class GraphRecApiError extends Error {
   readonly correlationId?: string;
   readonly retryAfterSeconds?: number;
   readonly fields: { field: string; message: string }[];
+  readonly details: Record<string, unknown>;
 
   constructor(status: number, body: ErrorBody | null, fallbackCorrelationId?: string) {
     super(body?.error?.message ?? "GraphRec could not process this request");
@@ -26,8 +27,12 @@ export class GraphRecApiError extends Error {
     this.correlationId = body?.error?.correlation_id ?? fallbackCorrelationId;
     this.retryAfterSeconds = body?.error?.retry_after_seconds;
     this.fields = body?.error?.details?.fields ?? [];
+    this.details = body?.error?.details ?? {};
   }
 }
+
+/** A limit change that would put a tenant below what it already stores (409 limit_below_usage). */
+export interface LimitConflict { limit_name: string; limit: number; used: number; over_by: number; tenant_id?: string; tenant_name?: string }
 
 // ── tenants / auth ─────────────────────────────────────────────
 export interface TenantRegistrationInput {
@@ -374,6 +379,7 @@ export interface PlatformTenant {
 }
 
 export interface PlatformPlan {
+  warnings?: LimitConflict[];
   id: string;
   code: string;
   name: string;
@@ -382,6 +388,7 @@ export interface PlatformPlan {
 }
 
 export interface PlatformQuotaOverride {
+  warnings?: LimitConflict[];
   limits: Record<string, unknown>;
   overrides: Record<string, unknown>;
 }
@@ -493,4 +500,16 @@ export interface ScalingStatus {
   last_scaled_at: string | null;
   events: CapacityEvent[];
   limitation: string;
+}
+
+// ── recommendations ────────────────────────────────────────────
+export interface RecommendationResult {
+  request_id: string;
+  items: { external_product_id: string; position: number }[];
+  model_version_id: string | null;
+  strategy: string;
+  fallback_used: boolean;
+  fallback_tier: string;
+  applied_rules: string[];
+  rules_version: number | null;
 }

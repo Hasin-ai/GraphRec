@@ -44,7 +44,7 @@ export function UsageTrends() {
   const trend = useResource(() => query ? billing.trends(query) : Promise.resolve(null), [JSON.stringify(query)]);
   const data = trend.data && Array.isArray(trend.data.buckets) ? trend.data : null;
   const total = data ? data.totals[type] ?? 0 : 0;
-  return <Panel title="Usage trends" note="Ledger sums per period, UTC (XR-F-07)">
+  return <Panel title="Usage trends" note="Totals per period, in UTC">
     <div className="fields trend-controls">
       <Field id="ut-gran" label="Granularity"><Select id="ut-gran" value={granularity} onChange={v => { const g = v as TrendGranularity; setGranularity(g); setFrom(isoDay(new Date(Date.now() - DEFAULT_DAYS[g] * 86_400_000))); setTo(isoDay(new Date())); }} options={[{ value: "hour", label: "Hourly" }, { value: "day", label: "Daily" }, { value: "week", label: "Weekly" }]} /></Field>
       <Field id="ut-type" label="Usage type"><Select id="ut-type" value={type} onChange={setType} options={TYPES.map(t => ({ value: t, label: humanize(t) }))} /></Field>

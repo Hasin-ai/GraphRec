@@ -6,9 +6,9 @@ import { useResource } from "../../hooks/useResource";
 import { useSession } from "../../hooks/useSession";
 import { useToast } from "../../hooks/useToast";
 import { fmtDateTime } from "../../lib/format";
-import { Field, Form, TextInput, type FormError } from "../../ui/Form";
+import { Field, TextInput, type FormError } from "../../ui/Form";
 import { Page } from "../../ui/Page";
-import { Banner, DefinitionList, ErrorBanner, Panel, Skeleton } from "../../ui/primitives";
+import { Banner, ErrorBanner, Skeleton } from "../../ui/primitives";
 import { parseBounded } from "./RetrainingPolicyPanel";
 
 interface Draft { diversity: boolean; maxPer: string; freshness: boolean; weight: string; halfLife: string }
@@ -21,7 +21,7 @@ export function parseWeight(value: string): number | string {
   return n;
 }
 
-/** XR-F-04 / XR-NF-02: bounded, versioned diversity and freshness rules. */
+/** Diversity and freshness rules: one card per rule, inputs live only while the rule is on (audit RR-1…RR-7). */
 export function RecommendationRulesPage() {
   const { can } = useSession();
   const { flash } = useToast();
@@ -33,6 +33,8 @@ export function RecommendationRulesPage() {
   const writable = can("models:deploy");
   const p = policy.data && typeof policy.data.diversity_enabled === "boolean" ? policy.data : null;
   useEffect(() => { if (p && !draft) setDraft(toDraft(p)); }, [p, draft]);
+  const saved = p ? toDraft(p) : null;
+  const dirty = !!draft && !!saved && JSON.stringify(draft) !== JSON.stringify(saved);
 
   async function save() {
     if (!draft) return;
@@ -47,35 +49,48 @@ export function RecommendationRulesPage() {
     if (Object.keys(next).length) { setFormError({ title: "Check the highlighted fields", body: "The rules were not saved." }); return; }
     setBusy(true); setFormError(null);
     try {
-      const saved = await recommendationRules.put({ diversity_enabled: draft.diversity, max_per_category: maxPer as number, freshness_enabled: draft.freshness, freshness_weight: weight as number, freshness_half_life_days: halfLife as number });
-      setDraft(toDraft(saved)); await policy.reload(); flash(`Recommendation rules saved as version ${saved.version}.`);
+      const result = await recommendationRules.put({ diversity_enabled: draft.diversity, max_per_category: maxPer as number, freshness_enabled: draft.freshness, freshness_weight: weight as number, freshness_half_life_days: halfLife as number });
+      policy.setData(result); setDraft(toDraft(result)); flash(`Recommendation rules saved (version ${result.version}).`);
     } catch (error) { setFormError({ title: "The rules could not be saved", body: describeError(error) }); }
     finally { setBusy(false); }
   }
+  const discard = () => { if (saved) setDraft(saved); setErrors({}); setFormError(null); };
+  const set = (patch: Partial<Draft>) => draft && setDraft({ ...draft, ...patch });
+  const live = p ? [p.diversity_enabled ? `at most ${p.max_per_category} per category` : null, p.freshness_enabled ? `freshness boost (weight ${p.freshness_weight}, half-life ${p.freshness_half_life_days} days)` : null].filter(Boolean) : [];
 
   return <Page crumbs={[{ label: "Home", to: "/home" }, { label: "Recommendation Rules" }]} kicker="Serving" title="Recommendation Rules"
-    subtitle="Diversity and freshness adjustments applied after relevance ranking." actions={[{ label: "Refresh", onClick: () => { setDraft(null); void policy.reload(); } }]}>
+    subtitle="Rules reorder the products the model recommends. They never add or remove products."
+    updated={p ? (p.configured ? <>Live: {live.length ? live.join(" · ") : "no rules on (relevance order)"} · version {p.version}{p.updated_at ? <> · changed {fmtDateTime(p.updated_at)}</> : null}</> : "Using relevance order only — no rules saved yet.") : null}>
     {policy.error ? <ErrorBanner error={policy.error} onRetry={policy.reload} /> : null}
-    <Banner tone="info" title="Bounded and explainable">Rules only reorder eligible products after exclusions; they never add products. Freshness can move an item up by at most about 43% of the relevance range at the maximum weight (0.3). Every response that used rules reports the version it applied.</Banner>
-    {!p ? (policy.loading ? <Skeleton rows={3} /> : null) : <Panel title="Current rules" note={p.configured ? `Version ${p.version}` : "Not configured — relevance order only"}>
-      <DefinitionList items={[
-        { label: "Diversity", value: p.diversity_enabled ? `At most ${p.max_per_category} per category` : "Off" },
-        { label: "Freshness", value: p.freshness_enabled ? `Weight ${p.freshness_weight}, half-life ${p.freshness_half_life_days} days` : "Off" },
-        { label: "Last changed", value: fmtDateTime(p.updated_at) },
-      ]} />
-      {writable && draft ? <Form onSubmit={save} busy={busy} error={formError} submitLabel="Save rules">
-        <Field id="rr-diversity" label="Category diversity"><label className="check"><input id="rr-diversity" type="checkbox" checked={draft.diversity} onChange={e => setDraft({ ...draft, diversity: e.target.checked })} /> Limit how many items share one category</label></Field>
-        <Field id="rr-max" label="Maximum items per category" error={errors.maxPer} hint="1 to 100. Relaxed in relevance order if the list would otherwise be short.">
-          <TextInput id="rr-max" value={draft.maxPer} onChange={v => setDraft({ ...draft, maxPer: v })} mono />
-        </Field>
-        <Field id="rr-freshness" label="Freshness boost"><label className="check"><input id="rr-freshness" type="checkbox" checked={draft.freshness} onChange={e => setDraft({ ...draft, freshness: e.target.checked })} /> Boost recently added products</label></Field>
-        <Field id="rr-weight" label="Freshness weight" error={errors.weight} hint="0 to 0.3.">
-          <TextInput id="rr-weight" value={draft.weight} onChange={v => setDraft({ ...draft, weight: v })} mono />
-        </Field>
-        <Field id="rr-half" label="Freshness half-life (days)" error={errors.halfLife} hint="Age at which the boost halves. 1 to 3650.">
-          <TextInput id="rr-half" value={draft.halfLife} onChange={v => setDraft({ ...draft, halfLife: v })} mono />
-        </Field>
-      </Form> : !writable ? <p className="footnote">Changing rules requires models:deploy (tenant administrators).</p> : null}
-    </Panel>}
+    {!p || !draft ? (policy.loading ? <Skeleton rows={3} /> : null) : <form onSubmit={e => { e.preventDefault(); void save(); }} noValidate aria-busy={busy || undefined}>
+      {formError ? <Banner tone="danger" title={formError.title}>{formError.body}</Banner> : null}
+      {!writable ? <p className="footnote">Only tenant administrators can change rules. You can review the current settings.</p> : null}
+      <fieldset disabled={!writable || busy}>
+        <section className="rule-card">
+          <div className="rule-head"><div><h2>Category diversity</h2><p>Limits how many recommended items can come from one category, so lists aren't dominated by a single category.</p></div>
+            <label className="switch"><input id="rr-diversity" type="checkbox" checked={draft.diversity} onChange={e => set({ diversity: e.target.checked })} /><span className="track" aria-hidden="true" />{draft.diversity ? "On" : "Off"}</label></div>
+          <div className="rule-body" aria-disabled={!draft.diversity}>
+            <Field id="rr-max" label="Maximum items per category" error={errors.maxPer} hint="1 to 100. If a list would come up short, the limit is relaxed in relevance order.">
+              <TextInput id="rr-max" type="number" min={1} max={100} value={draft.maxPer} onChange={v => set({ maxPer: v })} disabled={!draft.diversity} />
+            </Field>
+          </div>
+        </section>
+        <section className="rule-card">
+          <div className="rule-head"><div><h2>Freshness boost</h2><p>Moves recently added products up. At the maximum weight an item can move up by about 43% of the relevance range.</p></div>
+            <label className="switch"><input id="rr-freshness" type="checkbox" checked={draft.freshness} onChange={e => set({ freshness: e.target.checked })} /><span className="track" aria-hidden="true" />{draft.freshness ? "On" : "Off"}</label></div>
+          <div className="rule-body" aria-disabled={!draft.freshness}>
+            <Field id="rr-weight" label="Weight" error={errors.weight} hint="0 to 0.3. Higher favours newer products more.">
+              <TextInput id="rr-weight" value={draft.weight} onChange={v => set({ weight: v })} disabled={!draft.freshness} />
+            </Field>
+            <Field id="rr-half" label="Half-life (days)" error={errors.halfLife} hint="1 to 3650. Age at which the boost halves.">
+              <TextInput id="rr-half" type="number" min={1} max={3650} value={draft.halfLife} onChange={v => set({ halfLife: v })} disabled={!draft.freshness} />
+            </Field>
+          </div>
+        </section>
+      </fieldset>
+      {writable ? <div className="save-bar">{dirty ? <span className="dirty">Unsaved changes</span> : <span className="clean">All changes saved</span>}
+        <button type="button" className="btn btn-secondary" onClick={discard} disabled={!dirty || busy}>Discard</button>
+        <button type="submit" className="btn btn-primary" disabled={!dirty || busy}>{busy ? "Saving…" : "Save rules"}</button></div> : null}
+    </form>}
   </Page>;
 }

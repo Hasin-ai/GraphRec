@@ -1,12 +1,5 @@
-const dateTime = new Intl.DateTimeFormat(undefined, {
-  year: "numeric",
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-  timeZoneName: "short",
-});
+const dateTime = new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+const dateTimeFull = new Intl.DateTimeFormat(undefined, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", timeZoneName: "short" });
 const dateOnly = new Intl.DateTimeFormat(undefined, { year: "numeric", month: "short", day: "numeric" });
 const number = new Intl.NumberFormat();
 
@@ -15,7 +8,31 @@ export const DASH = "—";
 export function fmtDateTime(value: string | number | null | undefined): string {
   if (value === null || value === undefined || value === "") return DASH;
   const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? String(value) : dateTime.format(d).replace(",", "");
+  if (Number.isNaN(d.getTime())) return String(value);
+  // "Sep 12, 2026 at 11:29 PM" — the timezone lives in fmtDateTimeFull (tooltips).
+  const parts = dateTime.formatToParts(d);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return `${get("month")} ${get("day")}, ${get("year")} at ${get("hour")}:${get("minute")} ${get("dayPeriod")}`;
+}
+
+/** Full timestamp with seconds and timezone, for title tooltips. */
+export function fmtDateTimeFull(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === "") return DASH;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? String(value) : dateTimeFull.format(d);
+}
+
+/** "3 min ago", "2 days ago", falling back to the date after a month. */
+export function fmtRelative(value: string | number | null | undefined, now = Date.now()): string {
+  if (value === null || value === undefined || value === "") return DASH;
+  const t = new Date(value).getTime();
+  if (Number.isNaN(t)) return String(value);
+  const s = Math.round((now - t) / 1000);
+  if (s < 45) return "just now";
+  const m = Math.round(s / 60); if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60); if (h < 24) return `${h} h ago`;
+  const days = Math.round(h / 24); if (days < 30) return `${days} day${days === 1 ? "" : "s"} ago`;
+  return fmtDate(t);
 }
 
 export function fmtDate(value: string | number | null | undefined): string {

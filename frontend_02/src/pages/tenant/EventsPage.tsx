@@ -59,23 +59,22 @@ function RecentBatches() {
   const rows = (batches.data ?? []).map((b) => (
     <tr key={b.id}>
       <td>
-        <Link to={`/submissions/${b.id}`} className="td-mono">
-          {b.id}
-        </Link>
+        <Link to={`/submissions/${b.id}`}>Batch of {fmtNumber(b.accepted_count + b.duplicate_count + b.rejected_count)} {b.accepted_count + b.duplicate_count + b.rejected_count === 1 ? "event" : "events"}</Link>
+        <div className="sub mono">{b.id.slice(0, 8)}</div>
       </td>
       <td>
         <Badge group="batch" value={b.status} />
       </td>
-      <Cell mono align="right">
+      <Cell align="right">
         {fmtNumber(b.accepted_count)}
       </Cell>
-      <Cell mono align="right">
+      <Cell align="right">
         {fmtNumber(b.duplicate_count)}
       </Cell>
-      <Cell mono align="right">
+      <Cell align="right">
         {fmtNumber(b.rejected_count)}
       </Cell>
-      <Cell mono>{fmtDateTime(b.created_at)}</Cell>
+      <Cell>{fmtDateTime(b.created_at)}</Cell>
       <ActionsCell actions={[{ label: "Open", onClick: () => navigate(`/submissions/${b.id}`) }]} />
     </tr>
   ));
@@ -203,19 +202,19 @@ export function EventsPage() {
       {mode === "single event" ? (
         <Form onSubmit={submitSingle} error={error} submitLabel="Submit event" busy={busy} width={860}>
           <Field id="event_id" label="Event identifier" error={fieldErrors.event_id} hint="Idempotency key. A repeat is confirmed as a duplicate.">
-            <TextInput id="event_id" value={single.event_id} onChange={(v) => set({ event_id: v })} mono placeholder="ev-33810" />
+            <TextInput id="event_id" value={single.event_id} onChange={(v) => set({ event_id: v })} mono placeholder="e.g. ev-33810" />
           </Field>
           <Field id="event_type" label="Event type">
             <Select id="event_type" value={single.event_type} onChange={(v) => set({ event_type: v })} options={[...EVENT_TYPES]} />
           </Field>
           <Field id="user_id" label="Customer identifier">
-            <TextInput id="user_id" value={single.user_id} onChange={(v) => set({ user_id: v })} mono placeholder="cus-9931" />
+            <TextInput id="user_id" value={single.user_id} onChange={(v) => set({ user_id: v })} mono placeholder="e.g. cus-9931" />
           </Field>
           <Field id="external_product_id" label="External product id">
-            <TextInput id="external_product_id" value={single.external_product_id} onChange={(v) => set({ external_product_id: v })} mono placeholder="SKU-6002" />
+            <TextInput id="external_product_id" value={single.external_product_id} onChange={(v) => set({ external_product_id: v })} mono placeholder="e.g. SKU-6002" />
           </Field>
           <Field id="occurred_at" label="Occurred at (optional)" error={fieldErrors.occurred_at} hint="Defaults to now.">
-            <TextInput id="occurred_at" value={single.occurred_at} onChange={(v) => set({ occurred_at: v })} mono placeholder="2026-08-14T09:41:02Z" />
+            <TextInput id="occurred_at" value={single.occurred_at} onChange={(v) => set({ occurred_at: v })} mono placeholder="Leave empty for now" />
           </Field>
           <Field id="context" label="Context (optional JSON)" wide error={fieldErrors.context}>
             <TextArea id="context" rows={3} value={single.context} onChange={(v) => set({ context: v })} mono placeholder='{ "surface": "product_page" }' />
@@ -229,7 +228,7 @@ export function EventsPage() {
         </Form>
       )}
       <RecentBatches />
-      <Footnote>Submitting an event identifier that was already received returns a duplicate confirmation rather than an error.</Footnote>
+      <Footnote>Single events are confirmed on submit and are not listed here; this table shows batches only. Re-sending an event identifier returns a duplicate confirmation, not an error.</Footnote>
     </Page>
   );
 }

@@ -13,11 +13,11 @@ export function ForbiddenPage() {
 
 export function NotFoundPage() {
   return (
-    <Page title="Not found" subtitle="No such resource.">
-      <Footnote>A resource belonging to another tenant is indistinguishable from one that does not exist.</Footnote>
+    <Page title="Page not found" subtitle="This page doesn't exist, or you don't have access to it.">
+      <Footnote>Check the address, or go back to the console start page.</Footnote>
       <div>
-        <Link className="btn btn-secondary" to="/">
-          Back to start
+        <Link className="btn btn-primary" to="/">
+          Go to Overview
         </Link>
       </div>
     </Page>

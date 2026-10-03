@@ -1,7 +1,6 @@
 import { roleLabel, sessionTenantId } from "../../auth/session";
 import { useSession, useTenant } from "../../hooks/useSession";
 import { fmtDateTime } from "../../lib/format";
-import { scopeLabel } from "../../lib/scopes";
 import { Page } from "../../ui/Page";
 import { Tag, Cell, DefinitionList, Footnote, Panel, PanelTable } from "../../ui/primitives";
 
@@ -33,21 +32,22 @@ export function AccountPage() {
       crumbs={[{ label: "Home", to: "/home" }, { label: "Account" }]}
       kicker="Your session"
       title="Account"
-      subtitle="Your own record only, as carried by the current session. Scopes are granted at sign-in; sign in again after a role change."
+      subtitle="Your sign-in details and what your role can do. Sign in again after your role changes."
       actions={[{ label: "Sign out", onClick: signOutTenant }]}
     >
       <DefinitionList
         items={[
-          { label: "Tenant ID", value: sessionTenantId(tenant) ?? "Unavailable in this session", mono: true, copy: sessionTenantId(tenant) ?? undefined },
-          { label: "Email", value: tenant.email || "Not provided during account setup", mono: true, copy: tenant.email || undefined },
-          { label: "Role", value: roleLabel(tenant.role), mono: true },
-          { label: "Signed in", value: fmtDateTime(tenant.signedInAt), mono: true },
-          { label: "Session expires", value: fmtDateTime(tenant.expiresAt), mono: true },
+          { label: "Email", value: tenant.email || "Not provided", copy: tenant.email || undefined },
+          { label: "Role", value: roleLabel(tenant.role).replace(/^./, c => c.toUpperCase()) },
+          { label: "Tenant ID", value: sessionTenantId(tenant) ?? "Not available", mono: !!sessionTenantId(tenant), copy: sessionTenantId(tenant) ?? undefined },
+          { label: "Signed in", value: fmtDateTime(tenant.signedInAt) },
+          { label: "Session expires", value: fmtDateTime(tenant.expiresAt) },
         ]}
       />
-      <Panel title="Capabilities of this session" body="Held scopes are the ones the login returned. A route or action outside them is refused by the API with 403 insufficient_scope.">
+      <Panel title="What you can do" body={tenant.scopes.length >= CAPABILITIES.length ? `${roleLabel(tenant.role).replace(/^./, c => c.toUpperCase())}: full access to this tenant.` : `${roleLabel(tenant.role).replace(/^./, c => c.toUpperCase())}: ${CAPABILITIES.filter(([, sc]) => tenant.scopes.includes(sc)).length} of ${CAPABILITIES.length} permissions. Actions outside them are hidden or disabled.`}>
+        <details className="details-section"><summary>View all permissions</summary>
         <PanelTable
-          columns={["Capability", "Scope", "Held"]}
+          columns={["Permission", "Scope", "Access"]}
           rows={CAPABILITIES.map(([label, scope]) => (
             <tr key={scope}>
               <Cell>{label}</Cell>
@@ -55,16 +55,14 @@ export function AccountPage() {
                 {scope}
               </Cell>
               <td>
-                <Tag tone={tenant.scopes.includes(scope) ? "ok" : "neu"}>{tenant.scopes.includes(scope) ? "Granted" : "Not granted"}</Tag>
+                {tenant.scopes.includes(scope) ? <span className="td-muted">Granted</span> : <Tag tone="warn">Not granted</Tag>}
               </td>
             </tr>
           ))}
         />
-        <p className="p-body">
-          All granted: {tenant.scopes.map(scopeLabel).join(" · ")}
-        </p>
+        </details>
       </Panel>
-      <Footnote>Password changes and recovery are handled by an operator issuing a new setup token. See Recover access on the sign-in page.</Footnote>
+      <Footnote>To change your password, ask your platform operator for a recovery token, then use "Forgot password?" on the sign-in page.</Footnote>
     </Page>
   );
 }

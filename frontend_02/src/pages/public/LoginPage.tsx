@@ -7,7 +7,6 @@ import { useSession } from "../../hooks/useSession";
 import { useToast } from "../../hooks/useToast";
 import { Field, Form, TextInput, type FormError } from "../../ui/Form";
 import { Page } from "../../ui/Page";
-import { Footnote } from "../../ui/primitives";
 
 const GENERIC: FormError = {
   title: "Sign-in failed",
@@ -59,8 +58,8 @@ export function LoginPage() {
   }
 
   return (
-    <Page kicker="GraphRec" title="Sign in" subtitle="Access your GraphRec tenant.">
-      <Form onSubmit={submit} error={error} submitLabel="Sign in" busy={busy} width={420} secondary={{ label: "Recover access", to: "/recover" }}>
+    <Page kicker="GraphRec" title="Sign in" subtitle="Use your tenant account credentials to access the GraphRec console.">
+      <Form onSubmit={submit} error={error} submitLabel="Sign in" busy={busy} width={460} secondary={{ label: "Forgot password?", to: "/recover", variant: "link" }}>
         <Field id="email" label="Email" wide>
           <TextInput id="email" type="email" value={email} onChange={setEmail} placeholder="you@company.example" autoComplete="username" required />
         </Field>
@@ -68,8 +67,8 @@ export function LoginPage() {
           <TextInput id="password" type="password" value={password} onChange={setPassword} autoComplete="current-password" required />
         </Field>
       </Form>
-      <div className="auth-links"><Link to="/register">Create a tenant</Link><Link to="/setup">Finish account setup</Link><Link to="/admin/login">Platform sign-in</Link></div>
-      <Footnote>Use the email and password for your tenant account.</Footnote>
+      <p className="auth-alt">New to GraphRec? <Link to="/register">Create a tenant</Link></p>
+      <div className="auth-meta"><Link to="/setup">Finish account setup</Link><Link to="/admin/login">Operator sign-in</Link></div>
     </Page>
   );
 }

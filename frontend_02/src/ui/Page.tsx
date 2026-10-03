@@ -13,7 +13,10 @@ export interface HeaderAction {
   variant?: "primary" | "secondary" | "danger";
   disabled?: boolean;
   reason?: string;
+  icon?: "refresh";
 }
+
+const REFRESH_ICON = <svg aria-hidden="true" viewBox="0 0 16 16" width="14" height="14"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 
 export function Breadcrumbs({ items }: { items: Crumb[] }) {
   return (
@@ -81,7 +84,7 @@ export function Page({
                     title={a.reason}
                     onClick={a.onClick}
                   >
-                    {a.label}
+                    {a.icon === "refresh" || /^refresh/i.test(a.label) ? REFRESH_ICON : null}{a.label === "Refresh" ? "Refresh data" : a.label}
                   </button>
                   {a.reason ? <span className="reason">{a.reason}</span> : null}
                 </span>

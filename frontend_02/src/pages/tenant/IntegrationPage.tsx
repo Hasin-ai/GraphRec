@@ -113,7 +113,7 @@ export function IntegrationPage() {
         ]}
       />
       <div className="panels">
-        {can("keys:write") ? <Panel title="Your active credentials" note={keys.data ? `${usable.length} usable` : undefined} body="Only the operations granted to a credential may be performed with it. Anything else is rejected with 403 insufficient_scope before the operation is accepted.">
+        {can("keys:write") ? <Panel title="Your active credentials" note={keys.data ? `${usable.length} usable` : undefined} body="Each credential can only do what it was granted. Anything else is refused with a 403 error.">
           {keys.error ? <ErrorBanner error={keys.error} onRetry={keys.reload} /> : null}
           {!keys.data ? keys.loading ? <Skeleton rows={2} /> : null : usable.length ? (
             <PanelTable
