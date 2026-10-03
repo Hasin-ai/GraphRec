@@ -40,7 +40,7 @@ def _catalog(n: int, description_size: int = 200) -> List[Dict[str, Any]]:
 def test_bulk_upsert_splits_on_the_byte_budget(api: MockAPI, sleeps: List[float]) -> None:
     api.on("POST", "/v1/products:bulk-upsert", _bulk_echo)
     with make_client(api, sleeps) as client:
-        result = client.products.bulk_upsert(_catalog(500), idempotency_key="sync-1")
+        result = client.tenant.catalog.bulk_upsert(_catalog(500), idempotency_key="sync-1")
     sizes = [len(call.request.content) for call in api.calls]
     assert all(size <= 16_384 for size in sizes)
     assert max(sizes) > 14_000  # chunks are packed, not tiny
@@ -54,7 +54,7 @@ def test_bulk_upsert_splits_on_the_byte_budget(api: MockAPI, sleeps: List[float]
 def test_bulk_upsert_respects_custom_limits(api: MockAPI, sleeps: List[float]) -> None:
     api.on("POST", "/v1/products:bulk-upsert", _bulk_echo)
     with make_client(api, sleeps, max_body_bytes=4096, max_batch_items=7) as client:
-        client.products.bulk_upsert(_catalog(40, description_size=10))
+        client.tenant.catalog.bulk_upsert(_catalog(40, description_size=10))
     assert all(len(call.request.content) <= 4096 for call in api.calls)
     assert all(len(call.json()["products"]) <= 7 for call in api.calls)
 
@@ -67,7 +67,7 @@ def test_duplicates_are_rejected_locally_like_the_server(api: MockAPI, sleeps: L
         {"external_id": "a", "title": "A again"},
     ]
     with make_client(api, sleeps) as client:
-        result = client.products.bulk_upsert(items)
+        result = client.tenant.catalog.bulk_upsert(items)
     assert [p["title"] for p in api.last().json()["products"]] == ["A", "B"]
     assert result.accepted_count == 2 and result.rejected_count == 1
     assert result.failures[0].external_id == "a"
@@ -77,7 +77,7 @@ def test_oversized_single_item_is_rejected_before_sending(
     api: MockAPI, sleeps: List[float]
 ) -> None:
     with make_client(api, sleeps) as client, pytest.raises(g.InputValidationError, match="sku-big"):
-        client.products.bulk_upsert(
+        client.tenant.catalog.bulk_upsert(
             [{"external_id": "sku-big", "title": "x", "description": "x" * 20_000}]
         )
     assert api.calls == []
@@ -92,7 +92,7 @@ def test_partial_result_is_attached_on_failure(api: MockAPI, sleeps: List[float]
 
     api.on("POST", "/v1/products:bulk-upsert", second_fails)
     with make_client(api, sleeps) as client, pytest.raises(g.RequestValidationError) as info:
-        client.products.bulk_upsert(_catalog(200))
+        client.tenant.catalog.bulk_upsert(_catalog(200))
     partial = info.value.partial_result  # type: ignore[attr-defined]
     assert (
         partial.created_count == len(api.calls[0].json()["products"]) and partial.request_count == 1
@@ -114,7 +114,7 @@ def test_event_batches_are_chunked_and_summed(api: MockAPI, sleeps: List[float])
         for i in range(400)
     ]
     with make_client(api, sleeps) as client:
-        result = client.events.create_batch(events)
+        result = client.storefront.events.create_batch(events)
     assert result.accepted_count == 400 and len(result.batches) == len(api.calls) > 1
     assert all(len(call.request.content) <= 16_384 for call in api.calls)
     first_ids = [e["event_id"] for e in api.calls[0].json()["events"]]
@@ -127,13 +127,13 @@ def test_event_batch_partial_result(api: MockAPI, sleeps: List[float]) -> None:
     )
     events = [{"event_type": "view", "context": {"x": "y" * 500}} for _ in range(60)]
     with make_client(api, sleeps) as client, pytest.raises(g.PayloadTooLargeError) as info:
-        client.events.create_batch(events)
+        client.storefront.events.create_batch(events)
     assert info.value.partial_result.accepted_count == 1  # type: ignore[attr-defined]
 
 
 def test_empty_bulk_inputs_are_rejected(api: MockAPI, sleeps: List[float]) -> None:
     with make_client(api, sleeps) as client:
         with pytest.raises(g.InputValidationError):
-            client.products.bulk_upsert([])
+            client.tenant.catalog.bulk_upsert([])
         with pytest.raises(g.InputValidationError):
-            client.events.create_batch([])
+            client.storefront.events.create_batch([])

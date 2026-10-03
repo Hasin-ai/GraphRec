@@ -12,8 +12,8 @@ import platform
 import time
 import uuid
 from functools import lru_cache
-from urllib.parse import urlencode
 from typing import Any, Callable, Dict, Mapping, Optional, Tuple, Union, cast
+from urllib.parse import urlencode
 
 import httpx
 from pydantic import BaseModel, TypeAdapter, ValidationError
@@ -35,8 +35,8 @@ from .errors import (
     APIResponseValidationError,
     APIStatusError,
     APITimeoutError,
+    AuthenticationError,
     ConfigurationError,
-    TokenExpiredError,
     error_from_response,
 )
 from .models.auth import AuthTokenPair
@@ -303,7 +303,10 @@ class SyncAPIClient(_BaseClient):
 
             error = error_from_response(response)
             if (
-                isinstance(error, TokenExpiredError)
+                # An expired token, or one revoked elsewhere (logout, password
+                # recovery): sign in again once with the stored credentials.
+                isinstance(error, AuthenticationError)
+                and route.auth != "none"
                 and self.auth is not None
                 and self.auth.can_refresh
                 and not refreshed
@@ -423,7 +426,10 @@ class AsyncAPIClient(_BaseClient):
 
             error: APIStatusError = error_from_response(response)
             if (
-                isinstance(error, TokenExpiredError)
+                # An expired token, or one revoked elsewhere (logout, password
+                # recovery): sign in again once with the stored credentials.
+                isinstance(error, AuthenticationError)
+                and route.auth != "none"
                 and self.auth is not None
                 and self.auth.can_refresh
                 and not refreshed

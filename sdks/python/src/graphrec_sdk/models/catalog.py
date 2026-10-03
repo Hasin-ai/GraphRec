@@ -11,11 +11,11 @@ from ._base import GraphRecModel, InputModel, ItemList
 
 __all__ = [
     "BulkUpsertFailure",
+    "CatalogSync",
     "Product",
     "ProductBulkUpsertResult",
     "ProductInput",
     "ProductList",
-    "CatalogSync",
 ]
 
 
@@ -93,7 +93,11 @@ class ProductBulkUpsertResult(GraphRecModel):
     @classmethod
     def merge(cls, results: Iterable[ProductBulkUpsertResult]) -> ProductBulkUpsertResult:
         items = list(results)
-        ids = [identifier for r in items for identifier in (r.sync_ids or ([r.sync_id] if r.sync_id else []))]
+        ids = [
+            identifier
+            for r in items
+            for identifier in (r.sync_ids or ([r.sync_id] if r.sync_id else []))
+        ]
         return cls(
             sync_id=ids[0] if len(ids) == 1 else None,
             sync_ids=ids,

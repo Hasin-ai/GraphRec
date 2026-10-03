@@ -1,10 +1,25 @@
+"""Resource classes. Reach them through the audience namespaces on the client
+(``client.storefront``, ``client.tenant``, ``client.platform``)."""
+
 from .api_keys import ApiKeys, AsyncApiKeys
-from .tenant_users import AsyncTenantUsers, TenantUsers
 from .billing import AsyncSubscriptions, AsyncUsage, Subscriptions, Usage
 from .datasets import AsyncDatasets, Datasets
 from .events import AsyncEvents, Events
 from .ml import AsyncModelVersions, AsyncTrainingJobs, ModelVersions, TrainingJobs
-from .platform import AsyncPlatform, Platform
+from .platform import (
+    AsyncPlatformOperations,
+    AsyncPlatformPlans,
+    AsyncPlatformTenants,
+    PlatformOperations,
+    PlatformPlans,
+    PlatformTenants,
+)
+from .policies import (
+    AsyncRecommendationPolicyResource,
+    AsyncRetrainingPolicyResource,
+    RecommendationPolicyResource,
+    RetrainingPolicyResource,
+)
 from .products import AsyncProducts, Products
 from .recommendations import (
     AsyncFeedback,
@@ -13,13 +28,12 @@ from .recommendations import (
     RecommendationsResource,
 )
 from .serving import AsyncDeployment, AsyncMetrics, Deployment, Metrics
-from .tenants import AsyncAuthentication, AsyncTenants, Authentication, Tenants
+from .tenant_users import AsyncTenantUsers, TenantUsers
+from .tenants import AsyncAuthentication, Authentication
 
 __all__ = [
     "ApiKeys",
     "AsyncApiKeys",
-    "TenantUsers",
-    "AsyncTenantUsers",
     "AsyncAuthentication",
     "AsyncDatasets",
     "AsyncDeployment",
@@ -27,11 +41,15 @@ __all__ = [
     "AsyncFeedback",
     "AsyncMetrics",
     "AsyncModelVersions",
-    "AsyncPlatform",
+    "AsyncPlatformOperations",
+    "AsyncPlatformPlans",
+    "AsyncPlatformTenants",
     "AsyncProducts",
+    "AsyncRecommendationPolicyResource",
     "AsyncRecommendationsResource",
+    "AsyncRetrainingPolicyResource",
     "AsyncSubscriptions",
-    "AsyncTenants",
+    "AsyncTenantUsers",
     "AsyncTrainingJobs",
     "AsyncUsage",
     "Authentication",
@@ -41,11 +59,15 @@ __all__ = [
     "Feedback",
     "Metrics",
     "ModelVersions",
-    "Platform",
+    "PlatformOperations",
+    "PlatformPlans",
+    "PlatformTenants",
     "Products",
+    "RecommendationPolicyResource",
     "RecommendationsResource",
+    "RetrainingPolicyResource",
     "Subscriptions",
-    "Tenants",
+    "TenantUsers",
     "TrainingJobs",
     "Usage",
 ]

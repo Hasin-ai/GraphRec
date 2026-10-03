@@ -1,7 +1,21 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any, AsyncIterator, Dict, Iterable, Iterator, List, Mapping, Optional, Sequence, Tuple, Union, cast
+from typing import (
+    Any,
+    AsyncIterator,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+    cast,
+)
+from uuid import UUID
 
 from .._base_client import OMIT
 from .._batching import chunk_items
@@ -10,8 +24,8 @@ from .._serialization import to_jsonable
 from .._validation import coerce_input, enum_value
 from ..errors import APIError, InputValidationError
 from ..models.catalog import (
-    CatalogSync,
     BulkUpsertFailure,
+    CatalogSync,
     Product,
     ProductBulkUpsertResult,
     ProductInput,
@@ -65,10 +79,13 @@ def _combine(
     if duplicates:
         merged.rejected_count += len(duplicates)
         merged.failures = [*merged.failures, *duplicates]
-        merged.outcomes = [*merged.outcomes, *(
-            {"external_id": failure.external_id, "status": "rejected", "reason": failure.reason}
-            for failure in duplicates
-        )]
+        merged.outcomes = [
+            *merged.outcomes,
+            *(
+                {"external_id": failure.external_id, "status": "rejected", "reason": failure.reason}
+                for failure in duplicates
+            ),
+        ]
     return merged
 
 
@@ -82,7 +99,6 @@ def _update_input(current: Product, changes: Dict[str, Any]) -> Dict[str, Any]:
 
 def _changes(**fields: Any) -> Dict[str, Any]:
     return {key: value for key, value in fields.items() if value is not OMIT}
-
 
 
 def _list_query(
@@ -99,11 +115,15 @@ def _list_query(
             raise InputValidationError("external_ids must hold between 1 and 200 ids")
     return {"limit": limit, "offset": offset, "ids": ",".join(ids) if ids else None}
 
+
 class Products(SyncResource):
     """Tenant catalog. Scopes: ``catalog:read`` / ``catalog:write``."""
 
     def bulk_upsert(
-        self, products: Iterable[ProductLike], *, idempotency_key: Optional[str] = None,
+        self,
+        products: Iterable[ProductLike],
+        *,
+        idempotency_key: Optional[str] = None,
         request_id: Optional[str] = None,
     ) -> ProductBulkUpsertResult:
         """Create or update many products (``POST /v1/products:bulk-upsert``).
@@ -123,7 +143,14 @@ class Products(SyncResource):
             try:
                 result = self._client.request(
                     "products.bulk_upsert",
-                    json={"products": chunk, **({"request_id": _chunk_key(request_id, index, len(chunks))} if request_id else {})},
+                    json={
+                        "products": chunk,
+                        **(
+                            {"request_id": _chunk_key(request_id, index, len(chunks))}
+                            if request_id
+                            else {}
+                        ),
+                    },
                     idempotency_key=_chunk_key(idempotency_key, index, len(chunks)),
                     cast_to=ProductBulkUpsertResult,
                 )
@@ -134,12 +161,20 @@ class Products(SyncResource):
         return _combine(results, duplicates)
 
     def list_syncs(self) -> List[CatalogSync]:
-        return cast(List[CatalogSync], self._client.request("products.list_syncs", cast_to=List[CatalogSync]))
+        return cast(
+            List[CatalogSync],
+            self._client.request("products.list_syncs", cast_to=List[CatalogSync]),
+        )
 
     def get_sync(self, sync_id: Union[str, UUID]) -> CatalogSync:
-        return cast(CatalogSync, self._client.request(
-            "products.get_sync", path_params={"sync_id": sync_id}, cast_to=CatalogSync,
-        ))
+        return cast(
+            CatalogSync,
+            self._client.request(
+                "products.get_sync",
+                path_params={"sync_id": sync_id},
+                cast_to=CatalogSync,
+            ),
+        )
 
     def list(
         self,
@@ -248,7 +283,10 @@ class Products(SyncResource):
 
 class AsyncProducts(AsyncResource):
     async def bulk_upsert(
-        self, products: Iterable[ProductLike], *, idempotency_key: Optional[str] = None,
+        self,
+        products: Iterable[ProductLike],
+        *,
+        idempotency_key: Optional[str] = None,
         request_id: Optional[str] = None,
     ) -> ProductBulkUpsertResult:
         """Async variant of :meth:`Products.bulk_upsert`."""
@@ -261,7 +299,14 @@ class AsyncProducts(AsyncResource):
             try:
                 result = await self._client.request(
                     "products.bulk_upsert",
-                    json={"products": chunk, **({"request_id": _chunk_key(request_id, index, len(chunks))} if request_id else {})},
+                    json={
+                        "products": chunk,
+                        **(
+                            {"request_id": _chunk_key(request_id, index, len(chunks))}
+                            if request_id
+                            else {}
+                        ),
+                    },
                     idempotency_key=_chunk_key(idempotency_key, index, len(chunks)),
                     cast_to=ProductBulkUpsertResult,
                 )
@@ -272,12 +317,20 @@ class AsyncProducts(AsyncResource):
         return _combine(results, duplicates)
 
     async def list_syncs(self) -> List[CatalogSync]:
-        return cast(List[CatalogSync], await self._client.request("products.list_syncs", cast_to=List[CatalogSync]))
+        return cast(
+            List[CatalogSync],
+            await self._client.request("products.list_syncs", cast_to=List[CatalogSync]),
+        )
 
     async def get_sync(self, sync_id: Union[str, UUID]) -> CatalogSync:
-        return cast(CatalogSync, await self._client.request(
-            "products.get_sync", path_params={"sync_id": sync_id}, cast_to=CatalogSync,
-        ))
+        return cast(
+            CatalogSync,
+            await self._client.request(
+                "products.get_sync",
+                path_params={"sync_id": sync_id},
+                cast_to=CatalogSync,
+            ),
+        )
 
     async def list(
         self,

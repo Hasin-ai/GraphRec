@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, cast
+from typing import Any, Dict, Optional, Union, cast
+from uuid import UUID
 
 from ..errors import InputValidationError
-from ..models.tenant_users import TenantUserInvitation, TenantUserList
+from ..models.tenant_users import TenantUser, TenantUserInvitation, TenantUserList
 from ._base import AsyncResource, SyncResource
+
+__all__ = ["AsyncTenantUsers", "TenantUsers"]
 
 ROLES = ("tenant_administrator", "tenant_developer")
 
@@ -23,10 +26,14 @@ def _invite_body(email: str, role: str, display_name: Optional[str]) -> Dict[str
 
 
 class TenantUsers(SyncResource):
+    """Tenant user administration. Administrator bearer tokens only (scope ``users:write``)."""
+
     def list(self) -> TenantUserList:
         """``GET /v1/tenant/users``."""
 
-        return cast(TenantUserList, self._client.request("tenant_users.list", cast_to=TenantUserList))
+        return cast(
+            TenantUserList, self._client.request("tenant_users.list", cast_to=TenantUserList)
+        )
 
     def invite(
         self, email: str, *, role: str = "tenant_developer", display_name: Optional[str] = None
@@ -43,6 +50,23 @@ class TenantUsers(SyncResource):
                 "tenant_users.invite",
                 json=_invite_body(email, role, display_name),
                 cast_to=TenantUserInvitation,
+            ),
+        )
+
+    def revoke_invitation(self, user_id: Union[str, UUID]) -> TenantUser:
+        """Withdraw a pending invitation; its one-time setup link stops working.
+
+        ``DELETE /v1/tenant/users/{user_id}/invitation``. Raises
+        :class:`~graphrec_sdk.NotFoundError` for unknown users and a
+        :class:`~graphrec_sdk.ConflictError` when the user is no longer invited.
+        """
+
+        return cast(
+            TenantUser,
+            self._client.request(
+                "tenant_users.revoke_invitation",
+                path_params={"user_id": user_id},
+                cast_to=TenantUser,
             ),
         )
 
@@ -66,5 +90,17 @@ class AsyncTenantUsers(AsyncResource):
                 "tenant_users.invite",
                 json=_invite_body(email, role, display_name),
                 cast_to=TenantUserInvitation,
+            ),
+        )
+
+    async def revoke_invitation(self, user_id: Union[str, UUID]) -> TenantUser:
+        """Async variant of :meth:`TenantUsers.revoke_invitation`."""
+
+        return cast(
+            TenantUser,
+            await self._client.request(
+                "tenant_users.revoke_invitation",
+                path_params={"user_id": user_id},
+                cast_to=TenantUser,
             ),
         )

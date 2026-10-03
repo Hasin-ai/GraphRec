@@ -16,42 +16,16 @@ from ._constants import (
     ENV_API_KEY,
     ENV_BASE_URL,
 )
+from ._namespaces import (
+    AsyncPlatformNamespace,
+    AsyncStorefrontNamespace,
+    AsyncTenantNamespace,
+    PlatformNamespace,
+    StorefrontNamespace,
+    TenantNamespace,
+)
 from ._retry import RetryPolicy
 from .errors import ConfigurationError
-from .resources import (
-    ApiKeys,
-    AsyncApiKeys,
-    AsyncTenantUsers,
-    TenantUsers,
-    AsyncAuthentication,
-    AsyncDatasets,
-    AsyncDeployment,
-    AsyncEvents,
-    AsyncFeedback,
-    AsyncMetrics,
-    AsyncModelVersions,
-    AsyncPlatform,
-    AsyncProducts,
-    AsyncRecommendationsResource,
-    AsyncSubscriptions,
-    AsyncTenants,
-    AsyncTrainingJobs,
-    AsyncUsage,
-    Authentication,
-    Datasets,
-    Deployment,
-    Events,
-    Feedback,
-    Metrics,
-    ModelVersions,
-    Platform,
-    Products,
-    RecommendationsResource,
-    Subscriptions,
-    Tenants,
-    TrainingJobs,
-    Usage,
-)
 
 __all__ = ["AsyncGraphRec", "GraphRec"]
 
@@ -113,38 +87,35 @@ class _ClientOptions:
 class GraphRec:
     """Synchronous GraphRec client.
 
+    Resources are grouped by audience: ``client.storefront`` (events,
+    recommendations, feedback), ``client.tenant`` (tenant administration) and
+    ``client.platform`` (cross-tenant operations).
+
     Storefront backend (API key)::
 
         from graphrec_sdk import GraphRec
 
         client = GraphRec(base_url="https://graphrec.example.com", api_key="gr_live_...")
-        recs = client.recommendations.get(user_id="customer-42", top_n=8)
+        recs = client.storefront.recommendations.get(user_id="customer-42", top_n=8)
 
     Tenant administration (auto-login, token renewed before expiry)::
 
         admin = GraphRec(email="admin@shop.example", password="...")
-        key = admin.api_keys.create(name="storefront", scopes=STOREFRONT_KEY_SCOPES)
+        key = admin.tenant.api_keys.create(name="storefront", scopes=STOREFRONT_KEY_SCOPES)
+
+    Platform operations (``PLATFORM_ADMIN_TOKEN``)::
+
+        ops = GraphRec(access_token=os.environ["PLATFORM_ADMIN_TOKEN"])
+        for t in ops.platform.tenants.list():
+            print(t.slug, t.status)
 
     Credentials fall back to ``GRAPHREC_API_KEY`` / ``GRAPHREC_ACCESS_TOKEN`` and the
     URL to ``GRAPHREC_BASE_URL`` (default ``http://localhost:8010``).
     """
 
-    tenants: Tenants
-    auth: Authentication
-    api_keys: ApiKeys
-    tenant_users: TenantUsers
-    subscription: Subscriptions
-    usage: Usage
-    products: Products
-    events: Events
-    datasets: Datasets
-    model_versions: ModelVersions
-    training_jobs: TrainingJobs
-    deployment: Deployment
-    metrics: Metrics
-    recommendations: RecommendationsResource
-    feedback: Feedback
-    platform: Platform
+    storefront: StorefrontNamespace
+    tenant: TenantNamespace
+    platform: PlatformNamespace
 
     def __init__(
         self,
@@ -193,22 +164,9 @@ class GraphRec:
             default_headers=default_headers,
             http_client=http_client,
         )
-        self.tenants = Tenants(self._api)
-        self.auth = Authentication(self._api)
-        self.api_keys = ApiKeys(self._api)
-        self.tenant_users = TenantUsers(self._api)
-        self.subscription = Subscriptions(self._api)
-        self.usage = Usage(self._api)
-        self.products = Products(self._api)
-        self.events = Events(self._api)
-        self.datasets = Datasets(self._api)
-        self.model_versions = ModelVersions(self._api)
-        self.training_jobs = TrainingJobs(self._api)
-        self.deployment = Deployment(self._api)
-        self.metrics = Metrics(self._api)
-        self.recommendations = RecommendationsResource(self._api)
-        self.feedback = Feedback(self._api)
-        self.platform = Platform(self._api)
+        self.storefront = StorefrontNamespace(self._api)
+        self.tenant = TenantNamespace(self._api)
+        self.platform = PlatformNamespace(self._api)
 
     @property
     def base_url(self) -> str:
@@ -269,25 +227,12 @@ class AsyncGraphRec:
     ::
 
         async with AsyncGraphRec(api_key="gr_live_...") as client:
-            recs = await client.recommendations.get(user_id="customer-42")
+            recs = await client.storefront.recommendations.get(user_id="customer-42")
     """
 
-    tenants: AsyncTenants
-    auth: AsyncAuthentication
-    api_keys: AsyncApiKeys
-    tenant_users: AsyncTenantUsers
-    subscription: AsyncSubscriptions
-    usage: AsyncUsage
-    products: AsyncProducts
-    events: AsyncEvents
-    datasets: AsyncDatasets
-    model_versions: AsyncModelVersions
-    training_jobs: AsyncTrainingJobs
-    deployment: AsyncDeployment
-    metrics: AsyncMetrics
-    recommendations: AsyncRecommendationsResource
-    feedback: AsyncFeedback
-    platform: AsyncPlatform
+    storefront: AsyncStorefrontNamespace
+    tenant: AsyncTenantNamespace
+    platform: AsyncPlatformNamespace
 
     def __init__(
         self,
@@ -336,22 +281,9 @@ class AsyncGraphRec:
             default_headers=default_headers,
             http_client=http_client,
         )
-        self.tenants = AsyncTenants(self._api)
-        self.auth = AsyncAuthentication(self._api)
-        self.api_keys = AsyncApiKeys(self._api)
-        self.tenant_users = AsyncTenantUsers(self._api)
-        self.subscription = AsyncSubscriptions(self._api)
-        self.usage = AsyncUsage(self._api)
-        self.products = AsyncProducts(self._api)
-        self.events = AsyncEvents(self._api)
-        self.datasets = AsyncDatasets(self._api)
-        self.model_versions = AsyncModelVersions(self._api)
-        self.training_jobs = AsyncTrainingJobs(self._api)
-        self.deployment = AsyncDeployment(self._api)
-        self.metrics = AsyncMetrics(self._api)
-        self.recommendations = AsyncRecommendationsResource(self._api)
-        self.feedback = AsyncFeedback(self._api)
-        self.platform = AsyncPlatform(self._api)
+        self.storefront = AsyncStorefrontNamespace(self._api)
+        self.tenant = AsyncTenantNamespace(self._api)
+        self.platform = AsyncPlatformNamespace(self._api)
 
     @property
     def base_url(self) -> str:

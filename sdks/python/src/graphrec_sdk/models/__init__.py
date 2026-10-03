@@ -2,43 +2,59 @@
 
 from ._base import GraphRecModel, InputModel, ItemList
 from .api_keys import ApiKey, ApiKeyList, ApiKeyWithSecret
-from .tenant_users import TenantUser, TenantUserInvitation, TenantUserList
 from .auth import AuthTokenPair, TenantRegistration
-from .billing import Subscription, UsageDimension, UsageSummary
+from .billing import Subscription, UsageDimension, UsageSummary, UsageTrend, UsageTrendBucket
 from .catalog import (
     BulkUpsertFailure,
+    CatalogSync,
     Product,
     ProductBulkUpsertResult,
     ProductInput,
     ProductList,
-    CatalogSync,
 )
 from .datasets import DatasetSnapshot, DatasetSnapshotList, DatasetUploadResult
-from .events import EventBatch, EventBatchList, EventBatchResult, EventInput, EventReceipt
+from .events import (
+    EventBatch,
+    EventBatchList,
+    EventBatchResult,
+    EventInput,
+    EventItemOutcome,
+    EventReceipt,
+)
 from .ml import ModelVersion, ModelVersionList, TrainingJob, TrainingJobList
 from .platform import (
     AuditRecord,
     AuditRecordList,
+    LimitConflict,
     PlatformFailure,
     PlatformFailureList,
+    PlatformStatus,
     PlatformTenant,
     PlatformTenantList,
     PricingPlan,
     PricingPlanList,
     QuotaOverride,
+    RecoveryToken,
     TenantQuota,
+)
+from .policies import (
+    RecommendationPolicy,
+    RecommendationPolicyUpdate,
+    RetrainingPolicy,
+    RetrainingPolicyUpdate,
 )
 from .recommendations import FeedbackReceipt, RecommendationItem, Recommendations
 from .serving import (
+    CapacityEvent,
     DeploymentStatus,
     MetricsSummary,
     QualitySummary,
+    RateLimiterStatus,
+    ScalingStatus,
 )
+from .tenant_users import TenantUser, TenantUserInvitation, TenantUserList
 
 __all__ = [
-    "TenantUser",
-    "TenantUserInvitation",
-    "TenantUserList",
     "ApiKey",
     "ApiKeyList",
     "ApiKeyWithSecret",
@@ -46,6 +62,8 @@ __all__ = [
     "AuditRecordList",
     "AuthTokenPair",
     "BulkUpsertFailure",
+    "CapacityEvent",
+    "CatalogSync",
     "DatasetSnapshot",
     "DatasetSnapshotList",
     "DatasetUploadResult",
@@ -54,16 +72,19 @@ __all__ = [
     "EventBatchList",
     "EventBatchResult",
     "EventInput",
+    "EventItemOutcome",
     "EventReceipt",
     "FeedbackReceipt",
     "GraphRecModel",
     "InputModel",
     "ItemList",
+    "LimitConflict",
     "MetricsSummary",
     "ModelVersion",
     "ModelVersionList",
     "PlatformFailure",
     "PlatformFailureList",
+    "PlatformStatus",
     "PlatformTenant",
     "PlatformTenantList",
     "PricingPlan",
@@ -72,16 +93,27 @@ __all__ = [
     "ProductBulkUpsertResult",
     "ProductInput",
     "ProductList",
-    "CatalogSync",
     "QualitySummary",
     "QuotaOverride",
-    "TenantQuota",
+    "RateLimiterStatus",
     "RecommendationItem",
+    "RecommendationPolicy",
+    "RecommendationPolicyUpdate",
     "Recommendations",
+    "RecoveryToken",
+    "RetrainingPolicy",
+    "RetrainingPolicyUpdate",
+    "ScalingStatus",
     "Subscription",
+    "TenantQuota",
     "TenantRegistration",
+    "TenantUser",
+    "TenantUserInvitation",
+    "TenantUserList",
     "TrainingJob",
     "TrainingJobList",
     "UsageDimension",
     "UsageSummary",
+    "UsageTrend",
+    "UsageTrendBucket",
 ]

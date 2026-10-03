@@ -49,14 +49,14 @@ def test_password_auth_logs_in_once_and_reuses_token(api: MockAPI, sleeps: List[
     clock = FakeClock()
     auth = g.PasswordAuth("admin@shop.test", "correct horse", clock=clock)
     with make_client(api, sleeps, api_key=None, auth=auth) as client:
-        client.usage.get()
-        client.usage.get()
+        client.tenant.usage.get()
+        client.tenant.usage.get()
         assert api.paths() == ["POST /v1/auth/login", "GET /v1/usage", "GET /v1/usage"]
         assert api.last().headers["Authorization"] == "Bearer tok-1"
         assert api.calls[0].json() == {"email": "admin@shop.test", "password": "correct horse"}
 
         clock.now += 900 - 30  # inside the expiry skew window
-        client.usage.get()
+        client.tenant.usage.get()
         assert api.paths()[-2:] == ["POST /v1/auth/login", "GET /v1/usage"]
         assert api.last().headers["Authorization"] == "Bearer tok-2"
         assert auth.tokens is not None and auth.tokens.access_token == "tok-2"
@@ -68,7 +68,7 @@ def test_token_expired_triggers_single_relogin(api: MockAPI, sleeps: List[float]
     with make_client(
         api, sleeps, api_key=None, email="admin@shop.test", password="pw-123456"
     ) as client:
-        summary = client.usage.get()
+        summary = client.tenant.usage.get()
     assert summary.get(g.UsageType.ACCEPTED_EVENTS).remaining == 48800  # type: ignore[union-attr]
     assert api.paths() == [
         "POST /v1/auth/login",
@@ -86,15 +86,34 @@ def test_persistent_token_expired_is_raised(api: MockAPI, sleeps: List[float]) -
         api, sleeps, api_key=None, email="a@shop.test", password="pw-123456"
     ) as client:
         with pytest.raises(errors.TokenExpiredError):
-            client.usage.get()
+            client.tenant.usage.get()
     assert len([p for p in api.paths() if p == "GET /v1/usage"]) == 2
+
+
+def test_revoked_session_triggers_single_relogin(api: MockAPI, sleeps: List[float]) -> None:
+    # A logout or password recovery elsewhere revokes the cached token: the server
+    # answers authentication_failed, not token_expired.
+    api.queue("POST", "/v1/auth/login", tokens("tok-1"), tokens("tok-2"))
+    api.queue("GET", "/v1/usage", error(401, "authentication_failed"), USAGE)
+    with make_client(api, sleeps, api_key=None, email="a@shop.test", password="pw-123456") as client:
+        client.tenant.usage.get()
+    assert api.paths().count("POST /v1/auth/login") == 2
+    assert api.last().headers["Authorization"] == "Bearer tok-2"
+
+
+def test_api_key_401_is_not_retried(api: MockAPI, sleeps: List[float]) -> None:
+    api.on("GET", "/v1/usage", lambda _r: error(401, "authentication_failed"))
+    with make_client(api, sleeps) as client:
+        with pytest.raises(errors.AuthenticationError):
+            client.tenant.usage.get()
+    assert len(api.calls) == 1
 
 
 def test_static_bearer_token_is_not_refreshed(api: MockAPI, sleeps: List[float]) -> None:
     api.on("GET", "/v1/usage", lambda _r: error(401, "token_expired"))
     with make_client(api, sleeps, api_key=None, access_token="static") as client:
         with pytest.raises(errors.TokenExpiredError):
-            client.usage.get()
+            client.tenant.usage.get()
     assert len(api.calls) == 1
 
 
@@ -102,7 +121,7 @@ def test_failed_login_surfaces_authentication_error(api: MockAPI, sleeps: List[f
     api.on("POST", "/v1/auth/login", lambda _r: error(401, "authentication_failed"))
     with make_client(api, sleeps, api_key=None, email="a@shop.test", password="wrong-pw") as client:
         with pytest.raises(errors.AuthenticationError):
-            client.usage.get()
+            client.tenant.usage.get()
 
 
 def test_async_password_auth(api: MockAPI) -> None:
@@ -113,7 +132,7 @@ def test_async_password_auth(api: MockAPI) -> None:
         async with make_async_client(
             api, api_key=None, email="a@shop.test", password="pw-123456"
         ) as client:
-            first, second = await asyncio.gather(client.usage.get(), client.usage.get())
+            first, second = await asyncio.gather(client.tenant.usage.get(), client.tenant.usage.get())
             assert first.get("accepted_events") is not None
             assert second.project_defaults is True
 

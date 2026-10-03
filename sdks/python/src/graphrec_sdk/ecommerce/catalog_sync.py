@@ -79,7 +79,7 @@ class CatalogSync:
         started = time.monotonic()
         items = _prepare(products, allow_empty, disable_missing)
         upsert = (
-            self._client.products.bulk_upsert(items, idempotency_key=idempotency_key)
+            self._client.tenant.catalog.bulk_upsert(items, idempotency_key=idempotency_key)
             if items
             else ProductBulkUpsertResult(request_count=0)
         )
@@ -87,10 +87,10 @@ class CatalogSync:
         failures: Dict[str, str] = {}
         if disable_missing:
             feed: Set[str] = {item.external_id for item in items}
-            for product in self._client.products.iterate():
+            for product in self._client.tenant.catalog.iterate():
                 if product.is_active and product.external_id not in feed:
                     try:
-                        self._client.products.disable(product.external_id)
+                        self._client.tenant.catalog.disable(product.external_id)
                         disabled.append(product.external_id)
                     except APIError as exc:
                         failures[product.external_id] = str(exc)
@@ -117,7 +117,7 @@ class AsyncCatalogSync:
         started = time.monotonic()
         items = _prepare(products, allow_empty, disable_missing)
         upsert = (
-            await self._client.products.bulk_upsert(items, idempotency_key=idempotency_key)
+            await self._client.tenant.catalog.bulk_upsert(items, idempotency_key=idempotency_key)
             if items
             else ProductBulkUpsertResult(request_count=0)
         )
@@ -125,10 +125,10 @@ class AsyncCatalogSync:
         failures: Dict[str, str] = {}
         if disable_missing:
             feed: Set[str] = {item.external_id for item in items}
-            async for product in self._client.products.iterate():
+            async for product in self._client.tenant.catalog.iterate():
                 if product.is_active and product.external_id not in feed:
                     try:
-                        await self._client.products.disable(product.external_id)
+                        await self._client.tenant.catalog.disable(product.external_id)
                         disabled.append(product.external_id)
                     except APIError as exc:
                         failures[product.external_id] = str(exc)

@@ -30,7 +30,7 @@ def handle_order_paid(client: GraphRec, order: Dict[str, Any]) -> None:
         )
         for index, line in enumerate(order["lines"], start=1)
     ]
-    result = client.events.create_batch(events)
+    result = client.storefront.events.create_batch(events)
     print(
         f"order {order['id']}: accepted={result.accepted_count} duplicates={result.duplicate_count}"
     )

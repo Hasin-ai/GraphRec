@@ -14,7 +14,7 @@ from .conftest import API_KEY, BASE_URL, MockAPI, error, make_client, product, t
 
 def test_standard_headers_and_api_key_scheme(client: g.GraphRec, api: MockAPI) -> None:
     api.on("GET", "/v1/products/sku-1", product())
-    client.products.get("sku-1")
+    client.tenant.catalog.get("sku-1")
     sent = api.last()
     assert sent.headers["Accept"] == "application/json"
     assert sent.headers["Authorization"] == f"ApiKey {API_KEY}"
@@ -25,7 +25,7 @@ def test_standard_headers_and_api_key_scheme(client: g.GraphRec, api: MockAPI) -
 
 def test_json_post_is_compact_and_typed(client: g.GraphRec, api: MockAPI) -> None:
     api.on("PUT", "/v1/products/sku-1", product())
-    client.products.upsert({"external_id": "sku-1", "title": "Linen shirt", "price": 49.9})
+    client.tenant.catalog.upsert({"external_id": "sku-1", "title": "Linen shirt", "price": 49.9})
     sent = api.last()
     assert sent.headers["Content-Type"] == "application/json"
     assert b": " not in sent.request.content
@@ -36,7 +36,7 @@ def test_json_post_is_compact_and_typed(client: g.GraphRec, api: MockAPI) -> Non
 
 def test_bodyless_action_post_still_declares_json(client: g.GraphRec, api: MockAPI) -> None:
     api.on("POST", "/v1/products/sku%201:disable", product("sku 1", is_active=False))
-    result = client.products.disable("sku 1")
+    result = client.tenant.catalog.disable("sku 1")
     sent = api.last()
     assert result.is_active is False
     assert sent.headers["Content-Type"] == "application/json"
@@ -46,12 +46,12 @@ def test_bodyless_action_post_still_declares_json(client: g.GraphRec, api: MockA
 
 def test_path_parameters_are_percent_encoded(client: g.GraphRec, api: MockAPI) -> None:
     api.on("GET", "/v1/products/a%2Fb%3Fc", product("a/b?c"))
-    assert client.products.get("a/b?c").external_id == "a/b?c"
+    assert client.tenant.catalog.get("a/b?c").external_id == "a/b?c"
 
 
 def test_public_routes_never_receive_credentials(client: g.GraphRec, api: MockAPI) -> None:
     api.on("POST", "/v1/auth/login", tokens())
-    client.auth.login(email="dev@shop.test", password="secret-password")
+    client.tenant.auth.login(email="dev@shop.test", password="secret-password")
     assert "Authorization" not in api.last().headers
 
 
@@ -79,7 +79,7 @@ def test_error_envelope_maps_to_exception(
 ) -> None:
     api.on("GET", "/v1/products/sku-1", lambda _r: error(status, code, "nope"))
     with make_client(api, sleeps) as client, pytest.raises(exc_type) as info:
-        client.products.get("sku-1")
+        client.tenant.catalog.get("sku-1")
     exc = info.value
     assert type(exc) is exc_type
     assert exc.status_code == status
@@ -97,14 +97,14 @@ def test_validation_error_exposes_field_errors(client: g.GraphRec, api: MockAPI)
         lambda _r: error(422, "validation_failed", details=details),
     )
     with pytest.raises(errors.RequestValidationError) as info:
-        client.products.bulk_upsert([{"external_id": "sku-1", "title": "x"}])
+        client.tenant.catalog.bulk_upsert([{"external_id": "sku-1", "title": "x"}])
     assert info.value.field_errors == [errors.FieldError("products.0.title", "Field required")]
 
 
 def test_non_json_error_body_is_handled(client: g.GraphRec, api: MockAPI) -> None:
     api.on("GET", "/v1/products", lambda _r: httpx.Response(502, text="<html>Bad gateway</html>"))
     with pytest.raises(errors.InternalServerError) as info:
-        client.products.list()
+        client.tenant.catalog.list()
     assert info.value.code == "http_502"
 
 
@@ -124,7 +124,7 @@ def test_rate_limit_is_retried_with_retry_after(
             "created_at": "2026-09-11T10:00:00Z",
         },
     )
-    version = client.model_versions.create(version_tag="v1")
+    version = client.tenant.model_versions.create(version_tag="v1")
     assert version.version_tag == "v1"
     assert sleeps == [7.0]
     first, second = api.calls
@@ -134,7 +134,7 @@ def test_rate_limit_is_retried_with_retry_after(
 def test_retryable_503_uses_backoff_then_gives_up(api: MockAPI, sleeps: List[float]) -> None:
     api.on("GET", "/v1/usage", lambda _r: error(503, "service_unavailable", retryable=True))
     with make_client(api, sleeps) as client, pytest.raises(errors.ServiceUnavailableError):
-        client.usage.get()
+        client.tenant.usage.get()
     assert len(api.calls) == 3
     assert sleeps == [0.5, 1.0]
 
@@ -144,7 +144,7 @@ def test_quota_exceeded_is_never_retried(
 ) -> None:
     api.on("POST", "/v1/training-jobs", lambda _r: error(429, "quota_exceeded", retryable=True))
     with pytest.raises(errors.QuotaExceededError) as info:
-        client.training_jobs.create()
+        client.tenant.training_jobs.create()
     assert info.value.retryable is False
     assert len(api.calls) == 1 and sleeps == []
 
@@ -152,7 +152,7 @@ def test_quota_exceeded_is_never_retried(
 def test_retry_after_above_ceiling_is_raised(api: MockAPI, sleeps: List[float]) -> None:
     api.on("GET", "/v1/usage", lambda _r: error(429, "rate_limit_exceeded", retry_after=3600))
     with make_client(api, sleeps) as client, pytest.raises(errors.RateLimitError) as info:
-        client.usage.get()
+        client.tenant.usage.get()
     assert info.value.retry_after_seconds == 3600
     assert len(api.calls) == 1
 
@@ -165,10 +165,10 @@ def test_read_timeout_retried_only_for_idempotent_routes(api: MockAPI, sleeps: L
     api.on("POST", "/v1/training-jobs", timeout)
     with make_client(api, sleeps) as client:
         with pytest.raises(errors.APITimeoutError):
-            client.products.list()
+            client.tenant.catalog.list()
         assert len(api.calls) == 3
         with pytest.raises(errors.APITimeoutError):
-            client.training_jobs.create()
+            client.tenant.training_jobs.create()
         assert len(api.calls) == 4
 
 
@@ -194,26 +194,26 @@ def test_unexpected_success_body_raises_response_validation_error(
 ) -> None:
     api.on("GET", "/v1/products/sku-1", {"unexpected": True})
     with pytest.raises(errors.APIResponseValidationError) as info:
-        client.products.get("sku-1")
+        client.tenant.catalog.get("sku-1")
     assert info.value.body == {"unexpected": True}
 
 
 def test_unknown_response_fields_are_preserved(client: g.GraphRec, api: MockAPI) -> None:
     api.on("GET", "/v1/products/sku-1", product(new_server_field="hello"))
-    result = client.products.get("sku-1")
+    result = client.tenant.catalog.get("sku-1")
     assert result.model_extra == {"new_server_field": "hello"}
 
 
 def test_credential_configuration_errors(api: MockAPI) -> None:
     with make_client(api, api_key=None) as anonymous, pytest.raises(errors.ConfigurationError):
-        anonymous.products.list()
+        anonymous.tenant.catalog.list()
     with make_client(api) as keyed, pytest.raises(errors.ConfigurationError, match="bearer"):
-        keyed.api_keys.list()
+        keyed.tenant.api_keys.list()
     with (
         make_client(api) as keyed,
         pytest.raises(errors.ConfigurationError, match="PLATFORM_ADMIN_TOKEN"),
     ):
-        keyed.platform.list_tenants()
+        keyed.platform.tenants.list()
     assert api.calls == []
     with pytest.raises(errors.ConfigurationError):
         g.GraphRec(api_key=API_KEY, access_token="t", use_env=False)
@@ -249,7 +249,7 @@ def test_with_credentials_shares_the_connection_pool(client: g.GraphRec, api: Mo
     )
     admin = client.with_credentials(access_token="jwt-token")
     assert admin._api._http is client._api._http
-    admin.subscription.get()
+    admin.tenant.subscription.get()
     assert api.last().headers["Authorization"] == "Bearer jwt-token"
     admin.close()
     assert not client._api._http.is_closed
@@ -269,7 +269,7 @@ def test_default_headers_and_idempotency_key(api: MockAPI) -> None:
         },
     )
     with make_client(api, api_key=None, default_headers={"X-Shop": "eu-1"}) as client:
-        client.tenants.register(name="Shop", admin_email="owner@shop.test", idempotency_key="reg-1")
+        client.tenant.auth.register(name="Shop", admin_email="owner@shop.test", idempotency_key="reg-1")
     sent = api.last()
     assert sent.headers["Idempotency-Key"] == "reg-1"
     assert sent.headers["X-Shop"] == "eu-1"
@@ -284,4 +284,4 @@ def test_base_url_path_prefix_is_kept(api: MockAPI) -> None:
         use_env=False,
     )
     api.on("GET", "/graphrec/v1/products", {"items": [], "total": 0})
-    assert len(client.products.list()) == 0
+    assert len(client.tenant.catalog.list()) == 0

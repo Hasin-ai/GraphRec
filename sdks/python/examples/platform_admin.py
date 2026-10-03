@@ -20,15 +20,15 @@ def main(tenant_id: Optional[str]) -> None:
     with GraphRec(access_token=os.environ["PLATFORM_ADMIN_TOKEN"], use_env=False) as ops:
         print("platform:", ops.platform.status())
 
-        for plan in ops.platform.list_plans():
+        for plan in ops.platform.plans.list():
             print(f"plan {plan.code:<6} {plan.limits}")
 
-        tenants = ops.platform.list_tenants()
+        tenants = ops.platform.tenants.list()
         suspended = [t for t in tenants if t.status == TenantStatus.SUSPENDED]
         print(f"{len(tenants)} tenants, {len(suspended)} suspended")
 
         if tenant_id:
-            quota = ops.platform.set_quota_override(
+            quota = ops.platform.tenants.set_quota_override(
                 tenant_id, overrides={"accepted_events": 1_000_000}
             )
             print("effective limits:", quota.limits, "overrides:", quota.overrides)

@@ -10,7 +10,14 @@ from .._ids import new_id
 from .._serialization import utcnow
 from ._base import GraphRecModel, InputModel, ItemList
 
-__all__ = ["EventBatch", "EventBatchList", "EventBatchResult", "EventInput", "EventReceipt"]
+__all__ = [
+    "EventBatch",
+    "EventBatchList",
+    "EventBatchResult",
+    "EventInput",
+    "EventItemOutcome",
+    "EventReceipt",
+]
 
 
 class EventInput(InputModel):
@@ -53,6 +60,16 @@ class EventReceipt(GraphRecModel):
     received_at: datetime
 
 
+class EventItemOutcome(GraphRecModel):
+    """What happened to one event of a batch."""
+
+    event_id: str
+    #: ``accepted``, ``duplicate`` or ``rejected``.
+    status: str
+    #: Why the event was rejected; ``None`` otherwise.
+    reason: Optional[str] = None
+
+
 class EventBatch(GraphRecModel):
     id: UUID
     status: str
@@ -60,7 +77,7 @@ class EventBatch(GraphRecModel):
     accepted_count: int
     duplicate_count: int
     rejected_count: int
-    outcomes: List[Dict[str, str]] = Field(default_factory=list)
+    outcomes: List[EventItemOutcome] = Field(default_factory=list)
     created_at: datetime
 
 

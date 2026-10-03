@@ -5,7 +5,7 @@ import time
 from typing import Any, Dict, Mapping, Optional, Union, cast
 from uuid import UUID
 
-from ..errors import InputValidationError, WaitTimeoutError
+from ..errors import InputValidationError, NotFoundError, WaitTimeoutError
 from ..models.ml import ModelVersion, ModelVersionList, TrainingJob, TrainingJobList
 from ._base import AsyncResource, SyncResource
 
@@ -48,11 +48,6 @@ def _job_body(
     if configuration:
         body["configuration"] = dict(configuration)
     return body
-
-
-def _find(jobs: TrainingJobList, job_id: Union[str, UUID]) -> Optional[TrainingJob]:
-    wanted = str(job_id)
-    return next((job for job in jobs if str(job.id) == wanted), None)
 
 
 class ModelVersions(SyncResource):
@@ -242,7 +237,7 @@ class TrainingJobs(SyncResource):
         Pass ``request_id`` to retry an ambiguous response without creating
         another job. The accepted job runs in the background. Poll it until
         terminal; then activate its ``model_version_id`` with
-        ``client.model_versions.activate(...)`` after reviewing its metrics.
+        ``client.tenant.model_versions.activate(...)`` after reviewing its metrics.
         """
 
         return cast(
@@ -272,9 +267,12 @@ class TrainingJobs(SyncResource):
         ))
 
     def find(self, job_id: Union[str, UUID]) -> Optional[TrainingJob]:
-        """Look a job up by ID (the API has no single-job endpoint, so this lists jobs)."""
+        """Like :meth:`get`, but returns ``None`` instead of raising for an unknown job."""
 
-        return _find(self.list(), job_id)
+        try:
+            return self.get(job_id)
+        except NotFoundError:
+            return None
 
     def wait(
         self,
@@ -341,7 +339,10 @@ class AsyncTrainingJobs(AsyncResource):
     async def find(self, job_id: Union[str, UUID]) -> Optional[TrainingJob]:
         """Async variant of :meth:`TrainingJobs.find`."""
 
-        return _find(await self.list(), job_id)
+        try:
+            return await self.get(job_id)
+        except NotFoundError:
+            return None
 
     async def wait(
         self,

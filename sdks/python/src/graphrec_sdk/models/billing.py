@@ -3,9 +3,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Dict, List, Optional, Union
 
+from pydantic import Field
+
 from ._base import GraphRecModel
 
-__all__ = ["Subscription", "UsageDimension", "UsageSummary"]
+__all__ = ["Subscription", "UsageDimension", "UsageSummary", "UsageTrend", "UsageTrendBucket"]
 
 
 class Subscription(GraphRecModel):
@@ -55,3 +57,23 @@ class UsageSummary(GraphRecModel):
 
         key = getattr(usage_type, "value", usage_type)
         return next((item for item in self.dimensions if item.type == key), None)
+
+
+class UsageTrendBucket(GraphRecModel):
+    """Usage in one period, keyed by usage type."""
+
+    start: datetime
+    values: Dict[str, Union[int, float]] = Field(default_factory=dict)
+
+
+class UsageTrend(GraphRecModel):
+    """Usage summarized by period and usage type (``GET /v1/usage/trends``)."""
+
+    tenant_id: str
+    start: datetime
+    end: datetime
+    #: ``hour``, ``day`` or ``week``.
+    granularity: str
+    usage_types: List[str] = Field(default_factory=list)
+    buckets: List[UsageTrendBucket] = Field(default_factory=list)
+    totals: Dict[str, Union[int, float]] = Field(default_factory=dict)
