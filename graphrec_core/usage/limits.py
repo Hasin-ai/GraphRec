@@ -40,6 +40,12 @@ def require_capacity(db: Session, tenant_id: UUID, dimension: str, quantity: int
     """
     if dimension in SERVING_DIMENSIONS:
         raise ValueError(f"{dimension} is enforced by graphrec_core.usage.admission")
+    if quantity <= 0:
+        # Nothing new is being admitted (e.g. a catalog sync that only updates
+        # existing products, or a batch of duplicate events). Inventory can sit
+        # above its limit after a plan downgrade or a lowered override; that must
+        # block growth, not edits to what is already stored.
+        return
     lock_dimension(db, tenant_id, dimension)
     row = db.execute(select(PricingPlan, TenantResourceQuota)
         .join(TenantSubscription, TenantSubscription.plan_id == PricingPlan.id)
@@ -86,3 +92,32 @@ def artifact_storage_used(db: Session, tenant_id: UUID) -> int:
         if isinstance(size, int) and not isinstance(size, bool):
             total += max(0, size)
     return total
+
+
+# Limits on stored inventory, as opposed to metered monthly counters. Lowering one
+# of these below what a tenant already holds does not delete anything; it only
+# blocks growth until usage falls back under the limit.
+INVENTORY_DIMENSIONS = ("stored_products", "active_model_versions", "artifact_storage_bytes")
+
+
+def inventory_usage(db: Session, tenant_id: UUID) -> dict[str, int]:
+    # Inventory tables are under forced RLS: scope this transaction to the tenant
+    # first, or the counts silently read as zero.
+    from graphrec_core.database.tenancy import set_local_tenant
+    set_local_tenant(db, tenant_id)
+    return {
+        "stored_products": int(db.scalar(select(func.count(Product.id)).where(Product.tenant_id == tenant_id)) or 0),
+        "active_model_versions": int(db.scalar(select(func.count(ModelVersion.id)).where(
+            ModelVersion.tenant_id == tenant_id, ModelVersion.status == "active")) or 0),
+        "artifact_storage_bytes": artifact_storage_used(db, tenant_id),
+    }
+
+
+def limits_below_inventory(db: Session, tenant_id: UUID, limits: dict[str, int]) -> list[dict[str, int | str]]:
+    """Inventory limits in ``limits`` that the tenant already exceeds."""
+    used = inventory_usage(db, tenant_id)
+    return [
+        {"limit_name": name, "limit": int(limits[name]), "used": used[name], "over_by": used[name] - int(limits[name])}
+        for name in INVENTORY_DIMENSIONS
+        if isinstance(limits.get(name), int) and used[name] > limits[name]
+    ]

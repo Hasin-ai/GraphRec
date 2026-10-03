@@ -18,6 +18,7 @@ from graphrec_core.database.models import PricingPlan
 from graphrec_core.database.session import get_db
 from graphrec_core.errors import ApiError
 from graphrec_core.subscription.service import SubscriptionService
+from graphrec_core.usage.limits import limits_below_inventory
 from graphrec_core.usage.service import UsageService
 from graphrec_core.schemas.usage import UsageSummaryResponse
 from graphrec_core.settings import Settings, get_settings
@@ -48,16 +49,33 @@ class TenantStatusUpdate(BaseModel):
 
 class QuotaOverrideUpdate(BaseModel):
     overrides: dict[str, Any] = Field(default_factory=dict)
+    # Lowering an inventory limit below current usage is refused unless the
+    # operator confirms it; nothing is deleted, but further growth is blocked.
+    acknowledge_below_usage: bool = False
 
 
 class PlanAssignment(BaseModel):
     plan_id: UUID
+    acknowledge_below_usage: bool = False
 
 
 class PlanUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     limits: dict[str, Annotated[int, Field(strict=True, ge=0, le=9_000_000_000_000_000)]]
     is_active: bool
+    acknowledge_below_usage: bool = False
+
+
+def _guard_below_usage(db: Session, conflicts: list[dict[str, Any]], acknowledged: bool) -> list[dict[str, Any]]:
+    """Refuse (and roll back) a limit change that puts tenants over an inventory
+    limit, unless the operator acknowledged it; return the conflicts as warnings."""
+    if conflicts and not acknowledged:
+        db.rollback()
+        raise ApiError(409, "limit_below_usage",
+            "The new limits are below what the tenant already stores. Existing data is kept, but the tenant "
+            "cannot add more until usage drops. Resend with acknowledge_below_usage=true to apply anyway.",
+            details={"conflicts": conflicts})
+    return conflicts
 
 
 class RecoveryIssue(BaseModel):
@@ -100,8 +118,11 @@ def assign_tenant_plan(tenant_id: UUID, payload: PlanAssignment, request: Reques
         {"tenant_id": tenant_id, "plan_id": payload.plan_id, "correlation_id": request.state.correlation_id})
     if not changed:
         raise ApiError(404, "resource_not_found", "Tenant or active plan not found.")
+    # Evaluate inside the same transaction, so a refused change is rolled back.
+    effective = get_tenant_quota(tenant_id, db)
+    warnings = _guard_below_usage(db, limits_below_inventory(db, tenant_id, effective["limits"]), payload.acknowledge_below_usage)
     db.commit()
-    return get_tenant_quota(tenant_id, db)
+    return {**effective, "warnings": warnings}
 
 
 def _tenant_not_found(tenant_id: UUID) -> ApiError:
@@ -190,8 +211,19 @@ def update_platform_plan(plan_id: UUID, payload: PlanUpdate, request: Request,
     if row is None:
         db.rollback()
         raise ApiError(404, "resource_not_found", "Plan not found.")
+    conflicts: list[dict[str, Any]] = []
+    # Subscriptions are RLS-protected, so walk tenants through the platform-only functions.
+    for tenant in db.execute(text("SELECT * FROM public.platform_list_tenants()")).mappings().all():
+        if tenant["status"] == "deleted":
+            continue
+        quota = get_tenant_quota(tenant["id"], db)
+        if str(quota["plan_id"]) != str(plan_id):
+            continue
+        conflicts += [{"tenant_id": str(tenant["id"]), "tenant_name": tenant["name"], **c}
+                      for c in limits_below_inventory(db, tenant["id"], quota["limits"])]
+    warnings = _guard_below_usage(db, conflicts, payload.acknowledge_below_usage)
     db.commit()
-    return PlatformPlanResource(**row)
+    return PlatformPlanResource(**row, warnings=warnings)
 
 
 @router.post("/tenants/{tenant_id}/quotas", response_model=PlatformQuotaOverride)
@@ -223,8 +255,11 @@ def set_tenant_quota_override(
     if row is None:
         db.rollback()
         raise _tenant_not_found(tenant_id)
+    # row["limits"] are the base limits; overrides apply on top, so check the effective ones.
+    effective = get_tenant_quota(tenant_id, db)["limits"]
+    warnings = _guard_below_usage(db, limits_below_inventory(db, tenant_id, effective), payload.acknowledge_below_usage)
     db.commit()
-    return PlatformQuotaOverride(limits=row["limits"], overrides=row["overrides"])
+    return PlatformQuotaOverride(limits=row["limits"], overrides=row["overrides"], warnings=warnings)
 
 
 @router.get("/failures", response_model=PlatformFailureListResponse)

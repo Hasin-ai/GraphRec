@@ -25,11 +25,13 @@ class PlatformPlanResource(BaseModel):
     name: str
     limits: dict[str, Any]
     is_active: bool
+    warnings: list[dict[str, Any]] = []
 
 
 class PlatformQuotaOverride(BaseModel):
     limits: dict[str, Any]
     overrides: dict[str, Any]
+    warnings: list[dict[str, Any]] = []
 
 
 class PlatformFailureItem(BaseModel):
