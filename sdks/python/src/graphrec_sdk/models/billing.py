@@ -30,6 +30,8 @@ class UsageDimension(GraphRecModel):
     remaining: Optional[Union[int, float]] = None
     #: ``count``, ``seconds``, ``bytes`` or ``minutes``.
     unit: str
+    #: ``False`` when GraphRec does not measure this dimension yet; ``used`` is then not a measurement.
+    measured: bool = True
 
     @property
     def utilization(self) -> Optional[float]:

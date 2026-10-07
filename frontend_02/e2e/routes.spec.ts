@@ -78,11 +78,15 @@ test('all routes render in both themes and at responsive widths', async ({ page,
     for (const route of ['/home', '/products', '/usage', '/datasets', '/credentials', '/training', '/integration']) await capture(route, `responsive-${route.slice(1)}`, width);
   }
   await page.setViewportSize({ width: 1440, height: 940 });
-  await page.getByRole('button', { name: 'Toggle colour theme' }).click();
+  // Theme lives in the account menu: Light, Dark, System.
+  await page.getByRole('button', { name: /^Account menu for / }).click();
+  await page.getByRole('menuitemradio', { name: 'Dark' }).click();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await capture('/usage', 'dark-usage');
   await capture('/products', 'dark-products', 390);
   await page.getByRole('button', { name: 'Open navigation' }).click();
-  await expect(page.getByRole('button', { name: 'Close navigation' })).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByRole('button', { name: 'Close navigation' }).and(page.locator('[aria-expanded]'))).toHaveAttribute('aria-expanded', 'true');
   await page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'API Credentials' }).click();
   await expect(page.getByRole('button', { name: 'Open navigation' })).toHaveAttribute('aria-expanded', 'false');
   await page.getByRole('button', { name: 'Create credential', exact: true }).first().click();
@@ -109,7 +113,11 @@ test('all routes render in both themes and at responsive widths', async ({ page,
       await capture(route, `platform-${i}`, 390);
     }
     await page.setViewportSize({ width: 1440, height: 940 });
-    await page.getByRole('button', { name: 'Toggle colour theme' }).click();
+    // Theme lives in the account menu: Light, Dark, System.
+  await page.getByRole('button', { name: /^Account menu for / }).click();
+  await page.getByRole('menuitemradio', { name: 'Dark' }).click();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     for (const [i, route] of platformRoutes.entries()) await capture(route, `platform-light-${i}`);
   }
   writeFileSync(resolve(folder, 'routes.json'), JSON.stringify({ report, failures }, null, 2));

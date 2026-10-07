@@ -38,10 +38,23 @@ def _job(tenant, job_id) -> TrainingJob:
         return job
 
 
+def _seed_larger(client, headers):
+    """Enough history that a 10-epoch run lasts long enough to be interrupted mid-batch."""
+    products = [{"external_id": str(i), "title": f"Item {i}"} for i in range(30)]
+    assert client.post("/v1/products:bulk-upsert", json={"products": products}, headers=headers).status_code == 200
+    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    events = [{"event_id": f"{u}-{i}", "event_type": "view", "user_id": f"u{u}", "external_product_id": str((i * 7 + u) % 30),
+               "occurred_at": (start + timedelta(seconds=u * 40 + i)).isoformat()} for u in range(40) for i in range(12)]
+    assert client.post("/v1/events/batches", json={"events": events}, headers=headers).status_code == 200
+
+
 def _queue(client, epochs=10):
     tenant, headers = provision(client)
-    limits(client, tenant, training_jobs=5)
-    seed(client, headers)
+    limits(client, tenant, training_jobs=5, accepted_events=100_000)
+    if epochs > 1:
+        _seed_larger(client, headers)
+    else:
+        seed(client, headers)
     response = client.post("/v1/training-jobs", json={"configuration": {"mode": "train", "epochs": epochs}},
                            headers=headers)
     assert response.status_code == 200, response.text
@@ -68,7 +81,7 @@ def test_er_nf_01_killed_worker_job_is_reclaimed_and_completes(client, tmp_path)
     tenant, job_id = _queue(client)
     process = _start_worker(tmp_path)
     try:
-        _wait(lambda: _job(tenant, job_id).stage == "training")
+        _wait(lambda: _job(tenant, job_id).stage in {"training", "evaluating_validation"})
         process.send_signal(signal.SIGKILL)  # abrupt: no handler runs
         process.wait(10)
     finally:
@@ -95,7 +108,7 @@ def test_er_nf_01_sigterm_requeues_without_spending_an_attempt(client, tmp_path)
     tenant, job_id = _queue(client)
     process = _start_worker(tmp_path)
     try:
-        _wait(lambda: _job(tenant, job_id).stage == "training")
+        _wait(lambda: _job(tenant, job_id).stage in {"training", "evaluating_validation"})
         process.send_signal(signal.SIGTERM)
         assert process.wait(30) == 0
     finally:
