@@ -6,7 +6,12 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from apps.api.errors import api_error_handler, http_error_handler, validation_error_handler
+from apps.api.errors import (
+    api_error_handler,
+    http_error_handler,
+    unhandled_error_handler,
+    validation_error_handler,
+)
 from apps.api.middleware import ContractMiddleware
 from apps.api.routes.auth import router as auth_router
 from apps.api.routes.api_keys import router as api_keys_router
@@ -37,6 +42,7 @@ app.add_middleware(ContractMiddleware, settings=get_settings())
 app.add_exception_handler(ApiError, api_error_handler)
 app.add_exception_handler(RequestValidationError, validation_error_handler)
 app.add_exception_handler(StarletteHTTPException, http_error_handler)
+app.add_exception_handler(Exception, unhandled_error_handler)
 app.include_router(tenants_router)
 app.include_router(auth_router)
 app.include_router(api_keys_router)

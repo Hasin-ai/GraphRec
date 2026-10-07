@@ -141,9 +141,34 @@ async def http_error_handler(request: Request, exc: StarletteHTTPException) -> J
             code="resource_not_found",
             message="The requested resource was not found",
         )
+    if exc.status_code == 405:
+        return error_response(
+            correlation_id=correlation_id_for(request),
+            status_code=405,
+            code="method_not_allowed",
+            message="This method is not supported for the requested resource",
+            extra_headers=dict(exc.headers or {}),
+        )
     return error_response(
         correlation_id=correlation_id_for(request),
         status_code=400,
         code="malformed_request",
         message="The request could not be processed",
+    )
+
+
+async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    """A-03 / NR-NF-06: an unexpected failure still returns the error envelope with a
+    traceable correlation id, and never the exception text (it may hold data)."""
+    correlation_id = correlation_id_for(request)
+    logging.getLogger("graphrec.api").error(
+        "Unhandled error on %s %s (correlation %s)", request.method, request.url.path, correlation_id,
+        exc_info=exc,
+    )
+    return error_response(
+        correlation_id=correlation_id,
+        status_code=500,
+        code="internal_error",
+        message="An unexpected error occurred. Quote the correlation id when reporting it.",
+        retryable=True,
     )

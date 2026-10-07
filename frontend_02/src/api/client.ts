@@ -127,6 +127,8 @@ export function describeError(error: unknown): string {
     return `Training is cooling down. Try again in ${error.retryAfterSeconds ?? "a few"} seconds.`;
   if (error.code === "insufficient_scope") return "Your credential does not grant this operation.";
   if (error.code === "token_expired") return "Your session expired. Sign in again.";
+  if (error.code === "internal_error")
+    return `Something went wrong on our side${error.correlationId ? ` (reference ${error.correlationId})` : ""}. Try again shortly.`;
   if (error.code === "validation_failed" && error.fields.length) {
     return error.fields.map((f) => `${f.field}: ${f.message}`).join("; ");
   }
