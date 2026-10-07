@@ -15,20 +15,7 @@
     <meta name="twitter:title" content="GraphRec: Recommendations that learn from every interaction" />
     <meta name="twitter:description" content="A multi-tenant recommendation platform for e-commerce: catalog sync, event streaming, time-aware graph models and real-time Top-N recommendations." />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <script>
-      /* Pre-paint theme: same rule as hooks/useTheme.ts, applied before React mounts so there is no light-to-dark flash. */
-      (function () {
-        var theme = "light";
-        try {
-          var stored = window.localStorage.getItem("graphrec.theme");
-          if (stored === "light" || stored === "dark") theme = stored;
-          else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) theme = "dark";
-        } catch (e) {
-          try { if (window.matchMedia("(prefers-color-scheme: dark)").matches) theme = "dark"; } catch (e2) { /* ignore */ }
-        }
-        document.documentElement.setAttribute("data-theme", theme);
-      })();
-    </script>
+    <script src="/theme-init.js"></script>
   </head>
   <body>
     <div id="root"></div>
