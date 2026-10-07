@@ -110,6 +110,7 @@ rabbitmq_data/
 # Documentation & Diagrams
 # ==========================================
 docs/*
+!docs/*.md
 !docs/srs-implementation-matrix.md
 !docs/srs-implementation-report.md
 diagrams/

@@ -1,0 +1,151 @@
+# GraphRec CI: every pull request and every push to main must pass all gates.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22.17.0"
+  # Test-only secrets; production refuses values like these (GRAPHREC_ENV=production).
+  GRAPHREC_ENV: development
+  DATABASE_URL: postgresql+psycopg://graphrec_app:graphrec_app_ci@localhost:5432/graphrec
+  OWNER_DATABASE_URL: postgresql+psycopg://graphrec_owner:graphrec_owner_ci@localhost:5432/graphrec
+  AUDIT_HASH_SECRET: ci-audit-secret-0123456789abcdef0123456789
+  JWT_SIGNING_SECRET: ci-jwt-secret-0123456789abcdef0123456789abcdef
+  API_KEY_HMAC_PEPPER: ci-pepper-0123456789abcdef0123456789abcdef
+  PLATFORM_ADMIN_TOKEN: ci-platform-token-0123456789abcdef0123456789
+  REDIS_URL: redis://localhost:6379/0
+  QDRANT_URL: http://localhost:6334
+  GENERATED_MODEL_ROOT: /tmp/graphrec-artifacts
+
+jobs:
+  backend:
+    name: Backend lint, unit and integration tests
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17.5-alpine
+        env:
+          POSTGRES_DB: graphrec
+          POSTGRES_USER: graphrec_owner
+          POSTGRES_PASSWORD: graphrec_owner_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U graphrec_owner -d graphrec" --health-interval 3s --health-retries 20
+      redis:
+        image: redis:7.4.2-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd "redis-cli ping" --health-interval 3s --health-retries 20
+      qdrant:
+        image: qdrant/qdrant:v1.12.0
+        ports: ["6333:6333", "6334:6334"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install
+        run: |
+          pip install --index-url https://download.pytorch.org/whl/cpu "torch==2.8.0"
+          pip install -c constraints.txt -e ".[test]" -e sdks/python ruff==0.12.3 pip-audit==2.9.0
+      - name: Lint (ruff)
+        run: ruff check apps graphrec_core scripts tests --select E9,F63,F7,F82,F401 --output-format=github
+      - name: Runtime role and migrations
+        run: |
+          PGPASSWORD=graphrec_owner_ci POSTGRES_USER=graphrec_owner POSTGRES_DB=graphrec \
+            GRAPHREC_APP_PASSWORD=graphrec_app_ci PGHOST=localhost \
+            sh infrastructure/postgres/10-create-runtime-role.sh
+          DATABASE_URL=$OWNER_DATABASE_URL alembic upgrade head
+      - name: Migrations upgrade cleanly from 0031 and round-trip
+        run: |
+          DATABASE_URL=$OWNER_DATABASE_URL alembic downgrade 0031_free_plan_serving_limits
+          DATABASE_URL=$OWNER_DATABASE_URL alembic upgrade head
+      - name: Unit and integration tests
+        run: python -m pytest -q tests --ignore=tests/e2e
+      - name: SDK tests (unit and contract)
+        working-directory: sdks/python
+        run: python -m pytest -q tests
+      - name: OpenAPI drift (web wire types)
+        run: python scripts/export_openapi.py --check frontend_02/openapi.json
+      - name: Dependency audit (Python)
+        run: pip-audit -r <(pip freeze --exclude-editable) --progress-spinner off
+
+  web:
+    name: Web type check, unit tests, build and audit
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend_02
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend_02/package-lock.json
+      - run: npm ci
+      - run: npx tsc -b --noEmit
+      - run: npx vitest run
+      - run: npm run build
+      - run: npm audit --audit-level=high
+
+  images:
+    name: Build and scan images
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build API image (runtime target, no tests)
+        run: docker build --target runtime -t graphrec-api:ci .
+      - name: Build web image
+        run: docker build -t graphrec-web:ci frontend_02
+      - name: Production image contains no tests
+        run: test -z "$(docker run --rm --entrypoint sh graphrec-api:ci -c 'ls /app/tests 2>/dev/null')"
+      - name: Scan images (Trivy)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: graphrec-api:ci
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+  e2e:
+    name: Browser end-to-end (Compose stack)
+    runs-on: ubuntu-24.04
+    needs: [backend, web]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: |
+          cp .env.example .env
+          sed -i "s|^JWT_SIGNING_SECRET=.*|JWT_SIGNING_SECRET=$JWT_SIGNING_SECRET|; s|^AUDIT_HASH_SECRET=.*|AUDIT_HASH_SECRET=$AUDIT_HASH_SECRET|; s|^API_KEY_HMAC_PEPPER=.*|API_KEY_HMAC_PEPPER=$API_KEY_HMAC_PEPPER|; s|^PLATFORM_ADMIN_TOKEN=.*|PLATFORM_ADMIN_TOKEN=$PLATFORM_ADMIN_TOKEN|" .env
+      - name: Start the stack
+        run: docker compose up -d --build --wait api worker scheduler frontend
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Playwright
+        working-directory: frontend_02
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          E2E_BASE_URL=http://localhost:5180 npx playwright test
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail 300
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-results
+          path: frontend_02/e2e-results

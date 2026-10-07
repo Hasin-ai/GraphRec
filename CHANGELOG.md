@@ -37,3 +37,4 @@ All notable changes to GraphRec. Entries reference the anomaly register in
 - NR-F-15: usage dimensions carry `measured`; replica runtime (not recorded yet) shows "Not measured" instead of 0, and serving replicas report the tenant's current ready units.
 - Console honesty fixes found by the browser suite: the getting-started checklist counts the 4 steps it shows (was "of 6"); placeholder runs are labelled "Synthetic placeholder" instead of "Trained on tenant data"; Service Status states that serving capacity is logical; breadcrumbs match navigation ("Events").
 - A-04: Playwright specs updated to the shipped console (labels, menus, required reasons).
+- CI (GitHub Actions): lint, migrations round-trip from 0031, unit/integration, SDK contract, OpenAPI drift check (`scripts/export_openapi.py --check`), pip-audit, tsc, vitest, build, npm audit, image build with a no-tests check, Trivy scan, and Playwright against the Compose stack.
