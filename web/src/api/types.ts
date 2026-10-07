@@ -172,6 +172,8 @@ export interface UsageDimension {
   unit: "count" | "seconds" | "bytes" | "minutes";
   /** False when GraphRec does not measure this dimension yet (show "Not measured", never 0). */
   measured?: boolean;
+  /** UC-24: "current" dimensions are point-in-time inventory, the same for any period. */
+  scope?: "period" | "current";
 }
 
 export interface UsageSummaryResult {
@@ -181,6 +183,8 @@ export interface UsageSummaryResult {
   dimensions: UsageDimension[];
   last_reconciled_at: string;
   project_defaults: boolean;
+  /** UC-24: false when a past period was requested. */
+  current_period?: boolean;
 }
 
 // ── catalog ────────────────────────────────────────────────────

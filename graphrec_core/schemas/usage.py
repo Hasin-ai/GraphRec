@@ -31,6 +31,10 @@ class UsageDimension(BaseModel):
     #: NR-F-15: ``False`` when GraphRec does not measure this dimension yet;
     #: ``used`` is then 0 by convention and must not be shown as a measurement.
     measured: bool = True
+    #: UC-24: ``period`` sums the ledger over the requested period; ``current`` is a
+    #: point-in-time gauge (stored products, retained versions, storage, replicas)
+    #: that always reflects now, whatever period was requested.
+    scope: Literal["period", "current"] = "period"
 
     @model_validator(mode="after")
     def validate_values(self) -> "UsageDimension":
@@ -54,6 +58,8 @@ class UsageSummaryResponse(BaseModel):
     dimensions: list[UsageDimension]
     last_reconciled_at: datetime
     project_defaults: bool
+    #: UC-24: False when a past period was requested with ``?period=YYYY-MM``.
+    current_period: bool = True
 
     @model_validator(mode="after")
     def validate_period(self) -> "UsageSummaryResponse":

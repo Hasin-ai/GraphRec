@@ -168,7 +168,9 @@ def test_zero_usage_returns_all_dimensions_calendar_period_and_access_log(
         "dimensions",
         "last_reconciled_at",
         "project_defaults",
+        "current_period",
     }
+    assert body["current_period"] is True
     dimensions = dimensions_by_type(body)
     assert set(dimensions) == USAGE_TYPES
     assert all(item["used"] == 0 for item in dimensions.values())
@@ -224,6 +226,7 @@ def test_durable_ledger_reconciles_used_remaining_and_informational_values(
         "remaining": 49_875,
         "unit": "count",
         "measured": True,
+        "scope": "period",
     }
     assert dimensions["training_cpu_seconds"]["used"] == 12.5
     assert dimensions["training_cpu_seconds"]["limit"] is None
@@ -313,18 +316,21 @@ def test_usage_requires_valid_credential_and_scope(client: TestClient) -> None:
     assert denied.json()["error"]["code"] == "insufficient_scope"
 
 
-def test_usage_rejects_public_period_or_tenant_selectors(client: TestClient) -> None:
+def test_usage_rejects_tenant_selectors_and_malformed_periods(client: TestClient) -> None:
+    # NR-NF-02: the tenant comes from the credential; UC-24 periods are YYYY-MM only.
     _, _, email, password = provision_user(client)
     token = login_token(client, email, password)
 
-    response = get_usage(client, token, f"?tenant_id={uuid4()}&period=previous")
+    response = get_usage(client, token, f"?tenant_id={uuid4()}&scope=all")
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "validation_failed"
     assert response.json()["error"]["details"]["fields"] == [
-        {"field": "period", "message": "Unexpected query parameter"},
+        {"field": "scope", "message": "Unexpected query parameter"},
         {"field": "tenant_id", "message": "Unexpected query parameter"},
     ]
+    malformed = get_usage(client, token, "?period=previous")
+    assert malformed.status_code == 422 and malformed.json()["error"]["code"] == "validation_failed"
 
 
 def test_usage_read_limit_returns_retry_guidance(client: TestClient) -> None:

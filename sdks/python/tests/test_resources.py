@@ -1187,6 +1187,19 @@ def test_usage_trends_query(api: MockAPI, sleeps: List[float]) -> None:
             client.tenant.usage.trends(start=datetime(2026, 9, 2), end=datetime(2026, 9, 1))
 
 
+def test_uc_24_usage_period_query(api: MockAPI, sleeps: List[float]) -> None:
+    api.on("GET", "/v1/usage", {"period_start": fx.NOW, "period_end": "2026-10-01T00:00:00Z",
+                                "reset_at": "2026-10-01T00:00:00Z", "dimensions": [], "last_reconciled_at": fx.NOW,
+                                "project_defaults": False, "current_period": False})
+    with make_client(api, sleeps, **BEARER) as client:
+        assert client.tenant.usage.get(period="2026-08").current_period is False
+        assert api.last().request.url.params["period"] == "2026-08"
+        client.tenant.usage.get()
+        assert "period" not in api.last().request.url.params
+        with pytest.raises(g.InputValidationError):
+            client.tenant.usage.get(period="last-month")
+
+
 def test_scaling_limit_is_validated(api: MockAPI, sleeps: List[float]) -> None:
     with make_client(api, sleeps) as client:
         for bad in (0, 101, True):

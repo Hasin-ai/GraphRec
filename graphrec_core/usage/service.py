@@ -42,6 +42,8 @@ DIMENSIONS: tuple[tuple[str, str | None, str], ...] = (
 #: runtime needs real serving instances (decision D-07), so it is reported as not
 #: measured instead of a nominal zero (NR-F-15).
 UNMEASURED = frozenset({"replica_runtime_minutes"})
+#: Point-in-time inventory, not ledger sums: the same whatever period is requested.
+GAUGES = frozenset({"stored_products", "active_model_versions", "artifact_storage_bytes", "inference_replicas"})
 
 
 class UsageService:
@@ -53,12 +55,14 @@ class UsageService:
         principal: AuthenticatedPrincipal,
         *,
         correlation_id: UUID,
+        period: datetime | None = None,
     ) -> UsageSummaryResponse:
         return self._get_current(
             principal.tenant_id,
             actor_type=principal.actor_type,
             actor_reference=principal.actor_reference,
             correlation_id=correlation_id,
+            period=period,
         )
 
     def get_for_platform(self, tenant_id: UUID, *, correlation_id: UUID) -> UsageSummaryResponse:
@@ -78,9 +82,12 @@ class UsageService:
         actor_type: str,
         actor_reference: UUID | None,
         correlation_id: UUID,
+        period: datetime | None = None,
     ) -> UsageSummaryResponse:
         now = datetime.now(timezone.utc)
-        period_start, period_end = self._period(now)
+        current_start, _ = self._period(now)
+        period_start, period_end = self._period(period or now)
+        current_period = period_start == current_start
         try:
             quota_row = self.session.execute(
                 select(TenantSubscription, PricingPlan, TenantResourceQuota)
@@ -128,6 +135,7 @@ class UsageService:
                     used=totals.get(usage_type, Decimal(0)),
                     effective_limits=limits,
                     measured=usage_type not in UNMEASURED,
+                    scope="current" if usage_type in GAUGES else "period",
                 )
                 for usage_type, limit_key, unit in DIMENSIONS
             ]
@@ -138,6 +146,7 @@ class UsageService:
                 dimensions=dimensions,
                 last_reconciled_at=reconciled_at,
                 project_defaults=subscription.project_defaults,
+                current_period=current_period,
             )
             self.session.add(
                 AuditLog(
@@ -175,6 +184,7 @@ class UsageService:
         used: Decimal,
         effective_limits: dict[str, int],
         measured: bool = True,
+        scope: str = "period",
     ) -> UsageDimension:
         limit = effective_limits.get(limit_key) if limit_key is not None else None
         remaining = None if limit is None else max(Decimal(limit) - used, Decimal(0))
@@ -187,6 +197,7 @@ class UsageService:
             ),
             unit=unit,
             measured=measured,
+            scope=scope,
         )
 
     @staticmethod

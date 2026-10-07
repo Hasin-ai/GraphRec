@@ -120,7 +120,8 @@ export const apiKeys = {
 
 export const billing = {
   subscription: () => request<SubscriptionResult>("/v1/subscription"),
-  usage: () => request<UsageSummaryResult>("/v1/usage"),
+  /** UC-24: `period` is YYYY-MM; omitted means the current billing period. */
+  usage: (period?: string) => request<UsageSummaryResult>(`/v1/usage${period ? `?period=${encodeURIComponent(period)}` : ""}`),
   /** XR-F-07: ledger sums per bucket. `start`/`end` are ISO-8601 with offset. */
   trends: (params: { granularity: TrendGranularity; start?: string; end?: string; types?: string[] }) => {
     const query = new URLSearchParams({ granularity: params.granularity });

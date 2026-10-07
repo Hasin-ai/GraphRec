@@ -4470,6 +4470,15 @@
             ],
             "title": "Remaining"
           },
+          "scope": {
+            "default": "period",
+            "enum": [
+              "period",
+              "current"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
           "type": {
             "enum": [
               "accepted_events",
@@ -4520,6 +4529,11 @@
       "UsageSummaryResponse": {
         "additionalProperties": false,
         "properties": {
+          "current_period": {
+            "default": true,
+            "title": "Current Period",
+            "type": "boolean"
+          },
           "dimensions": {
             "items": {
               "$ref": "#/components/schemas/UsageDimension"
@@ -8150,6 +8164,27 @@
     "/v1/usage": {
       "get": {
         "operationId": "get_usage_v1_usage_get",
+        "parameters": [
+          {
+            "description": "UC-24: a monthly billing period, YYYY-MM (default: the current one). Up to 24 months back; never in the future.",
+            "in": "query",
+            "name": "period",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^\\d{4}-\\d{2}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "UC-24: a monthly billing period, YYYY-MM (default: the current one). Up to 24 months back; never in the future.",
+              "title": "Period"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -8160,6 +8195,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Get Usage",

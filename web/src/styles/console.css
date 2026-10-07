@@ -541,3 +541,8 @@ a.kpi:hover { text-decoration: none; color: var(--color-text); box-shadow: var(-
 .limit-conflicts p { margin: 0; color: var(--color-neutral-700); }
 .limit-conflicts ul { margin: 0; padding-left: 18px; }
 .limit-conflicts .check { margin-top: 4px; font-weight: 600; }
+
+/* UC-24: billing-period selector above the usage summary */
+.field-inline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.field-inline label { font-weight: 600; font-size: 0.875rem; }
+.field-inline .input { width: auto; min-width: 180px; max-width: 100%; }

@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
 import { billing } from "../../api";
+import { useQueryState } from "../../hooks/useQueryState";
 import { useResource } from "../../hooks/useResource";
+import { Select } from "../../ui/Form";
 import { useSession } from "../../hooks/useSession";
 import { fmtDate, fmtDateTime, fmtNumber, fmtQuantity, humanize } from "../../lib/format";
 import { quotaMessage, quotaState } from "../../lib/quota";
@@ -16,9 +18,21 @@ function RelativeTimeUntil({ value }: { value: string }) {
 }
 import { UsageTrends } from "./UsageTrends";
 
+/** The current month and the 11 before it, as YYYY-MM (UTC billing periods). */
+export function recentPeriods(now = new Date()): { value: string; label: string }[] {
+  return Array.from({ length: 12 }, (_, back) => {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - back, 1));
+    const value = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+    return { value, label: back === 0 ? "This period" : d.toLocaleDateString(undefined, { month: "long", year: "numeric", timeZone: "UTC" }) };
+  });
+}
+
 export function UsagePage() {
   const { can } = useSession();
-  const usage = useResource(() => billing.usage(), []);
+  const periods = recentPeriods();
+  const [period, setPeriod] = useQueryState("period", periods[0].value);
+  const past = period !== periods[0].value;
+  const usage = useResource(() => billing.usage(past ? period : undefined), [period]);
   const subscription = useResource(() => can('billing:read') ? billing.subscription() : Promise.resolve(null), [can('billing:read')]);
   const dims = usage.data?.dimensions ?? [];
   const exhausted = dims.filter(d => quotaState(d.used, d.limit).status === 'exhausted');
@@ -28,7 +42,9 @@ export function UsagePage() {
   const sortedDims = dims.slice().sort((a, b) => rank(a) - rank(b));
   const limited = dims.filter(d => d.limit !== null);
   const over = exhausted; const near = approaching;
-  return <Page title="Usage & Quotas" subtitle="What this workspace has used this billing period, against your plan's limits." actions={[{ label: 'Refresh', disabled: usage.loading, onClick: () => { void usage.reload(); void subscription.reload(); } }]}>
+  return <Page title="Usage & Quotas" subtitle={past ? "What this workspace used in a past billing period, against your current plan's limits." : "What this workspace has used this billing period, against your plan's limits."} actions={[{ label: 'Refresh', disabled: usage.loading, onClick: () => { void usage.reload(); void subscription.reload(); } }]}>
+    <div className="field-inline"><label htmlFor="usage-period">Billing period</label><Select id="usage-period" value={period} onChange={setPeriod} options={periods} /></div>
+    {past && usage.data ? <Alert tone="info" title={`Showing ${periods.find(p => p.value === period)?.label ?? period}`}>Counts such as events and recommendation requests are totals for that period. Stored products, retained versions, artifact storage and replicas are point-in-time and show their current value.</Alert> : null}
     {usage.error ? <ErrorBanner error={usage.error} onRetry={usage.reload} /> : null}
     {!usage.data && usage.loading ? <Skeleton /> : null}
     {usage.data ? <>
@@ -36,14 +52,14 @@ export function UsagePage() {
         <div className="plan-main">
           <div className="plan-title">{plan ? `${humanize(plan.plan_code)} plan` : 'Current plan'}{plan ? <StatusPill tone={plan.status === 'active' ? 'success' : 'neutral'}>{humanize(plan.status)}</StatusPill> : null}</div>
           <div className="plan-meta">
-            <span><Icon name="clock" size={14} />Resets {fmtDate(usage.data.reset_at)} (<RelativeTimeUntil value={usage.data.reset_at} />)</span>
+            {past ? <span><Icon name="clock" size={14} />{fmtDate(usage.data.period_start)} – {fmtDate(usage.data.period_end)}</span> : <span><Icon name="clock" size={14} />Resets {fmtDate(usage.data.reset_at)} (<RelativeTimeUntil value={usage.data.reset_at} />)</span>}
             <span>{over.length ? `${over.length} of ${limited.length} limits reached` : near.length ? `${near.length} of ${limited.length} limits near capacity` : `All ${limited.length} limits within capacity`}</span>
             <span><Link to="/pricing">Compare plans</Link></span>
           </div>
         </div>
         {over.length || near.length ? <span className="plan-cta muted small"><Icon name="info" size={14} />To raise a limit, ask your GraphRec platform operator to change your plan.</span> : null}
       </Card>
-      {exhausted.length || approaching.length ? <div className="alert-list">{[...exhausted, ...approaching].map(d => {
+      {!past && (exhausted.length || approaching.length) ? <div className="alert-list">{[...exhausted, ...approaching].map(d => {
         const msg = quotaMessage(d.type, d.used, d.limit); const ex = quotaState(d.used, d.limit).status === 'exhausted';
         const fix = d.type === 'stored_products' && can('catalog:read') ? { label: 'Manage catalog', to: '/products' } : d.type === 'active_model_versions' && can('models:read') ? { label: 'Manage versions', to: '/models' } : null;
         return <Alert key={d.type} tone={ex ? 'danger' : 'warning'} title={msg.title} action={fix ? <ButtonLink size="sm" to={fix.to}>{fix.label}</ButtonLink> : undefined}>{msg.body}</Alert>; })}</div> : null}
@@ -51,7 +67,7 @@ export function UsagePage() {
         rows={sortedDims.map(d => { const q = quotaState(d.used, d.limit); const isOver = d.limit !== null && d.used > d.limit; const pct = d.limit ? Math.round((d.used / d.limit) * 100) : null;
           const tone = q.status === 'exhausted' ? 'danger' : q.status === 'approaching' ? 'warning' : 'neutral';
           return <tr key={d.type} className={q.status === 'exhausted' ? 'row-over' : q.status === 'approaching' ? 'row-near' : undefined}>
-          <Cell>{usageLabel(d.type)}</Cell><Cell mono align="right">{d.measured === false ? '—' : fmtQuantity(d.used, d.unit)}</Cell>
+          <Cell sub={past && d.scope === 'current' ? 'Current value' : undefined}>{usageLabel(d.type)}</Cell><Cell mono align="right">{d.measured === false ? '—' : fmtQuantity(d.used, d.unit)}</Cell>
           <Cell mono align="right">{d.limit === null ? 'No limit' : fmtQuantity(d.limit, d.unit)}</Cell>
           <td>{d.measured === false ? <span className="td-muted">Not measured yet</span> : d.limit === null ? <span className="td-muted">Tracked, no limit</span> : <div className="usage-cell">
             <Progress value={d.used} max={d.limit} tone={tone} label={`${usageLabel(d.type)}: ${fmtQuantity(d.used, d.unit)} of ${fmtQuantity(d.limit, d.unit)}`} />

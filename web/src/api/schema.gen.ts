@@ -2986,6 +2986,12 @@ export interface components {
             /** Remaining */
             remaining: number | null;
             /**
+             * Scope
+             * @default period
+             * @enum {string}
+             */
+            scope: "period" | "current";
+            /**
              * Type
              * @enum {string}
              */
@@ -3000,6 +3006,11 @@ export interface components {
         };
         /** UsageSummaryResponse */
         UsageSummaryResponse: {
+            /**
+             * Current Period
+             * @default true
+             */
+            current_period: boolean;
             /** Dimensions */
             dimensions: components["schemas"]["UsageDimension"][];
             /**
@@ -5494,7 +5505,10 @@ export interface operations {
     };
     get_usage_v1_usage_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description UC-24: a monthly billing period, YYYY-MM (default: the current one). Up to 24 months back; never in the future. */
+                period?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5508,6 +5522,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UsageSummaryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
