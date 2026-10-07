@@ -58,6 +58,14 @@ CASES: List[Case] = [
         check=lambda r: r == {"status": "ok"},
     ),
     Case(
+        "meta.get",
+        "/v1/meta",
+        {"product": "GraphRec", "version": "1.1.0", "environment": "development",
+         "features": {"development_placeholders": True}},
+        lambda c: c.meta(),
+        check=lambda r: r["version"] == "1.1.0",
+    ),
+    Case(
         "tenants.register",
         "/v1/tenants",
         {
