@@ -27,3 +27,4 @@ All notable changes to GraphRec. Entries reference the anomaly register in
 - A-20 / ER-F-05: `model_version_id` is the version that produced the ranking and is `null` when a fallback served it; new `active_model_version_id` reports the active version.
 - A-21b / BRULE-03: recommendation requests no longer create customer records; only accepted interactions do.
 - A-21 / ER-NF-01 / ER-NF-05: the training worker separates transient failures (database connection, network, vector store), which are retried once, from deterministic ones, which fail at once with a labelled reason. SIGTERM hands the running job back to the queue without spending an attempt, and partial artifact directories are removed. A new test kills a real worker process mid-batch and proves the job is reclaimed and completes.
+- The scheduler stops cleanly after its current tick on SIGTERM/SIGINT (graceful shutdown for API, worker and scheduler).
