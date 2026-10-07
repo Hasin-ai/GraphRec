@@ -15,6 +15,7 @@ from graphrec_core.schemas.auth import (
     AuthTokenPair,
     LoginRequest,
     RecoverPasswordRequest,
+    RecoverPasswordResponse,
     RefreshRequest,
     SetupPasswordRequest,
 )
@@ -115,7 +116,7 @@ def setup_password(
     )
 
 
-@router.post("/recover-password")
+@router.post("/recover-password", response_model=RecoverPasswordResponse)
 def recover_password(
     payload: RecoverPasswordRequest,
     request: Request,

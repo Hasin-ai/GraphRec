@@ -5,7 +5,30 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_serializer, model_validator
+
+
+class RecommendationContext(BaseModel):
+    """Optional serving hints (A-13). Known hints are typed and bounded; other
+    keys are accepted and stored with the request but do not affect ranking."""
+
+    model_config = ConfigDict(extra="allow")
+
+    #: Anonymous session identifier (NR-F-13).
+    session_id: str | None = Field(default=None, max_length=256)
+    #: Products viewed in this session, most recent last (XR-F-01).
+    recent_product_ids: list[str] | None = Field(default=None, max_length=200)
+    #: Where the recommendations are shown, e.g. ``home`` or ``pdp`` (informational).
+    surface: str | None = Field(default=None, max_length=64)
+
+    @model_serializer(mode="wrap")
+    def _omit_unset_hints(self, handler):  # noqa: ANN001
+        # Unset hints are omitted so stored requests keep their original shape.
+        return {k: v for k, v in handler(self).items() if v is not None}
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Mapping-style access kept for callers that treated context as a dict."""
+        return self.model_dump().get(key, default)
 
 
 class RecommendationRequest(BaseModel):
@@ -13,7 +36,7 @@ class RecommendationRequest(BaseModel):
     user_id: str | None = Field(default=None, max_length=256)
     top_n: int = Field(default=10, ge=1, le=100)
     exclude_product_ids: list[str] = Field(default_factory=list, max_length=200)
-    context: dict[str, Any] = Field(default_factory=dict)
+    context: RecommendationContext = Field(default_factory=RecommendationContext)
     fallback_allowed: bool = True
 
     @field_validator("user_id")

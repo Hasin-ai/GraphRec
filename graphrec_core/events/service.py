@@ -34,7 +34,7 @@ class EventService:
                 "event_id": payload.event_id,
                 "accepted": True,
                 "duplicate": True,
-                "received_at": now.isoformat(),
+                "received_at": existing.created_at.isoformat(),
             }
 
         self._validate_product(tenant_id, payload.external_product_id)

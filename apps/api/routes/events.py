@@ -9,12 +9,19 @@ from sqlalchemy.orm import Session
 from graphrec_core.auth.principal import AuthenticatedPrincipal, authenticated_principal
 from graphrec_core.database.session import get_db
 from graphrec_core.events.service import EventService
-from graphrec_core.schemas.events import EventBatchResponse, EventBatchSubmit, EventRecord, EventSubmit, EventType
+from graphrec_core.schemas.events import (
+    EventBatchResponse,
+    EventBatchSubmit,
+    EventRecord,
+    EventSubmit,
+    EventSubmitResponse,
+    EventType,
+)
 
 router = APIRouter(tags=["events"])
 
 
-@router.post("/v1/events")
+@router.post("/v1/events", response_model=EventSubmitResponse)
 def submit_event(
     payload: EventSubmit,
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),

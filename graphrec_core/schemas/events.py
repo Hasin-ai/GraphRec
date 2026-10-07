@@ -68,3 +68,12 @@ class EventBatchResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class EventSubmitResponse(BaseModel):
+    """Result of ``POST /v1/events``. A duplicate returns the original receipt time."""
+
+    event_id: str
+    accepted: bool
+    duplicate: bool
+    received_at: datetime

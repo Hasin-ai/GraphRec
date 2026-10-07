@@ -261,6 +261,7 @@ RESPONSE_MODELS: List[Tuple[str, Type[BaseModel]]] = [
     ("ProductBulkUpsertResponse", m.ProductBulkUpsertResult),
     ("EventBatchResponse", m.EventBatch),
     ("EventRecord", m.EventRecord),
+    ("EventSubmitResponse", m.EventReceipt),
     ("DatasetSnapshotResource", m.DatasetSnapshot),
     ("DatasetSnapshotListResponse", m.DatasetSnapshotList),
     ("DatasetUploadResponse", m.DatasetUploadResult),
