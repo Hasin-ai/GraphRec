@@ -366,7 +366,7 @@ def _serve(
             )
         except Exception as exc:  # noqa: BLE001
             logger.exception("DGSR serving failed, falling back to popular: %s", exc)
-    elif active_model and active_model.model_type != "dgsr":
+    elif active_model and active_model.model_type != "dgsr" and not settings.is_production:
         query_vec = _zero_query_vector(settings.qdrant_embedding_dim)
 
         try:

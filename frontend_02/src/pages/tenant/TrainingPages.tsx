@@ -4,6 +4,7 @@ import { billing, datasets, models, training } from "../../api";
 import { isApiError } from "../../api/client";
 import type { TrainingJobResource } from "../../api/types";
 import { useResource } from "../../hooks/useResource";
+import { useMeta } from "../../hooks/useMeta";
 import { useSession } from "../../hooks/useSession";
 import { useToast } from "../../hooks/useToast";
 import { fmtDateTime, fmtNumber, shortId, flattenMetrics } from "../../lib/format";
@@ -47,6 +48,7 @@ function StartTrainingDialog({ el, onClose, onStarted }: { el: Eligibility; onCl
   const [snapshot, setSnapshot] = useState("");
   const [config, setConfig] = useState("");
   const [mode, setMode] = useState("train");
+  const productMeta = useMeta();
   const [artifact, setArtifact] = useState("");
   const [requestId] = useState(() => crypto.randomUUID());
   return (
@@ -78,7 +80,7 @@ function StartTrainingDialog({ el, onClose, onStarted }: { el: Eligibility; onCl
       }}
       onClose={onClose}
     >
-      <Field id="d-mode" label="Model source"><Select id="d-mode" value={mode} onChange={setMode} options={[{ value: "train", label: "Train from tenant data" }, { value: "checkpoint", label: "Trained DGSR checkpoint" }, { value: "placeholder", label: "Placeholder — development only" }]} /></Field>
+      <Field id="d-mode" label="Model source"><Select id="d-mode" value={mode} onChange={setMode} options={[{ value: "train", label: "Train from tenant data" }, { value: "checkpoint", label: "Trained DGSR checkpoint" }, ...(productMeta?.features.development_placeholders ? [{ value: "placeholder", label: "Placeholder — development only" }] : [])]} /></Field>
       {mode === "checkpoint" ? <Field id="d-artifact" label="Checkpoint directory" hint="Directory name under the API's configured model artifact root."><TextInput id="d-artifact" value={artifact} onChange={setArtifact} /></Field> : null}
       {snapshots.error ? <ErrorBanner error={snapshots.error} title="Snapshots unavailable" onRetry={snapshots.reload} /> : null}
       <Field id="d-snapshot" label="Dataset snapshot" hint="Training requires at least four product interactions for a shopper, including held-out validation and test targets.">

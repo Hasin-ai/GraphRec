@@ -14,3 +14,4 @@ All notable changes to GraphRec. Entries reference the anomaly register in
 - A-23: `405` is reported as `method_not_allowed` instead of `400 malformed_request`.
 - A-10: new `GRAPHREC_ENV` (`development` | `production`). In production the API, worker and scheduler refuse to start with default, placeholder or short secrets, a development database password, or no Redis.
 - A-24: one product version (`VERSION`, now 1.1.0) shared by the API, the console build and the Python SDK. Public `GET /v1/meta` reports version, environment and development features; the console sidebar shows the version.
+- A-02: placeholder training and manual `POST /v1/model-versions` are development-only. In production they are refused, non-DGSR versions cannot be activated or served, and the console hides the placeholder option. Fake `rustfs://` URIs are replaced by honest `placeholder://` / `unregistered://` markers.

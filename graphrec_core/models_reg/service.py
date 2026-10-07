@@ -77,6 +77,9 @@ class ModelRegistryService:
     def register_model_version(
         self, tenant_id: UUID, payload: ModelVersionCreate
     ) -> ModelVersionResource:
+        if get_settings().is_production:
+            # A-02: tenants cannot assert their own model quality in production.
+            raise ApiError(404, "resource_not_found", "The requested resource was not found")
         now = datetime.now(timezone.utc)
         existing = self.db.execute(
             select(ModelVersion).where(
@@ -100,7 +103,7 @@ class ModelRegistryService:
             status="eligible",
             metrics=payload.metrics,
             artifact_uri=payload.artifact_uri
-            or f"rustfs://graphrec-models/{tenant_id}/{payload.version_tag}.safetensors",
+            or f"unregistered://{tenant_id}/{payload.version_tag}",
             created_at=now,
         )
         self.db.add(mv)
@@ -256,6 +259,8 @@ class ModelRegistryService:
                     raise ValueError("The version has no indexed products")
                 evict_artifact(directory)
             else:
+                if get_settings().is_production:
+                    raise ValueError("Only trained DGSR versions can become active in production")
                 # Development placeholders are usable only when their index was
                 # actually created. A successful job row alone is insufficient.
                 info = get_qdrant_client().get_collection(collection_name(tenant_id, target.id))
@@ -340,6 +345,10 @@ class ModelRegistryService:
             return self._queue_training(tenant_id, payload)
         if mode != "placeholder":
             raise ApiError(422, "validation_failed", "Choose train, a pretrained_artifact, or an explicit development placeholder.")
+        if get_settings().is_production:
+            # A-02: synthetic embeddings are a development aid, never a production model.
+            raise ApiError(422, "validation_failed", "Placeholder training is available only in development.",
+                           details={"fields": [{"field": "configuration.mode", "message": "Use train or a pretrained_artifact"}]})
         now = datetime.now(timezone.utc)
         settings = get_settings()
 
@@ -372,7 +381,7 @@ class ModelRegistryService:
             status="eligible",
             # Real metrics come from the training worker; none exist for synthetic embeddings.
             metrics={},
-            artifact_uri=f"rustfs://graphrec-models/{tenant_id}/{version_tag}.safetensors",
+            artifact_uri=f"placeholder://{tenant_id}/{version_tag}",
             created_at=now,
         )
         self.db.add(mv)
