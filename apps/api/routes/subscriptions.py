@@ -8,14 +8,15 @@ from sqlalchemy.orm import Session
 from graphrec_core.auth.principal import AuthenticatedPrincipal, authenticated_principal
 from graphrec_core.database.session import get_db
 from graphrec_core.errors import ApiError
-from graphrec_core.registration.rate_limit import RegistrationRateLimiter
+from graphrec_core.registration.rate_limit import SharedRateLimiter
 from graphrec_core.schemas.subscription import SubscriptionResponse
 from graphrec_core.settings import get_settings
 from graphrec_core.subscription.service import SubscriptionService
 
 router = APIRouter(prefix="/v1", tags=["subscription"])
 settings = get_settings()
-subscription_limiter = RegistrationRateLimiter(
+subscription_limiter = SharedRateLimiter(
+    name="subscription",
     limit=settings.subscription_rate_limit,
     window_seconds=settings.subscription_rate_window_seconds,
 )

@@ -5,6 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from apps.api.errors import (
     api_error_handler,
@@ -41,6 +42,12 @@ app = FastAPI(
     redoc_url=None,
 )
 app.add_middleware(ContractMiddleware, settings=get_settings())
+# Outermost: resolve the real client address from a trusted proxy before any
+# per-source limit or audit reads request.client (A-01).
+app.add_middleware(
+    ProxyHeadersMiddleware,
+    trusted_hosts=[h.strip() for h in get_settings().forwarded_allow_ips.split(",") if h.strip()],
+)
 app.add_exception_handler(ApiError, api_error_handler)
 app.add_exception_handler(RequestValidationError, validation_error_handler)
 app.add_exception_handler(StarletteHTTPException, http_error_handler)

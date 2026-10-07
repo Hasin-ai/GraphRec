@@ -70,6 +70,10 @@ class Settings(BaseSettings):
     redis_timeout_ms: int = Field(default=30, ge=5, le=1_000)
     slot_wait_ms: int = Field(default=100, ge=0, le=5_000)
     slot_lease_seconds: int = Field(default=30, ge=1, le=600)
+    # A-01: proxies whose X-Forwarded-For is trusted for the client address used by
+    # per-source limits. Comma-separated IPs/CIDRs, or "*" when the API is reachable
+    # only through the bundled nginx (never publish the API port with "*").
+    forwarded_allow_ips: str = "127.0.0.1"
     # Shared secret for /v1/platform routes; unset disables platform administration.
     platform_admin_token: str | None = None
 

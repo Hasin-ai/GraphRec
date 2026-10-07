@@ -144,6 +144,34 @@ class _LocalFallback:
         self._rate: dict[UUID, deque[float]] = defaultdict(deque)
         self._slots: dict[UUID, int] = defaultdict(int)
         self._quota: dict[tuple[UUID, str], int] = {}
+        self._windows: dict[str, tuple[float, deque[float]]] = {}
+
+    #: Bound on remembered subjects; expired windows are pruned when it is reached.
+    MAX_WINDOWS = 50_000
+
+    def window(self, key: str, limit: int, window_seconds: int) -> int | None:
+        now = time.monotonic()
+        with self._lock:
+            if len(self._windows) >= self.MAX_WINDOWS:
+                for stale in [k for k, (expires, _) in self._windows.items() if expires <= now]:
+                    del self._windows[stale]
+            _expires, attempts = self._windows.get(key, (0.0, deque()))
+            while attempts and attempts[0] <= now - window_seconds:
+                attempts.popleft()
+            if len(attempts) >= limit:
+                self._windows[key] = (attempts[-1] + window_seconds, attempts)
+                return max(1, int(attempts[0] + window_seconds - now) + 1)
+            if len(self._windows) >= self.MAX_WINDOWS:
+                # Still full of live subjects: refuse rather than grow without bound.
+                return window_seconds
+            attempts.append(now)
+            self._windows[key] = (now + window_seconds, attempts)
+            return None
+
+    def clear_windows(self, prefix: str) -> None:
+        with self._lock:
+            for key in [k for k in self._windows if k.startswith(prefix)]:
+                del self._windows[key]
 
     def rate(self, tenant_id: UUID, limit: int) -> tuple[bool, int, int]:
         now = time.monotonic()
@@ -190,8 +218,13 @@ class _LocalFallback:
 
     def clear(self) -> None:
         with self._lock:
-            self._rate.clear(); self._slots.clear(); self._quota.clear()
+            self._rate.clear(); self._slots.clear(); self._quota.clear(); self._windows.clear()
             self._lock.notify_all()
+
+
+def _subject_digest(subject: str) -> str:
+    import hashlib
+    return hashlib.sha256(subject.encode("utf-8")).hexdigest()[:32]
 
 
 class AdmissionController:
@@ -307,6 +340,36 @@ class AdmissionController:
         if not allowed:
             raise _rate_limited(limit, result)
         return result
+
+    # -- generic sliding windows (A-01: authentication and read limits) ----
+    def check_window(self, name: str, subject: str, limit: int, window_seconds: int) -> int | None:
+        """Admit one attempt for ``subject`` under ``name``; return seconds to wait when refused.
+
+        Shared across every API process through Redis. When Redis is unavailable the
+        check falls back to this process's own window with the same limit, so the limit
+        keeps working (it never fails open to unlimited attempts).
+        """
+        key = f"gr:rlw:{name}:{_subject_digest(subject)}"
+        window_ms = window_seconds * 1000
+        if self._redis_available():
+            try:
+                allowed, _remaining, reset_ms = (int(v) for v in self._rate_script(
+                    keys=[key], args=[limit, window_ms, uuid4().hex]))
+                return None if allowed else max(1, -(-reset_ms // 1000))
+            except self._redis_errors() as exc:
+                self._fail(f"{name} window", exc)
+        return self.local.window(key, limit, window_seconds)
+
+    def clear_windows(self, name: str) -> None:
+        """Forget every attempt recorded under ``name`` (tests and operator resets)."""
+        self.local.clear_windows(f"gr:rlw:{name}:")
+        if self._redis_available():
+            try:
+                keys = list(self._client.scan_iter(match=f"gr:rlw:{name}:*", count=500))
+                if keys:
+                    self._client.delete(*keys)
+            except self._redis_errors() as exc:
+                self._fail(f"{name} clear", exc)
 
     # -- monthly quota ----------------------------------------------------
     def consume_quota(self, tenant_id: UUID, dimension: str, limit: int, period_start: datetime,

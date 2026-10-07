@@ -10,23 +10,26 @@ from graphrec_core.auth.principal import AuthenticatedPrincipal, authenticated_p
 from graphrec_core.auth.service import AuthenticationService
 from graphrec_core.database.session import get_db
 from graphrec_core.errors import ApiError
-from graphrec_core.registration.rate_limit import RegistrationRateLimiter
+from graphrec_core.registration.rate_limit import SharedRateLimiter
 from graphrec_core.schemas.auth import AuthTokenPair, LoginRequest, SetupPasswordRequest, RecoverPasswordRequest
 from graphrec_core.settings import Settings, get_settings
 
 router = APIRouter(prefix="/v1/auth", tags=["authentication"])
 settings = get_settings()
-login_limiter = RegistrationRateLimiter(
+login_limiter = SharedRateLimiter(
+    name="login",
     limit=settings.login_rate_limit,
     window_seconds=settings.login_rate_window_seconds,
 )
 # Setup tokens are unguessable, but the public endpoint still needs a per-source
 # ceiling so it cannot be used to probe tokens or burn password-hashing CPU.
-setup_limiter = RegistrationRateLimiter(
+setup_limiter = SharedRateLimiter(
+    name="setup",
     limit=settings.login_rate_limit,
     window_seconds=settings.login_rate_window_seconds,
 )
-recovery_limiter = RegistrationRateLimiter(
+recovery_limiter = SharedRateLimiter(
+    name="recovery",
     limit=settings.login_rate_limit,
     window_seconds=settings.login_rate_window_seconds,
 )

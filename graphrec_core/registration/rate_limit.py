@@ -1,31 +1,29 @@
 from __future__ import annotations
 
-from collections import defaultdict, deque
-from threading import Lock
-from time import monotonic
+from graphrec_core.usage.admission import get_admission
 
 
-class RegistrationRateLimiter:
-    """Single-process limiter for the one-process local Compose slice."""
+class SharedRateLimiter:
+    """Sliding-window limiter shared by every API process (A-01).
 
-    def __init__(self, limit: int, window_seconds: int) -> None:
+    Attempts are recorded in Redis through the admission controller, so the limit
+    holds across uvicorn workers and replicas. If Redis is unavailable the check
+    falls back to a per-process window with the same limit: authentication limits
+    degrade to per-process, never to unlimited. Subjects are hashed before use.
+    """
+
+    def __init__(self, name: str, limit: int, window_seconds: int) -> None:
+        self.name = name
         self.limit = limit
         self.window_seconds = window_seconds
-        self._attempts: dict[str, deque[float]] = defaultdict(deque)
-        self._lock = Lock()
 
-    def check(self, source: str) -> int | None:
-        now = monotonic()
-        cutoff = now - self.window_seconds
-        with self._lock:
-            attempts = self._attempts[source]
-            while attempts and attempts[0] <= cutoff:
-                attempts.popleft()
-            if len(attempts) >= self.limit:
-                return max(1, int(self.window_seconds - (now - attempts[0])) + 1)
-            attempts.append(now)
-            return None
+    def check(self, subject: str) -> int | None:
+        """Admit one attempt; return the seconds to wait when the limit is reached."""
+        return get_admission().check_window(self.name, subject, self.limit, self.window_seconds)
 
     def clear(self) -> None:
-        with self._lock:
-            self._attempts.clear()
+        get_admission().clear_windows(self.name)
+
+
+# Backwards-compatible name used by earlier modules and tests.
+RegistrationRateLimiter = SharedRateLimiter
