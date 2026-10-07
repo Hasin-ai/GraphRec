@@ -52,6 +52,18 @@ import type {
 
 const enc = encodeURIComponent;
 
+/** Body fragment for an optional audit reason (omitted when blank). */
+function reasonBody(reason: string | undefined): { reason?: string } {
+  const trimmed = reason?.trim();
+  return trimmed ? { reason: trimmed } : {};
+}
+
+/** Optional lifecycle-action body carrying an audit reason (ER-F-11). */
+function withReason(reason?: string): { json?: { reason: string } } {
+  const trimmed = reason?.trim();
+  return trimmed ? { json: { reason: trimmed } } : {};
+}
+
 export const meta = {
   get: () => request<ProductMeta>("/v1/meta", { realm: "public" }),
   plans: () => request<{ items: PublicPlan[] }>("/v1/plans", { realm: "public" }),
@@ -171,16 +183,16 @@ export const datasets = {
 export const models = {
   list: () => request<{ items: ModelVersionResource[] }>("/v1/model-versions"),
   get: (id: string) => request<ModelVersionResource>(`/v1/model-versions/${enc(id)}`),
-  activate: (id: string) =>
-    request<ModelVersionResource>(`/v1/model-versions/${enc(id)}:activate`, { method: "POST" }),
-  archive: (id: string) =>
-    request<ModelVersionResource>(`/v1/model-versions/${enc(id)}:archive`, { method: "POST" }),
-  rollback: (targetId: string) =>
-    request<ModelVersionResource>(`/v1/models/${enc(targetId)}:rollback`, { method: "POST" }),
+  activate: (id: string, reason?: string) =>
+    request<ModelVersionResource>(`/v1/model-versions/${enc(id)}:activate`, { method: "POST", ...withReason(reason) }),
+  archive: (id: string, reason?: string) =>
+    request<ModelVersionResource>(`/v1/model-versions/${enc(id)}:archive`, { method: "POST", ...withReason(reason) }),
+  rollback: (targetId: string, reason?: string) =>
+    request<ModelVersionResource>(`/v1/model-versions/${enc(targetId)}:rollback`, { method: "POST", ...withReason(reason) }),
 };
 
 export const training = {
-  cancel: (id: string) => request<TrainingJobResource>(`/v1/training-jobs/${encodeURIComponent(id)}:cancel`, { method: "POST" }),
+  cancel: (id: string, reason?: string) => request<TrainingJobResource>(`/v1/training-jobs/${encodeURIComponent(id)}:cancel`, { method: "POST", ...withReason(reason) }),
   get: (id: string) => request<TrainingJobResource>(`/v1/training-jobs/${enc(id)}`),
   list: () => request<{ items: TrainingJobResource[] }>("/v1/training-jobs"),
   create: (input: TrainingJobCreate) =>
@@ -203,8 +215,8 @@ const platformRealm = { realm: "platform" as const };
 export const platform = {
   getTenantQuota: (id: string) => request<PlatformQuotaOverride & { plan_id: string; plan_code: string }>(`/v1/platform/tenants/${enc(id)}/quotas`, platformRealm),
   getTenantUsage: (id: string) => request<UsageSummaryResult>(`/v1/platform/tenants/${enc(id)}/usage`, platformRealm),
-  issueRecovery: (id: string, email: string) => request<{ recovery_token: string; expires_at: string }>(`/v1/platform/tenants/${enc(id)}/recovery`, { ...platformRealm, method: "POST", json: { email } }),
-  assignTenantPlan: (id: string, planId: string, acknowledge = false) => request<PlatformQuotaOverride & { plan_id: string; plan_code: string }>(`/v1/platform/tenants/${enc(id)}/plan`, { ...platformRealm, method: 'POST', json: { plan_id: planId, acknowledge_below_usage: acknowledge } }),
+  issueRecovery: (id: string, email: string, reason?: string) => request<{ recovery_token: string; expires_at: string }>(`/v1/platform/tenants/${enc(id)}/recovery`, { ...platformRealm, method: "POST", json: { email, ...reasonBody(reason) } }),
+  assignTenantPlan: (id: string, planId: string, acknowledge = false, reason?: string) => request<PlatformQuotaOverride & { plan_id: string; plan_code: string }>(`/v1/platform/tenants/${enc(id)}/plan`, { ...platformRealm, method: 'POST', json: { plan_id: planId, acknowledge_below_usage: acknowledge, ...reasonBody(reason) } }),
   status: (token?: string) =>
     request<PlatformStatus>("/v1/platform/status", {
       realm: token ? "public" : "platform",
@@ -212,21 +224,26 @@ export const platform = {
     }),
   listTenants: () => request<{ items: PlatformTenant[] }>("/v1/platform/tenants", platformRealm),
   getTenant: (id: string) => request<PlatformTenant>(`/v1/platform/tenants/${enc(id)}`, platformRealm),
-  setTenantStatus: (id: string, status: PlatformTenantStatus) =>
+  /** UC-27: the reason is required and stored in the audit trail. */
+  setTenantStatus: (id: string, status: PlatformTenantStatus, reason: string) =>
     request<PlatformTenant>(`/v1/platform/tenants/${enc(id)}/status`, {
       ...platformRealm,
       method: "POST",
-      json: { status },
+      json: { status, reason: reason.trim() },
     }),
-  setQuotaOverrides: (id: string, overrides: Record<string, unknown>, acknowledge = false) =>
+  setQuotaOverrides: (id: string, overrides: Record<string, unknown>, acknowledge = false, reason?: string) =>
     request<PlatformQuotaOverride>(`/v1/platform/tenants/${enc(id)}/quotas`, {
       ...platformRealm,
       method: "POST",
-      json: { overrides, acknowledge_below_usage: acknowledge },
+      json: { overrides, acknowledge_below_usage: acknowledge, ...reasonBody(reason) },
     }),
   listPlans: () => request<PlatformPlan[]>("/v1/platform/plans", platformRealm),
-  updatePlan: (id: string, value: Pick<PlatformPlan, "name" | "limits" | "is_active">, acknowledge = false) =>
-    request<PlatformPlan>(`/v1/platform/plans/${enc(id)}`, { ...platformRealm, method: "PUT", json: { ...value, acknowledge_below_usage: acknowledge } }),
+  updatePlan: (id: string, value: Pick<PlatformPlan, "name" | "limits" | "is_active">, acknowledge = false, reason?: string) =>
+    request<PlatformPlan>(`/v1/platform/plans/${enc(id)}`, { ...platformRealm, method: "PUT", json: { ...value, acknowledge_below_usage: acknowledge, ...reasonBody(reason) } }),
   listFailures: () => request<{ items: PlatformFailure[] }>("/v1/platform/failures", platformRealm),
-  listAudit: () => request<{ items: PlatformAudit[] }>("/v1/platform/audit", platformRealm),
+  /** UC-31: filtered, paginated audit history (newest first). */
+  listAudit: (filters: { tenant_id?: string; action?: string; outcome?: string; before?: string; limit?: number } = {}) => {
+    const query = new URLSearchParams(Object.entries(filters).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => [k, String(v)])).toString();
+    return request<{ items: PlatformAudit[]; next_before: string | null }>(`/v1/platform/audit${query ? `?${query}` : ""}`, platformRealm);
+  },
 };

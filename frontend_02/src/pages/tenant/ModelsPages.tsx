@@ -16,6 +16,7 @@ import { NotFoundPage } from "../errors/ErrorPages";
 import { Alert, Button, ButtonLink, OverflowMenu, RelativeTime } from "../../ui/kit";
 import { Icon } from "../../ui/icons";
 import { evaluationModeLabel, formatMetricValue, humanizeKey, modelLabel, modelTypeLabel } from "../../lib/labels";
+import { ReasonField } from "../../ui/ReasonField";
 
 const STATUSES = ["eligible", "active", "retired", "archived"];
 
@@ -35,6 +36,7 @@ function useTenantEmailDomain(): string | null {
 }
 
 function ActivateDialog({ version, active, onClose, onDone }: { version: ModelVersionResource; active?: ModelVersionResource; onClose: () => void; onDone: (v: ModelVersionResource) => void }) {
+  const [reason, setReason] = useState("");
   return (
     <Dialog
       title={`Activate ${version.version_tag}`}
@@ -48,9 +50,11 @@ function ActivateDialog({ version, active, onClose, onDone }: { version: ModelVe
         { label: "Created", value: fmtDateTime(version.created_at) },
         { label: "Hit@10 · NDCG@10", value: `${metric(version, "Hit@10")?.toFixed(3) ?? "—"} · ${metric(version, "NDCG@10")?.toFixed(3) ?? "—"}` },
       ]}
-      onConfirm={async () => onDone(await models.activate(version.id))}
+      onConfirm={async () => onDone(await models.activate(version.id, reason))}
       onClose={onClose}
-    />
+    >
+      <ReasonField id="activate-reason" value={reason} onChange={setReason} />
+    </Dialog>
   );
 }
 
@@ -164,6 +168,7 @@ function ModelVersionDetail() {
   const jobs = useResource(() => can("training:read") ? training.list() : Promise.resolve(null), [versionId, can("training:read")]);
   const [dialog, setDialog] = useState<"activate" | "rollback" | "archive" | null>(null);
   const [target, setTarget] = useState("");
+  const [lifecycleReason, setLifecycleReason] = useState("");
   const [search, setSearch] = useSearchParams();
   const requestedRollback = search.get("rollback");
 
@@ -277,7 +282,7 @@ function ModelVersionDetail() {
           onConfirm={async () => {
             const chosen = target || requestedRollback || "";
             if (!chosen) return "No retired version is available as a roll-back target.";
-            const restored = await models.rollback(chosen);
+            const restored = await models.rollback(chosen, lifecycleReason);
             setDialog(null);
             flash(`Rolled back to ${restored.version_tag}.`);
             navigate("/models");
@@ -287,6 +292,7 @@ function ModelVersionDetail() {
           <Field id="d-target" label="Roll-back target">
             <Select id="d-target" value={target || requestedRollback || ""} onChange={setTarget} options={retired.map((r) => ({ value: r.id, label: `${all.data ? modelLabel(r, all.data.items) : r.version_tag} · ${fmtDateTime(r.created_at)}` }))} />
           </Field>
+          <ReasonField id="rollback-reason" value={lifecycleReason} onChange={setLifecycleReason} />
 
         </Dialog>
       ) : null}
@@ -297,13 +303,15 @@ function ModelVersionDetail() {
           body="An archived version is retained for audit and is excluded from activation and roll-back choices in this console. The backend also attempts to delete its embedding index."
           consequence="This action cannot be undone from the console."
           onConfirm={async () => {
-            const archived = await models.archive(v.id);
+            const archived = await models.archive(v.id, lifecycleReason);
             setDialog(null);
             flash(`${archived.version_tag} archived.`);
             navigate("/models");
           }}
           onClose={() => setDialog(null)}
-        />
+        >
+          <ReasonField id="archive-reason" value={lifecycleReason} onChange={setLifecycleReason} />
+        </Dialog>
       ) : null}
     </Page>
   );

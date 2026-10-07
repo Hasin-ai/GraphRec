@@ -96,14 +96,20 @@ class AuditRecord(GraphRecModel):
     id: UUID
     tenant_id: UUID
     actor_type: str
+    actor_reference: Optional[UUID] = None
     action_type: str
     resource_type: str
+    resource_reference: Optional[UUID] = None
     outcome: str
+    correlation_reference: Optional[UUID] = None
+    #: The reason given for the action, if any (ER-F-11).
+    reason: Optional[str] = None
     occurred_at: datetime
 
 
 class AuditRecordList(ItemList[AuditRecord]):
-    pass
+    #: Cursor for the next (older) page; pass to ``list_audit_logs(before=...)``.
+    next_before: Optional[datetime] = None
 
 
 class RecoveryToken(GraphRecModel):

@@ -13,14 +13,17 @@ import { Page } from "../../ui/Page";
 import { ActionsCell, Badge, Cell, DataTable, DefinitionList, ErrorBanner, FilterBar, Footnote, Panel, PanelTable, Skeleton, Tag } from "../../ui/primitives";
 import { NotFoundPage } from "../errors/ErrorPages";
 import { humanizeKey } from "../../lib/labels";
+import { ReasonField } from "../../ui/ReasonField";
 
 const STATUSES: PlatformTenantStatus[] = ["active", "suspended", "deleting", "deleted"];
 const USAGE_TYPES = ["accepted_events", "recommendation_requests", "training_jobs", "training_cpu_seconds", "stored_products", "artifact_storage_bytes", "active_model_versions", "inference_replicas", "replica_runtime_minutes"];
 
 function StatusDialog({ tenant, onClose, onDone }: { tenant: PlatformTenant; onClose: () => void; onDone: (t: PlatformTenant) => void }) {
   const [status, setStatus] = useState<string>(tenant.status === "active" ? "suspended" : "active");
+  const [reason, setReason] = useState("");
   return (
     <Dialog
+      confirmDisabled={reason.trim().length < 3}
       title={`Change status of ${tenant.slug}`}
       width={640}
       confirmLabel="Apply status change"
@@ -31,13 +34,14 @@ function StatusDialog({ tenant, onClose, onDone }: { tenant: PlatformTenant; onC
         { label: "New status", value: status },
       ]}
       onConfirm={async () => {
-        onDone(await platform.setTenantStatus(tenant.id, status as PlatformTenantStatus));
+        onDone(await platform.setTenantStatus(tenant.id, status as PlatformTenantStatus, reason));
       }}
       onClose={onClose}
     >
       <Field id="d-status" label="New status">
         <Select id="d-status" value={status} onChange={setStatus} options={STATUSES} />
       </Field>
+      <ReasonField id="d-status-reason" value={reason} onChange={setReason} required />
 
     </Dialog>
   );
@@ -132,6 +136,7 @@ function useBelowUsageGuard() {
 function OverrideDialog({ tenant, onClose, onDone }: { tenant: PlatformTenant; onClose: () => void; onDone: (r: PlatformQuotaOverride) => void }) {
   const [type, setType] = useState(USAGE_TYPES[0]);
   const [value, setValue] = useState("");
+  const [reason, setReason] = useState("");
   const guard = useBelowUsageGuard();
   return (
     <Dialog
@@ -141,7 +146,7 @@ function OverrideDialog({ tenant, onClose, onDone }: { tenant: PlatformTenant; o
       body="An override replaces the plan limit for one usage type. Overrides already in force for other usage types are kept."
       onConfirm={async () => {
         if (value.trim() === "" || !Number.isInteger(Number(value)) || Number(value) < 0) return "The override limit must be a non-negative integer.";
-        const result = await guard.attempt(ack => platform.setQuotaOverrides(tenant.id, { [type]: Number(value) }, ack));
+        const result = await guard.attempt(ack => platform.setQuotaOverrides(tenant.id, { [type]: Number(value) }, ack, reason));
         if (!guard.isResult(result)) return result;
         onDone(result);
       }}
@@ -153,6 +158,7 @@ function OverrideDialog({ tenant, onClose, onDone }: { tenant: PlatformTenant; o
       <Field id="d-value" label="Override limit">
         <TextInput id="d-value" value={value} onChange={v => { setValue(v); guard.reset(); }} mono placeholder="8000000" type="number" min={0} />
       </Field>
+      <ReasonField id="d-override-reason" value={reason} onChange={setReason} />
       {guard.notice}
     </Dialog>
   );
@@ -160,16 +166,18 @@ function OverrideDialog({ tenant, onClose, onDone }: { tenant: PlatformTenant; o
 
 function RecoveryDialog({ tenant, onClose, onDone }: { tenant: PlatformTenant; onClose: () => void; onDone: (token: string, expires: string) => void }) {
   const [email, setEmail] = useState("");
+  const [reason, setReason] = useState("");
   return <Dialog title={`Issue recovery token for ${tenant.slug}`} width={640}
     body="Issue a one-time token for an active account. Deliver it to the account owner through a trusted channel. A new token revokes earlier unused tokens."
     confirmLabel="Issue token" onClose={onClose} onConfirm={async () => {
       if (!email.trim()) return "Enter the account email.";
-      const issued = await platform.issueRecovery(tenant.id, email.trim());
+      const issued = await platform.issueRecovery(tenant.id, email.trim(), reason);
       onDone(issued.recovery_token, issued.expires_at);
     }}>
     <Field id="recovery-account" label="Account email">
       <TextInput id="recovery-account" type="email" value={email} onChange={setEmail} autoComplete="off" required />
     </Field>
+    <ReasonField id="recovery-reason" value={reason} onChange={setReason} />
   </Dialog>;
 }
 
@@ -189,6 +197,7 @@ function PlatformTenantDetail() {
   const tenantUsage = useResource(() => platform.getTenantUsage(tenantId), [tenantId]);
   const quota = quotaResource.data;
   const [selectedPlan, setSelectedPlan] = useState('');
+  const [planReason, setPlanReason] = useState("");
   const planGuard = useBelowUsageGuard();
   const crumbs = [{ label: "Platform", to: "/admin/status" }, { label: "Tenants", to: "/admin/tenants" }, { label: shortId(tenantId), mono: true }];
 
@@ -308,12 +317,12 @@ function PlatformTenantDetail() {
       ) : null}
       {dialog === 'plan' ? <Dialog title={`Assign plan for ${t.slug}`} body="The new base limits apply immediately. This does not reset usage or remove existing overrides." confirmLabel="Assign plan" onClose={() => { setDialog(null); planGuard.reset(); }} onConfirm={async () => {
         if (!selectedPlan) return 'Select an active plan.';
-        const result = await planGuard.attempt(ack => platform.assignTenantPlan(t.id, selectedPlan, ack));
+        const result = await planGuard.attempt(ack => platform.assignTenantPlan(t.id, selectedPlan, ack, planReason));
         if (!planGuard.isResult(result)) return result;
         quotaResource.setData(result);
         void tenantUsage.reload();
         setDialog(null); planGuard.reset(); flash(result.warnings?.length ? 'Tenant plan updated. The tenant is now over a storage limit.' : 'Tenant plan updated.');
-      }}><Field id="tenant-plan" label="Plan"><Select id="tenant-plan" value={selectedPlan} onChange={v => { setSelectedPlan(v); planGuard.reset(); }} options={[{ value: '', label: 'Choose a plan' }, ...(plans.data ?? []).filter(p => p.is_active).map(p => ({ value: p.id, label: p.name }))]} /></Field>{planGuard.notice}</Dialog> : null}
+      }}><Field id="tenant-plan" label="Plan"><Select id="tenant-plan" value={selectedPlan} onChange={v => { setSelectedPlan(v); planGuard.reset(); }} options={[{ value: '', label: 'Choose a plan' }, ...(plans.data ?? []).filter(p => p.is_active).map(p => ({ value: p.id, label: p.name }))]} /></Field><ReasonField id="tenant-plan-reason" value={planReason} onChange={setPlanReason} />{planGuard.notice}</Dialog> : null}
       {dialog === "recovery" ? <RecoveryDialog tenant={t} onClose={() => setDialog(null)} onDone={(token, expires) => {
         setDialog(null); setRecovery({ token, expires }); flash("One-time recovery token issued.");
       }} /> : null}
@@ -352,6 +361,7 @@ export function PlatformPlanPage() {
   const plans = useResource(() => platform.listPlans(), []);
   const { flash } = useToast();
   const [editing, setEditing] = useState(false);
+  const [editReason, setEditReason] = useState("");
   const editGuard = useBelowUsageGuard();
   const [name, setName] = useState("");
   const [active, setActive] = useState("true");
@@ -383,7 +393,7 @@ export function PlatformPlanPage() {
           parsed[key] = number;
         }
         if (!name.trim()) return "Enter a plan name.";
-        const result = await editGuard.attempt(ack => platform.updatePlan(plan.id, { name: name.trim(), is_active: active === "true", limits: parsed }, ack));
+        const result = await editGuard.attempt(ack => platform.updatePlan(plan.id, { name: name.trim(), is_active: active === "true", limits: parsed }, ack, editReason));
         if (!editGuard.isResult(result)) return result;
         const updated: PlatformPlan = result;
         plans.setData(previous => previous ? previous.map(item => item.id === updated.id ? updated : item) : null);
@@ -393,6 +403,7 @@ export function PlatformPlanPage() {
         <Field id="plan-name" label="Plan name"><TextInput id="plan-name" value={name} onChange={setName} /></Field>
         <Field id="plan-active" label="Open to new assignments"><Select id="plan-active" value={active} onChange={setActive} options={[{ value: "true", label: "Open" }, { value: "false", label: "Closed" }]} /></Field>
         {Object.keys(plan.limits).map(key => <Field key={key} id={`limit-${key}`} label={humanizeKey(key)}><TextInput id={`limit-${key}`} value={limits[key] ?? ""} onChange={value => { setLimits(current => ({ ...current, [key]: value })); editGuard.reset(); }} type="number" min={0} max={9_000_000_000_000_000} /></Field>)}
+        <ReasonField id="plan-edit-reason" value={editReason} onChange={setEditReason} />
         {editGuard.notice}
       </Dialog> : null}
     </Page>

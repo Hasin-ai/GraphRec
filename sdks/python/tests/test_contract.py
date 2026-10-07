@@ -221,8 +221,12 @@ def schema_fields(name: str) -> Dict[str, SchemaField]:
 # -- routes -------------------------------------------------------------------------
 
 
+#: Deprecated server aliases kept for older clients; the SDK uses their replacements.
+DEPRECATED_SERVER_ROUTES = {("POST", "/v1/models/{model_id}:rollback")}
+
+
 def test_sdk_covers_exactly_the_server_routes() -> None:
-    server = set(server_routes())
+    server = set(server_routes()) - DEPRECATED_SERVER_ROUTES
     sdk = {(route.method, route.path) for route in g.ROUTES.values()}
     assert sdk - server == set(), "SDK calls routes the server does not define"
     assert server - sdk == set(), "Server routes missing from the SDK"
@@ -374,7 +378,7 @@ REQUEST_BODIES = [
             "rec-1", None, None, None, external_product_id="a", position=1, value=1
         ),
     ),
-    ("TenantStatusUpdate", lambda: platform_resource._status_body("suspended")),
+    ("TenantStatusUpdate", lambda: {**platform_resource._status_body("suspended"), **platform_resource._reason_body("Abuse report")}),
     ("QuotaOverrideUpdate", lambda: platform_resource._quota_body({"accepted_events": 1})),
     ("QuotaOverrideUpdate", lambda: platform_resource._quota_body({"accepted_events": 1}, True)),
     ("PlanAssignment", lambda: platform_resource._assign_body("3f0e2b8e-9c1d-4c1e-8e2a-000000000001", True)),

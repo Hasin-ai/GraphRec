@@ -388,7 +388,7 @@ CASES: List[Case] = [
     ),
     Case(
         "model_versions.rollback",
-        f"/v1/models/{fx.UUID_B}:rollback",
+        f"/v1/model-versions/{fx.UUID_B}:rollback",
         fx.model_version("active"),
         lambda c: c.tenant.model_versions.rollback(fx.UUID_B),
     ),
@@ -586,8 +586,8 @@ CASES: List[Case] = [
             "status": "suspended",
             "created_at": fx.NOW,
         },
-        lambda c: c.platform.tenants.set_status(fx.UUID_A, g.TenantStatus.SUSPENDED),
-        body=_eq({"status": "suspended"}),
+        lambda c: c.platform.tenants.set_status(fx.UUID_A, g.TenantStatus.SUSPENDED, reason="Abuse report"),
+        body=_eq({"status": "suspended", "reason": "Abuse report"}),
         client_kwargs=PLATFORM,
     ),
     Case(

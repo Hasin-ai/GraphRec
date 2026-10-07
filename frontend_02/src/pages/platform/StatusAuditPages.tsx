@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { platform } from "../../api";
+import type { PlatformAudit } from "../../api/types";
 import { useClearQuery, useQueryState } from "../../hooks/useQueryState";
 import { useResource } from "../../hooks/useResource";
 import { fmtDateTime, relativeSeconds, shortId } from "../../lib/format";
@@ -67,14 +69,29 @@ export function PlatformAuditPage() {
   const [tabParam, setTab] = useQueryState("view", "Failures");
   const tab: Tab = tabParam === "Audit records" ? "Audit records" : "Failures";
   const failures = useResource(() => platform.listFailures(), []);
-  const audit = useResource(() => platform.listAudit(), []);
   const [severity, setSeverity] = useQueryState("severity", "all severities");
   const [action, setAction] = useQueryState("action", "all action types");
   const [tenant, setTenant] = useQueryState("tenant", "");
+  // UC-31: a full tenant id and an action type filter on the server; a partial id narrows the loaded page.
+  const exactTenant = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenant.trim()) ? tenant.trim() : undefined;
+  const serverAction = action === "all action types" ? undefined : action;
+  const audit = useResource(() => platform.listAudit({ tenant_id: exactTenant, action: serverAction, limit: 200 }), [exactTenant, serverAction]);
+  const [older, setOlder] = useState<{ items: PlatformAudit[]; next: string | null } | null>(null);
+  useEffect(() => setOlder(null), [exactTenant, serverAction]);
+  const [loadingOlder, setLoadingOlder] = useState(false);
 
   const failureList = (failures.data?.items ?? []).filter((f) => severity === "all severities" || f.severity === severity);
-  const auditItems = audit.data?.items ?? [];
-  const actionTypes = Array.from(new Set(auditItems.map((a) => a.action_type))).sort();
+  const auditItems = [...(audit.data?.items ?? []), ...(older?.items ?? [])];
+  const nextBefore = older ? older.next : audit.data?.next_before ?? null;
+  const actionTypes = Array.from(new Set([...auditItems.map((a) => a.action_type), ...(serverAction ? [serverAction] : [])])).sort();
+  async function loadOlder() {
+    if (!nextBefore) return;
+    setLoadingOlder(true);
+    try {
+      const page = await platform.listAudit({ tenant_id: exactTenant, action: serverAction, before: nextBefore, limit: 200 });
+      setOlder(previous => ({ items: [...(previous?.items ?? []), ...page.items], next: page.next_before }));
+    } finally { setLoadingOlder(false); }
+  }
   const auditList = auditItems.filter((a) => (action === "all action types" || a.action_type === action) && (!tenant.trim() || a.tenant_id?.startsWith(tenant.trim())));
 
   return (
@@ -124,29 +141,31 @@ export function PlatformAuditPage() {
           {!audit.data ? (audit.loading ? <Skeleton /> : null) : (
             <DataTable
               minWidth={850}
-              columns={["Occurred at", "Actor type", "Action type", "Resource type", "Outcome", "Tenant"]}
+              columns={["Occurred at", "Actor", "Action type", "Resource type", "Outcome", "Reason", "Tenant"]}
               rows={auditList.map((a) => (
                 <tr key={a.id}>
                   <Cell mono>{fmtDateTime(a.occurred_at)}</Cell>
-                  <Cell mono>{a.actor_type}</Cell>
+                  <Cell mono>{a.actor_type}{a.actor_reference ? ` · ${shortId(a.actor_reference)}` : ""}</Cell>
                   <Cell mono>{a.action_type}</Cell>
                   <Cell mono>{a.resource_type}</Cell>
                   <td>
                     <Badge group="outcome" value={a.outcome} />
                   </td>
+                  <Cell muted>{a.reason ?? "—"}</Cell>
                   <Cell mono muted>
                     {a.tenant_id ? <Link to={`/admin/tenants/${a.tenant_id}`}>{shortId(a.tenant_id)}</Link> : "Platform"}
                   </Cell>
                 </tr>
               ))}
-              count={`${auditList.length} of the ${auditItems.length} most recent`}
+              count={`${auditList.length} of ${auditItems.length} loaded${nextBefore ? "" : " (all matching records)"}`}
               empty={{ title: "No audit records match this filter", body: "Clear the filters." }}
             />
           )}
+          {nextBefore ? <div className="submit-row"><button type="button" className="btn btn-secondary" onClick={() => void loadOlder()} disabled={loadingOlder}>{loadingOlder ? "Loading…" : "Load older records"}</button></div> : null}
         </>
       )}
       </div>
-      <Footnote>The API returns the 50 most recent records of each kind. Records are written by the platform and cannot be edited or deleted from this console.</Footnote>
+      <Footnote>Failures show the 50 most recent events. Audit records filter by full tenant id and action type on the server and page back through the whole history. Records are written by the platform and cannot be edited or deleted.</Footnote>
     </Page>
   );
 }

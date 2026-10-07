@@ -421,9 +421,14 @@ export interface PlatformAudit {
   id: string;
   tenant_id: string;
   actor_type: string;
+  actor_reference?: string | null;
   action_type: string;
   resource_type: string;
+  resource_reference?: string | null;
   outcome: string;
+  correlation_reference?: string | null;
+  /** ER-F-11: the reason given for the action. */
+  reason?: string | null;
   occurred_at: string;
 }
 

@@ -153,19 +153,19 @@ def test_platform_administrator_manages_tenants_across_boundaries(platform_clien
     assert missing.status_code == 404
 
     suspended = platform_client.post(
-        f"/v1/platform/tenants/{tenant_id}/status", json={"status": "suspended"}, headers=admin
+        f"/v1/platform/tenants/{tenant_id}/status", json={"status": "suspended", "reason": "Isolation test"}, headers=admin
     )
     assert suspended.status_code == 200
     assert suspended.json()["status"] == "suspended"
     assert platform_client.get("/v1/products", headers=bearer(token)).status_code == 401
 
     invalid = platform_client.post(
-        f"/v1/platform/tenants/{tenant_id}/status", json={"status": "nonsense"}, headers=admin
+        f"/v1/platform/tenants/{tenant_id}/status", json={"status": "nonsense", "reason": "Isolation test"}, headers=admin
     )
     assert invalid.status_code == 422
 
     restored = platform_client.post(
-        f"/v1/platform/tenants/{tenant_id}/status", json={"status": "active"}, headers=admin
+        f"/v1/platform/tenants/{tenant_id}/status", json={"status": "active", "reason": "Isolation test"}, headers=admin
     )
     assert restored.status_code == 200
     assert platform_client.get("/v1/products", headers=bearer(token)).status_code == 200

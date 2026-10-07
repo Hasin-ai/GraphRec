@@ -26,6 +26,7 @@ import { QualitySummary } from "../../ui/QualitySummary";
 import { ActionsCell, Badge, Cell, DataTable, DefinitionList, ErrorBanner, FilterBar, Panel, Skeleton, Banner } from "../../ui/primitives";
 import { NotFoundPage } from "../errors/ErrorPages";
 import { RetrainingPolicyPanel } from "./RetrainingPolicyPanel";
+import { ReasonField } from "../../ui/ReasonField";
 
 /** The worker records detailed stages while status remains queued or running. */
 const ACTIVE_STATES = ["queued", "running"];
@@ -180,6 +181,7 @@ export function TrainingPage() {
 
 export function TrainingJobPage() {
   const [cancelling, setCancelling] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
   const { jobId = "" } = useParams();
   const navigate = useNavigate();
   const jobResource = useResource(() => training.get(jobId), [jobId]);
@@ -247,7 +249,7 @@ export function TrainingJobPage() {
           {job.qdrant_collection ? <p className="p-body">Embedding index: <span className="mono">{job.qdrant_collection}</span></p> : null}
         </Panel>
       </div>
-      {cancelling ? <Dialog title="Cancel training job" body="The worker stops at its next processing boundary. No model version is activated." confirmLabel="Cancel job" onClose={() => setCancelling(false)} onConfirm={async () => { await training.cancel(job.id); setCancelling(false); await jobResource.reload(); }} /> : null}
+      {cancelling ? <Dialog title="Cancel training job" body="The worker stops at its next processing boundary. No model version is activated." confirmLabel="Cancel job" onClose={() => setCancelling(false)} onConfirm={async () => { await training.cancel(job.id, cancelReason); setCancelling(false); await jobResource.reload(); }}><ReasonField id="cancel-reason" value={cancelReason} onChange={setCancelReason} /></Dialog> : null}
     </Page>
   );
 }

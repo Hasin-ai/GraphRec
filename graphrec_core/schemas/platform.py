@@ -53,14 +53,22 @@ class PlatformAuditItem(BaseModel):
     id: UUID
     tenant_id: UUID
     actor_type: str
+    #: The acting user, credential or operator, when known.
+    actor_reference: UUID | None = None
     action_type: str
     resource_type: str
+    resource_reference: UUID | None = None
     outcome: str
+    correlation_reference: UUID | None = None
+    #: ER-F-11: the reason given for the action, if any.
+    reason: str | None = None
     occurred_at: datetime
 
 
 class PlatformAuditListResponse(BaseModel):
     items: list[PlatformAuditItem]
+    #: Pass as ``before`` to read the next (older) page; ``None`` on the last page.
+    next_before: datetime | None = None
 
 
 class PlatformTenantQuota(BaseModel):

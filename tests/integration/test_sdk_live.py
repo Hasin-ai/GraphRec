@@ -397,13 +397,13 @@ def test_platform_status_and_monitoring(ops: g.GraphRec, shop: Tenant) -> None:
 def test_platform_suspension_blocks_tenant_credentials(public: g.GraphRec, ops: g.GraphRec) -> None:
     tenant = _provision(public, "suspend")
     assert tenant.store.tenant.catalog.list(limit=1).total == 0
-    assert ops.platform.tenants.set_status(tenant.id, g.TenantStatus.SUSPENDED).status == "suspended"
+    assert ops.platform.tenants.set_status(tenant.id, g.TenantStatus.SUSPENDED, reason="Live suspension test").status == "suspended"
     with pytest.raises((g.AuthenticationError, g.PermissionDeniedError)):
         tenant.store.tenant.catalog.list(limit=1)
-    assert ops.platform.tenants.set_status(tenant.id, "active").status == "active"
+    assert ops.platform.tenants.set_status(tenant.id, "active", reason="Live reactivation test").status == "active"
     assert tenant.store.tenant.catalog.list(limit=1).total == 0
     with pytest.raises(g.RequestValidationError):
-        ops.platform.tenants.set_status(tenant.id, "frozen")
+        ops.platform.tenants.set_status(tenant.id, "frozen", reason="Invalid status test")
 
 
 # -- authorization and tenant isolation ------------------------------------------------
