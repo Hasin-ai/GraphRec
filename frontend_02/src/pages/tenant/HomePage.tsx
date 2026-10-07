@@ -159,6 +159,18 @@ export function HomePage() {
   ];
   const steps: Step[] = rawSteps.map(({ scope, ...step }) => scope ? step : { ...step, state: 'locked', detail: LOCKED_DETAIL });
 
+  // The getting-started checklist counts exactly the steps it shows.
+  const checklist: { title: string; detail: string; done: boolean; action: ReactNode }[] = [
+    { title: 'Add your catalog', detail: 'Products the recommender can choose from.', done: !!productCount,
+      action: can('catalog:write') ? <Link className="btn btn-primary btn-sm" to="/products/sync">Import catalog</Link> : null },
+    { title: 'Send interaction events', detail: 'Views, carts and purchases the model learns from.', done: !!accepted?.used,
+      action: can('events:write') ? <Link className="btn btn-secondary btn-sm" to="/events/submit">Send events</Link> : null },
+    { title: 'Train a model', detail: 'Creates a model version from your data.', done: allVersions.length > 0,
+      action: can('training:read') ? <Link className="btn btn-secondary btn-sm" to="/training">Train a model</Link> : null },
+    { title: 'Activate it and request recommendations', detail: 'Start serving your storefront.', done: !!servingUp,
+      action: can('models:read') ? <Link className="btn btn-secondary btn-sm" to="/models">Model versions</Link> : null },
+  ];
+
   const pct = (v: number | null | undefined) => v === null || v === undefined ? '—' : `${(v * 100).toFixed(v < 0.01 && v > 0 ? 2 : 1)}%`;
   const canTry = servingUp && can('recommendations:read');
 
@@ -175,12 +187,9 @@ export function HomePage() {
     })()}
 
     {isNew ? <section aria-labelledby="start-title" className="ov-section">
-      <div className="ov-section-head"><h2 id="start-title">Get your recommendation system running</h2><span className="muted small">{steps.filter(s => s.state === 'done').length} of {steps.length} steps done</span></div>
+      <div className="ov-section-head"><h2 id="start-title">Get your recommendation system running</h2><span className="muted small">{checklist.filter(item => item.done).length} of {checklist.length} steps done</span></div>
       <ol className="checklist">
-        <li className={productCount ? 'done' : ''}><div><strong>Add your catalog</strong><span>Products the recommender can choose from.</span></div>{can('catalog:write') ? <Link className="btn btn-primary btn-sm" to="/products/sync">Import catalog</Link> : null}</li>
-        <li className={accepted?.used ? 'done' : ''}><div><strong>Send interaction events</strong><span>Views, carts and purchases the model learns from.</span></div>{can('events:write') ? <Link className="btn btn-secondary btn-sm" to="/events/submit">Send events</Link> : null}</li>
-        <li className={allVersions.length ? 'done' : ''}><div><strong>Train a model</strong><span>Creates a model version from your data.</span></div>{can('training:read') ? <Link className="btn btn-secondary btn-sm" to="/training">Train a model</Link> : null}</li>
-        <li className={servingUp ? 'done' : ''}><div><strong>Activate it and request recommendations</strong><span>Start serving your storefront.</span></div>{can('models:read') ? <Link className="btn btn-secondary btn-sm" to="/models">Model versions</Link> : null}</li>
+        {checklist.map(item => <li key={item.title} className={item.done ? 'done' : ''}><div><strong>{item.title}</strong><span>{item.detail}</span></div>{item.action}</li>)}
       </ol>
     </section> : null}
 

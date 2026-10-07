@@ -11,7 +11,7 @@ import { NotFoundPage } from "../errors/ErrorPages";
 export function SubmissionPage() {
   const { submissionId = "" } = useParams();
   const batch = useResource(() => events.getBatch(submissionId), [submissionId]);
-  const crumbs = [{ label: "Home", to: "/home" }, { label: "Submit Events", to: "/events/submit" }, { label: submissionId, mono: true }];
+  const crumbs = [{ label: "Home", to: "/home" }, { label: "Events", to: "/events/submit" }, { label: submissionId, mono: true }];
 
   if (batch.error && isApiError(batch.error) && (batch.error.status === 404 || batch.error.status === 422)) return <NotFoundPage />;
   if (!batch.data) {

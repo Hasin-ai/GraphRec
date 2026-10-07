@@ -227,7 +227,7 @@ export function TrainingJobPage() {
       <DefinitionList
         items={[
           active ? { label: 'Progress', value: `${job.progress ?? 0}% · ${String(job.stage ?? job.status).replace(/_/g, ' ')}` } : { label: 'Duration', value: job.completed_at ? durationLabel(job.created_at, job.completed_at) : '—' },
-          { label: 'Source', value: job.configuration?.mode === 'pretrained_import' ? <>Imported checkpoint {typeof job.configuration?.pretrained_artifact === 'string' ? <IdChip value={job.configuration.pretrained_artifact as string} length={40} label="Checkpoint" /> : null}</> : 'Trained on tenant data' },
+          { label: 'Source', value: job.configuration?.mode === 'pretrained_import' ? <>Imported checkpoint {typeof job.configuration?.pretrained_artifact === 'string' ? <IdChip value={job.configuration.pretrained_artifact as string} length={40} label="Checkpoint" /> : null}</> : job.configuration?.mode === 'placeholder' || job.model_type === 'development_placeholder' ? 'Synthetic placeholder (development only)' : 'Trained on tenant data' },
           { label: "Model type", value: modelTypeLabel(job.model_type) },
           { label: "Requested", value: fmtDateTime(job.created_at) },
           { label: "Completed", value: job.completed_at ? fmtDateTime(job.completed_at) : active ? "In progress" : "—" },
@@ -238,7 +238,7 @@ export function TrainingJobPage() {
       />
       <div className="panels">
         {done && v ? (
-          <Panel title="Quality measures" badge={<Badge group="model" value={v.status} />} note={undefined} body={metricEntries.length ? 'Offline ranking scores for the version this run produced. Higher is better.' : "No offline metrics were recorded for this version. Train a DGSR model or import a checkpoint to record validation quality."} actions={[{ label: "Open model version", onClick: () => navigate(`/models/${v.id}`) }]}>
+          <Panel title="Quality measures" badge={metricEntries.length ? <Badge group="model" value={v.status} /> : undefined} note={undefined} body={metricEntries.length ? 'Offline ranking scores for the version this run produced. Higher is better.' : "No offline metrics were recorded for this version. Train a DGSR model or import a checkpoint to record validation quality."} actions={[{ label: "Open model version", onClick: () => navigate(`/models/${v.id}`) }]}>
             {metricEntries.length ? <QualitySummary metrics={v.metrics} /> : null}
           </Panel>
         ) : null}

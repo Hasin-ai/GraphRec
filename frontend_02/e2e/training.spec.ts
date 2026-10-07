@@ -36,9 +36,10 @@ test('tenant trains a real DGSR model and activates it through the console', asy
   await dialog.getByLabel('Configuration (optional JSON)').fill('{"epochs":1}');
   await dialog.getByRole('button', { name: 'Request training' }).click();
   await expect(page).toHaveURL(/\/training\/[0-9a-f-]+$/);
-  await expect(page.locator('.page-header .tag')).toHaveText('succeeded', { timeout: 60_000 });
+  await expect(page.locator('.page-header .tag')).toHaveAttribute('data-value', 'succeeded', { timeout: 60_000 });
   await expect(page.getByText('Development placeholder', { exact: true })).toHaveCount(0);
-  await expect(page.getByText('100% · completed', { exact: true })).toBeVisible();
+  // A trained run is labelled as trained on tenant data, never as a placeholder.
+  await expect(page.getByText('Trained on tenant data', { exact: true })).toBeVisible();
   const folder = resolve('e2e-screens', 'srs');
   mkdirSync(folder, { recursive: true });
   await page.screenshot({ path: resolve(folder, 'real-training-complete.png'), fullPage: true });
@@ -46,7 +47,7 @@ test('tenant trains a real DGSR model and activates it through the console', asy
   await expect(page.getByText('Development placeholder', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Activate', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: /^Activate / }).click();
-  await expect(page.locator('.page-header .tag')).toHaveText('active');
+  await expect(page.locator('.page-header .tag')).toHaveAttribute('data-value', 'active');
   const rec = await request.post('/v1/recommendations', { headers, data: { user_id: '0', top_n: 2 } });
   expect(rec.ok()).toBeTruthy();
   expect((await rec.json()).strategy).toBe('personalized');

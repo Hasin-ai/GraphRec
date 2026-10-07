@@ -37,11 +37,11 @@ test('model replacement, rollback and archive follow confirmed backend state', a
   await page.getByRole('button', { name: 'Activate', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: /^Activate / }).click();
   await expect(page.getByRole('dialog')).toBeHidden();
-  await expect(page.locator('.page-header .tag')).toHaveText('active');
+  await expect(page.locator('.page-header .tag')).toHaveAttribute('data-value', 'active');
   expect((await api('/deployment', undefined, token)).active_model_version_id).toBe(second.model_version_id);
   await page.getByRole('button', { name: 'Roll back', exact: true }).click();
   await page.getByRole('dialog').getByLabel('Roll-back target').selectOption(first.model_version_id);
-  await page.getByRole('dialog').getByRole('button', { name: 'Roll back', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Confirm rollback', exact: true }).click();
   await expect(page).toHaveURL(/\/models$/);
   expect((await api('/deployment', undefined, token)).active_model_version_id).toBe(first.model_version_id);
   await page.goto(`/models/${second.model_version_id}`);
@@ -55,6 +55,6 @@ test('model replacement, rollback and archive follow confirmed backend state', a
   await expect(page).toHaveURL(/\/models$/);
   expect((await api(`/model-versions/${second.model_version_id}`, undefined, token)).status).toBe('archived');
   await page.goto(`/models/${second.model_version_id}`);
-  await expect(page.locator('.page-header .tag')).toHaveText('archived');
+  await expect(page.locator('.page-header .tag')).toHaveAttribute('data-value', 'archived');
   await expect(page.getByRole('button', { name: 'Activate', exact: true })).toHaveCount(0);
 });

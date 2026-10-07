@@ -47,6 +47,7 @@ export function ServiceStatusPage() {
         { label: 'Last activation', value: fmtDateTime(d.last_transition_at) },
       ]} />
       {d.failure_reason ? <Banner tone="danger" title="Serving reported a failure">{d.failure_reason}</Banner> : null}
+      <p className="footnote">Serving capacity is logical: each unit adds concurrent recommendation slots that every API process enforces through the shared limiter. It does not start separate serving instances.</p>
     </Panel> : null}
     {canMetrics ? <Panel title="Recommendation traffic">
       <FilterBar filters={[{ id: 'window', label: 'Measurement window', value: span, onChange: setSpan, options: Object.keys(WINDOWS) }]} onClear={() => setSpan('last hour')} />

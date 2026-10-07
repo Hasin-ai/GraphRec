@@ -249,7 +249,7 @@ function ModelVersionDetail() {
         <Panel
           title="Artifact and index"
           dl={[
-            { label: "Checkpoint", value: checkpoint ? <IdChip value={checkpoint} length={40} label="Checkpoint" /> : v.artifact_uri ? <IdChip value={v.artifact_uri} length={28} label="Artifact" /> : "Not recorded" },
+            { label: "Checkpoint", value: checkpoint ? <IdChip value={checkpoint} length={40} label="Checkpoint" /> : v.artifact_uri ? <IdChip value={v.artifact_uri} length={20} label="Artifact" /> : "Not recorded" },
             { label: "Embedding index", value: v.qdrant_collection ?? producingJob?.qdrant_collection ?? <span className="td-muted">Not recorded</span>, mono: !!(v.qdrant_collection ?? producingJob?.qdrant_collection) },
             { label: "Training run", value: producingJob ? <Link to={`/training/${producingJob.id}`}>View run <span className="mono muted">{shortId(producingJob.id)}</span></Link> : "—" },
             { label: "Dataset snapshot", value: producingJob?.dataset_snapshot_id ? <IdChip value={producingJob.dataset_snapshot_id} label="Snapshot ID" /> : "—" },

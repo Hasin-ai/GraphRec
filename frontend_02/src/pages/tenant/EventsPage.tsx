@@ -205,7 +205,7 @@ export function EventsPage() {
     }
   }
 
-  const crumbs = [{ label: "Home", to: "/home" }, { label: "Submit Events" }];
+  const crumbs = [{ label: "Home", to: "/home" }, { label: "Events" }];
 
   if (result?.kind === "single") {
     const r = result.event;
