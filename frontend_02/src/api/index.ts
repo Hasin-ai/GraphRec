@@ -16,6 +16,8 @@ import type {
   MetricsSummary,
   ModelVersionResource,
   PlatformAudit,
+  PlatformTenantUsage,
+  TenantAuditItem,
   PlatformFailure,
   PlatformPlan,
   PlatformQuotaOverride,
@@ -82,6 +84,10 @@ export const tenantUsers = {
   invite: (input: { email: string; display_name?: string; role: TenantUserRole }) =>
     request<TenantUserInvitation>("/v1/tenant/users", { method: "POST", json: input }),
   revokeInvitation: (id: string) => request<TenantUserResource>(`/v1/tenant/users/${enc(id)}/invitation`, { method: "DELETE" }),
+  /** UC-27: change role or status; ends the member's sessions. */
+  update: (id: string, change: { role?: TenantUserRole; status?: "active" | "locked" | "disabled"; reason?: string }) =>
+    request<TenantUserResource>(`/v1/tenant/users/${enc(id)}`, { method: "PATCH", json: change }),
+  resendInvitation: (id: string) => request<TenantUserInvitation>(`/v1/tenant/users/${enc(id)}/invitation:resend`, { method: "POST" }),
 };
 
 // ── public ─────────────────────────────────────────────────────
@@ -258,9 +264,19 @@ export const platform = {
   updateOperator: (id: string, change: Partial<{ display_name: string; roles: PlatformOperator["roles"]; status: PlatformOperator["status"]; password: string }>) =>
     request<PlatformOperator>(`/v1/platform/operators/${enc(id)}`, { ...platformRealm, method: "PATCH", json: change }),
   listFailures: () => request<{ items: PlatformFailure[] }>("/v1/platform/failures", platformRealm),
+  /** UC-29: every tenant's usage against its limits. */
+  listUsage: () => request<{ items: PlatformTenantUsage[] }>("/v1/platform/usage", platformRealm),
   /** UC-31: filtered, paginated audit history (newest first). */
   listAudit: (filters: { tenant_id?: string; action?: string; outcome?: string; before?: string; limit?: number } = {}) => {
     const query = new URLSearchParams(Object.entries(filters).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => [k, String(v)])).toString();
     return request<{ items: PlatformAudit[]; next_before: string | null }>(`/v1/platform/audit${query ? `?${query}` : ""}`, platformRealm);
+  },
+};
+
+/** UC-31: this tenant's own audit trail (administrators). */
+export const tenantAudit = {
+  list: (filters: { action?: string; outcome?: string; before?: string; limit?: number } = {}) => {
+    const query = new URLSearchParams(Object.entries(filters).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => [k, String(v)])).toString();
+    return request<{ items: TenantAuditItem[]; next_before: string | null }>(`/v1/audit${query ? `?${query}` : ""}`);
   },
 };

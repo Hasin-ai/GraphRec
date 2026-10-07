@@ -8,6 +8,8 @@ import { FailurePage, ForbiddenPage, NotFoundPage } from "./pages/errors/ErrorPa
 import { LandingPage } from "./pages/marketing/LandingPage";
 import { PricingPage } from "./pages/marketing/PricingPage";
 import { PlatformAuditPage, PlatformStatusPage } from "./pages/platform/StatusAuditPages";
+import { PlatformUsagePage } from "./pages/platform/UsagePage";
+import { AuditPage } from "./pages/tenant/AuditPage";
 import { PlatformOperatorsPage } from "./pages/platform/OperatorsPage";
 import { TenantStatusPage } from "./pages/tenant/TenantStatusPage";
 import { PlatformPlanPage, PlatformPlansPage, PlatformTenantPage, PlatformTenantsPage } from "./pages/platform/TenantPages";
@@ -72,6 +74,7 @@ export function AppRoutes() {
           <Route path="/account" element={<AccountPage />} />
           <Route path="/account/tenant-status" element={<TenantStatusPage />} />
           <Route path="/users" element={scoped("users:write", <UsersPage />)} />
+          <Route path="/audit" element={scoped("audit:read", <AuditPage />)} />
           <Route path="/integration" element={<IntegrationPage />} />
           <Route path="/credentials" element={scoped("keys:write", <CredentialsPage />)} />
           <Route path="/products" element={scoped("catalog:read", <ProductsPage />)} />
@@ -100,6 +103,7 @@ export function AppRoutes() {
           <Route path="/admin/tenants/:tenantId" element={<PlatformTenantPage />} />
           <Route path="/admin/plans" element={<PlatformPlansPage />} />
           <Route path="/admin/plans/:planId" element={<PlatformPlanPage />} />
+          <Route path="/admin/usage" element={<PlatformUsagePage />} />
           <Route path="/admin/audit" element={<PlatformAuditPage />} />
           <Route path="/admin/operators" element={<PlatformOperatorsPage />} />
         </Route>

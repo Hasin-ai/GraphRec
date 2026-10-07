@@ -591,3 +591,30 @@ export interface PublicPlan {
   name: string;
   limits: Record<string, number>;
 }
+
+// ── Phase 3: tenant audit and cross-tenant usage ───────────────
+export interface TenantAuditItem {
+  id: string;
+  occurred_at: string;
+  action_type: string;
+  resource_type: string;
+  resource_reference?: string | null;
+  outcome: string;
+  /** tenant_user, api_key, platform_operator or system. */
+  actor_type: string;
+  /** Members and API keys of this tenant only; never a platform operator. */
+  actor_reference?: string | null;
+  reason?: string | null;
+  correlation_id?: string | null;
+}
+
+export interface PlatformTenantUsage {
+  tenant_id: string;
+  name: string;
+  status: string;
+  plan_code?: string | null;
+  period_start?: string | null;
+  dimensions: { type: string; used: number; limit: number | null; measured: boolean }[];
+  /** Usage could not be read: show "Unavailable", never zero. */
+  unavailable: boolean;
+}

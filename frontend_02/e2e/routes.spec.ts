@@ -69,7 +69,7 @@ test('all routes render in both themes and at responsive widths', async ({ page,
   await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page).toHaveURL(/\/home$/);
-  const tenantRoutes = ['/home', '/account', '/integration', '/credentials', '/products', '/products/new', '/products/sync', '/products/AUDIT-1', '/events/submit', `/submissions/${batch.id}`, '/datasets', '/training', `/training/${job.id}`, '/models', `/models/${job.model_version_id}`, '/usage', '/service-status'];
+  const tenantRoutes = ['/home', '/account', '/integration', '/credentials', '/products', '/products/new', '/products/sync', '/products/AUDIT-1', '/events/submit', `/submissions/${batch.id}`, '/datasets', '/training', `/training/${job.id}`, '/models', `/models/${job.model_version_id}`, '/usage', '/service-status', '/users', '/audit'];
   for (const [i, route] of tenantRoutes.entries()) {
     await capture(route, `tenant-${String(i).padStart(2, '0')}`);
     await capture(route, `tenant-${String(i).padStart(2, '0')}`, 390);
@@ -108,7 +108,7 @@ test('all routes render in both themes and at responsive widths', async ({ page,
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(page).toHaveURL(/\/admin\/status$/);
     const plans = await api('/platform/plans', undefined, admin);
-    const platformRoutes = ['/admin/status', '/admin/tenants', `/admin/tenants/${registration.id}`, '/admin/plans', `/admin/plans/${plans[0].id}`, '/admin/audit', '/admin/operators'];
+    const platformRoutes = ['/admin/status', '/admin/tenants', `/admin/tenants/${registration.id}`, '/admin/plans', `/admin/plans/${plans[0].id}`, '/admin/usage', '/admin/audit', '/admin/operators'];
     for (const [i, route] of platformRoutes.entries()) {
       await capture(route, `platform-${i}`);
       await capture(route, `platform-${i}`, 390);
