@@ -14,6 +14,26 @@ from tests.integration.test_srs_acceptance import provision, limits
 pytestmark = pytest.mark.integration
 
 
+@pytest.fixture(autouse=True)
+def isolated_training_queue():
+    """A-16: claim_training_job() takes the globally oldest queued job, so jobs
+    left queued by other tests (any tenant) would be claimed here instead of the
+    job under test. Drain them first through the same claim path and mark them
+    cancelled, tenant by tenant, so these tests see only their own work."""
+    while True:
+        with SessionLocal() as db, db.begin():
+            claimed = db.execute(text('SELECT * FROM public.claim_training_job()')).first()
+        if claimed is None:
+            break
+        with SessionLocal() as db, db.begin():
+            job_id, tenant_id = claimed
+            set_local_tenant(db, tenant_id)
+            job = db.get(TrainingJob, job_id)
+            job.status = job.stage = 'cancelled'
+            job.completed_at = datetime.now(timezone.utc)
+    yield
+
+
 def test_interrupted_job_retries_once_then_fails_visibly(client):
     tenant, headers = provision(client)
     seed(client, headers)
