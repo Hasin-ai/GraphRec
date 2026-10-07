@@ -31,6 +31,8 @@ def test_nr_f_02_refresh_rotates_and_new_access_token_works(client):
     assert second["refresh_token"] != first["refresh_token"]
     assert second["access_token"] != first["access_token"]
     assert second["email"] == first["email"] and second["user_role"] == first["user_role"]
+    # A-26: the workspace is labelled with the registered tenant name.
+    assert first["tenant_name"].startswith("Refresh ") and second["tenant_name"] == first["tenant_name"]
     assert client.get("/v1/subscription", headers=_bearer(second)).status_code == 200
     # The successor can itself be rotated.
     third = client.post("/v1/auth/refresh", json={"refresh_token": second["refresh_token"]}, headers=JSON)

@@ -10,6 +10,7 @@ The SDK now shares one version with the GraphRec API and console.
 - `GraphRec.ready()` reads `/readyz`.
 - `GraphRec.meta()` reads the product version.
 - `Recommendations.active_model_version_id` is new; `model_version_id` is now `None` when a fallback served the request.
+- `AuthTokenPair.tenant_name` carries the tenant's registered name.
 - `AuthTokenPair.email` carries the signed-in account's email.
 
 ## 1.0.0 — 2026-10-04

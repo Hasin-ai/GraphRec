@@ -16,6 +16,8 @@ export interface TenantSession {
   role: TenantUserRole;
   scopes: string[];
   accessToken: string;
+  /** The tenant's registered name, from the token response (absent for older sessions). */
+  tenantName?: string;
   /** Single-use refresh token; replaced on every refresh. */
   refreshToken?: string;
   expiresAt: number;
@@ -72,6 +74,7 @@ export function setTenantSession(email: string, pair: AuthTokenPair, signedInAt:
     scopes: pair.scopes,
     accessToken: pair.access_token,
     refreshToken: pair.refresh_token,
+    tenantName: pair.tenant_name ?? undefined,
     expiresAt: Date.now() + pair.expires_in * 1000,
     signedInAt,
   };

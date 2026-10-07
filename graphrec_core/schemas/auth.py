@@ -63,6 +63,8 @@ class AuthTokenPair(BaseModel):
     # Normalized sign-in email of the authenticated user, so clients can label
     # the session even when the caller did not supply an email (setup/recovery).
     email: str | None = None
+    # A-26: the tenant's registered name, so clients label the workspace with it.
+    tenant_name: str | None = None
 
 
 class RecoverPasswordRequest(BaseModel):

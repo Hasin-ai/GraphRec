@@ -20,6 +20,7 @@ from graphrec_core.database.models import (
     AuditLog,
     RefreshSession,
     SecurityEvent,
+    Tenant,
     TenantUser,
 )
 from graphrec_core.database.tenancy import set_local_tenant
@@ -640,6 +641,7 @@ class AuthenticationService:
         auth_epoch = self.session.scalar(select(TenantUser.auth_epoch).where(
             TenantUser.tenant_id == identity.tenant_id, TenantUser.id == identity.user_id,
         ))
+        tenant_name = self.session.scalar(select(Tenant.name).where(Tenant.id == identity.tenant_id))
         access_token = jwt.encode(
             {
                 "sub": str(identity.user_id),
@@ -713,6 +715,7 @@ class AuthenticationService:
             user_role=identity.user_role,  # type: ignore[arg-type]
             scopes=scopes,
             email=identity.normalized_email,
+            tenant_name=tenant_name,
         )
 
     def _record_failure(

@@ -105,13 +105,6 @@ function Nav({ groups, can, collapsed }: { groups: NavGroup[]; can: (scope: stri
   </div>;
 }
 
-/** A readable workspace name derived from the account's email domain ("beauty.example" → "Beauty"). */
-function workspaceName(email: string | undefined): string | null {
-  const domain = email?.split("@")[1];
-  if (!domain) return null;
-  const label = domain.split(".")[0].replace(/[-_]+/g, " ");
-  return label ? label.replace(/\b\w/g, c => c.toUpperCase()) : null;
-}
 /** A friendly display name: "dana.lee@x" → "Dana Lee"; machine-like handles ("owner-39f889") → "Workspace owner". */
 function displayName(email: string | undefined, role?: string): string {
   const local = (email ?? "").split("@")[0];
@@ -136,9 +129,9 @@ function WorkspaceSwitcher({ name, tenantId, home, collapsed, caption }: { name:
       <Icon name="chevrons-up-down" size={14} className="ws-chev" />
     </button>
     {pop.open ? <div ref={pop.ref} className="menu ws-menu" role="menu" aria-label="Workspace" onKeyDown={menuKeys}>
-      <div className="menu-label">Workspaces</div>
-      <Link role="menuitemradio" aria-checked="true" className="menu-item" to={home} onClick={() => pop.setOpen(false)}>
-        <span className="ws-avatar sm" aria-hidden="true">{name.slice(0, 1).toUpperCase()}</span>{name}<Icon name="check" size={15} className="menu-check" />
+      {/* One account belongs to exactly one workspace (tenant); there is nothing to switch to. */}
+      <Link role="menuitem" className="menu-item" to={home} onClick={() => pop.setOpen(false)}>
+        <span className="ws-avatar sm" aria-hidden="true">{name.slice(0, 1).toUpperCase()}</span>{name}
       </Link>
       {tenantId ? <>
         <div className="menu-sep" role="separator" />
@@ -290,7 +283,7 @@ export function TenantLayout() {
   const role = roleLabel(tenant.role).replace(/^tenant /, "");
   return <Shell key={tenant.accessToken} home="/home" sidebar={({ collapsed, toggleCollapsed, closeDrawer }) => <Sidebar home="/home" groups={TENANT_NAV} can={can}
     collapsed={collapsed} onCollapse={toggleCollapsed} onClose={closeDrawer}
-    header={c => <WorkspaceSwitcher name={workspaceName(tenant.email) ?? "Workspace"} tenantId={tenantId} home="/home" collapsed={c} caption="Tenant workspace" />}
+    header={c => <WorkspaceSwitcher name={tenant.tenantName ?? "Your workspace"} tenantId={tenantId} home="/home" collapsed={c} caption="Tenant workspace" />}
     footer={c => <UserMenu name={name} detail={tenant.email} role={role[0].toUpperCase() + role.slice(1)} collapsed={c} onSignOut={signOutTenant} accountTo="/account" plansTo="/pricing" />} />}>
     <Outlet />
   </Shell>;

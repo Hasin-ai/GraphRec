@@ -94,6 +94,8 @@ export interface AuthTokenPair {
   scopes: string[];
   /** Normalized sign-in email; labels the session when the client sent none. */
   email?: string | null;
+  /** The tenant's registered name (A-26). */
+  tenant_name?: string | null;
 }
 
 // ── api keys ───────────────────────────────────────────────────
