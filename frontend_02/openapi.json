@@ -816,6 +816,35 @@
         "title": "DatasetUploadResponse",
         "type": "object"
       },
+      "DeploymentCapacity": {
+        "description": "XR-F-08: logical serving capacity across tenants (see D-07).",
+        "properties": {
+          "available_tenants": {
+            "title": "Available Tenants",
+            "type": "integer"
+          },
+          "degraded_tenants": {
+            "title": "Degraded Tenants",
+            "type": "integer"
+          },
+          "desired_capacity": {
+            "title": "Desired Capacity",
+            "type": "integer"
+          },
+          "ready_capacity": {
+            "title": "Ready Capacity",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "available_tenants",
+          "degraded_tenants",
+          "desired_capacity",
+          "ready_capacity"
+        ],
+        "title": "DeploymentCapacity",
+        "type": "object"
+      },
       "DeploymentStatus": {
         "properties": {
           "active_model_version_id": {
@@ -2214,7 +2243,9 @@
             "type": "boolean"
           },
           "limits": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "type": "integer"
+            },
             "title": "Limits",
             "type": "object"
           },
@@ -2302,12 +2333,13 @@
           },
           "deployments": {
             "anyOf": [
-              {},
+              {
+                "$ref": "#/components/schemas/DeploymentCapacity"
+              },
               {
                 "type": "null"
               }
-            ],
-            "title": "Deployments"
+            ]
           },
           "rate_limiter": {
             "$ref": "#/components/schemas/RateLimiterStatus"
@@ -2843,7 +2875,9 @@
             "type": "string"
           },
           "limits": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "type": "integer"
+            },
             "title": "Limits",
             "type": "object"
           },

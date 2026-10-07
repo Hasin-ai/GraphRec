@@ -232,11 +232,24 @@ def test_password_client_logout_signs_in_again(shop: Tenant) -> None:
     assert shop.admin.tenant.users.list().total >= 1
 
 
-def test_tenant_users(shop: Tenant) -> None:
+def test_tenant_users(public: g.GraphRec, shop: Tenant) -> None:
     users = shop.admin.tenant.users
     invite = users.invite(f"dev-{uuid4().hex[:8]}@example.org", display_name="Dev")
     assert invite.setup_token and invite.status == "invited"
     assert any(u.id == invite.id for u in users.list())
+    assert users.get(invite.id).email == invite.email
+    resent = users.resend_invitation(invite.id)
+    assert resent.setup_token != invite.setup_token
+    with pytest.raises(g.ConflictError):  # pending invitations are resent or revoked, not edited
+        users.update(invite.id, role="tenant_administrator")
+    member = users.invite(f"member-{uuid4().hex[:8]}@example.org")
+    public.tenant.auth.setup_password(setup_token=member.setup_token, password=PASSWORD)
+    promoted = users.update(member.id, role="tenant_administrator", reason="SDK live test")
+    assert promoted.role == "tenant_administrator"
+    assert any(r.action_type == "tenant_user_updated" and r.reason == "SDK live test"
+               for r in shop.admin.tenant.audit.list(action="tenant_user_updated").items)
+    with pytest.raises(g.InputValidationError):
+        users.update(member.id)
     revoked = users.revoke_invitation(invite.id)
     assert revoked.id == invite.id and revoked.status != "invited"
     with pytest.raises(g.ConflictError):
@@ -412,6 +425,7 @@ def test_platform_status_and_monitoring(ops: g.GraphRec, shop: Tenant) -> None:
     assert status.database == "connected" and status.status in {"healthy", "degraded"}
     assert any(a.tenant_id == shop.id for a in ops.platform.list_audit_logs())
     assert isinstance(ops.platform.list_failures().items, list)
+    assert any(u.tenant_id == shop.id and not u.unavailable for u in ops.platform.list_usage().items)
 
 
 def test_platform_suspension_blocks_tenant_credentials(public: g.GraphRec, ops: g.GraphRec) -> None:

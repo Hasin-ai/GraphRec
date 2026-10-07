@@ -95,6 +95,9 @@ jobs:
           cache: npm
           cache-dependency-path: frontend_02/package-lock.json
       - run: npm ci
+      - name: Generated API types match openapi.json (contract drift)
+        run: npm run check:api
+      # Type check includes src/api/contract.check.ts: console types must agree with the generated ones.
       - run: npx tsc -b --noEmit
       - run: npx vitest run
       - run: npm run build

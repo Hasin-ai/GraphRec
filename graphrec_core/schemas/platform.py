@@ -21,11 +21,19 @@ class PlatformTenantListResponse(BaseModel):
     items: list[PlatformTenantResource]
 
 
+class DeploymentCapacity(BaseModel):
+    """XR-F-08: logical serving capacity across tenants (see D-07)."""
+    available_tenants: int
+    degraded_tenants: int
+    desired_capacity: int
+    ready_capacity: int
+
+
 class PlatformPlanResource(BaseModel):
     id: UUID
     code: str
     name: str
-    limits: dict[str, Any]
+    limits: dict[str, int]
     is_active: bool
     warnings: list[dict[str, Any]] = []
 
@@ -94,6 +102,6 @@ class PlatformStatus(BaseModel):
     api_cluster: str
     database: str
     worker_pool: str
-    deployments: Any | None = None
+    deployments: DeploymentCapacity | None = None
     rate_limiter: RateLimiterStatus
     timestamp: datetime

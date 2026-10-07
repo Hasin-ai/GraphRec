@@ -42,7 +42,7 @@ def get_meta(settings: Settings = Depends(get_settings)) -> MetaResponse:
 class PublicPlan(BaseModel):
     code: str
     name: str
-    limits: dict[str, Any]
+    limits: dict[str, int]
 
 
 class PublicPlanList(BaseModel):
