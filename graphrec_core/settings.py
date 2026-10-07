@@ -2,12 +2,19 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field, field_validator
+from typing import Literal
+
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    # ``development`` keeps local defaults and development-only features
+    # (placeholder training, manual model registration). ``production`` refuses
+    # to start with default, placeholder or short secrets (A-10).
+    graphrec_env: Literal["development", "production"] = "development"
 
     database_url: str = "postgresql+psycopg://graphrec_app:graphrec_app_local_only@localhost:5432/graphrec"
     # Connection pool sized for uvicorn's 40-thread sync pool per process.
@@ -98,6 +105,39 @@ class Settings(BaseSettings):
                 "secret still uses the .env.example placeholder; generate a random value"
             )
         return value
+
+
+    @property
+    def is_production(self) -> bool:
+        return self.graphrec_env == "production"
+
+    @model_validator(mode="after")
+    def _production_requires_strong_secrets(self) -> "Settings":
+        if not self.is_production:
+            return self
+        problems: list[str] = []
+        defaults = {name: field.default for name, field in type(self).model_fields.items()}
+        for name in ("jwt_signing_secret", "audit_hash_secret", "api_key_hmac_pepper"):
+            value = getattr(self, name)
+            if value == defaults[name] or _looks_like_placeholder(value) or len(value) < 32:
+                problems.append(f"{name.upper()} must be a unique random value of at least 32 characters")
+        if self.platform_admin_token is not None and _looks_like_placeholder(self.platform_admin_token):
+            problems.append("PLATFORM_ADMIN_TOKEN must not be a placeholder")
+        if self.database_url == defaults["database_url"] or "local_only" in self.database_url:
+            problems.append("DATABASE_URL must not use the development default or local-only passwords")
+        if not self.redis_url:
+            problems.append("REDIS_URL is required in production (shared rate limits and admission control)")
+        if problems:
+            raise ValueError("Refusing to start in production: " + "; ".join(problems))
+        return self
+
+
+_PLACEHOLDER_MARKERS = ("replace-with", "change-me", "changeme", "local-development", "local-only", "example")
+
+
+def _looks_like_placeholder(value: str) -> bool:
+    lowered = value.lower()
+    return any(marker in lowered for marker in _PLACEHOLDER_MARKERS)
 
 
 @lru_cache
