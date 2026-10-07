@@ -16,6 +16,7 @@ from apps.api.errors import (
     unhandled_error_handler,
     validation_error_handler,
 )
+from apps.api.body_limit import BodyLimitMiddleware
 from apps.api.middleware import ContractMiddleware
 from apps.api.routes.auth import router as auth_router
 from apps.api.routes.api_keys import router as api_keys_router
@@ -46,6 +47,7 @@ app = FastAPI(
     redoc_url=None,
 )
 app.add_middleware(ContractMiddleware, settings=get_settings())
+app.add_middleware(BodyLimitMiddleware, settings=get_settings())
 # Outermost: resolve the real client address from a trusted proxy before any
 # per-source limit or audit reads request.client (A-01).
 app.add_middleware(
