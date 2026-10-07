@@ -279,9 +279,19 @@ export function RequireScope({ scope, children }: { scope: string; children: Rea
   if (!can(scope)) return <Navigate to="/403" replace />;
   return <>{children}</>;
 }
+/** D-13: a member of a suspended workspace holds only this scope and sees only its status. */
+export function isRestrictedSession(scopes: string[]): boolean {
+  return scopes.length === 1 && scopes[0] === "account:status";
+}
+
 export function TenantLayout() {
   const { tenant, can, signOutTenant } = useSession();
+  const location = useLocation();
   if (!tenant) return <Navigate to="/login" replace />;
+  if (isRestrictedSession(tenant.scopes)) {
+    if (location.pathname !== "/account/tenant-status") return <Navigate to="/account/tenant-status" replace />;
+    return <main id="main-content" className="state-gate"><Outlet /></main>;
+  }
   const tenantId = sessionTenantId(tenant);
   const name = displayName(tenant.email, tenant.role);
   const role = roleLabel(tenant.role).replace(/^tenant /, "");

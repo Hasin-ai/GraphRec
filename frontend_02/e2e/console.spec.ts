@@ -497,5 +497,11 @@ test("platform realm: operator sign-in, tenant detail, quota override, suspensio
   await page.getByLabel("Email").fill(adminEmail);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByText("Sign-in failed")).toBeVisible();
+  // D-13: a member of a suspended workspace sees only its status, never the console.
+  await expect(page).toHaveURL(/\/account\/tenant-status$/);
+  await expect(page.getByText("A platform operator suspended this workspace", { exact: false })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Primary" })).toHaveCount(0);
+  await page.goto("/products");
+  await expect(page).toHaveURL(/\/account\/tenant-status$/);
+  await shot(page, "tenant-suspended");
 });

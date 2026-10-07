@@ -73,6 +73,55 @@ CASES: List[Case] = [
         check=lambda r: r["status"] == "ready",
     ),
     Case(
+        "account.status",
+        "/v1/tenant/status",
+        {"tenant_id": fx.UUID_A, "name": "Shop", "status": "suspended", "message": "Suspended.",
+         "restricted_session": True, "created_at": fx.NOW},
+        lambda c: c.tenant.account.status(),
+        check=lambda r: r.status == "suspended" and r.restricted_session,
+        client_kwargs=BEARER,
+    ),
+    Case(
+        "operators.login",
+        "/v1/platform/auth/login",
+        {"access_token": "op-token", "token_type": "Bearer", "expires_in": 3600, "operator_id": fx.UUID_A,
+         "email": "ops@shop.test", "display_name": "Ops", "roles": ["audit"]},
+        lambda c: c.platform.operators.login(email="ops@shop.test", password="pw"),
+        body=lambda b: b == {"email": "ops@shop.test", "password": "pw"},
+        check=lambda r: r.roles == ["audit"],
+    ),
+    Case(
+        "operators.me",
+        "/v1/platform/me",
+        {"operator_id": fx.UUID_A, "email": "ops@shop.test", "roles": ["audit"], "kind": "operator"},
+        lambda c: c.platform.operators.me(),
+        client_kwargs=PLATFORM,
+    ),
+    Case(
+        "operators.list",
+        "/v1/platform/operators",
+        {"items": []},
+        lambda c: c.platform.operators.list(),
+        client_kwargs=PLATFORM,
+    ),
+    Case(
+        "operators.create",
+        "/v1/platform/operators",
+        {"id": fx.UUID_A, "email": "ops@shop.test", "display_name": "Ops", "roles": ["audit"], "status": "active",
+         "created_at": fx.NOW, "last_login_at": None},
+        lambda c: c.platform.operators.create(email="ops@shop.test", display_name="Ops", password="x" * 12, roles=["audit"]),
+        client_kwargs=PLATFORM,
+    ),
+    Case(
+        "operators.update",
+        f"/v1/platform/operators/{fx.UUID_A}",
+        {"id": fx.UUID_A, "email": "ops@shop.test", "display_name": "Ops", "roles": ["audit"], "status": "disabled",
+         "created_at": fx.NOW, "last_login_at": None},
+        lambda c: c.platform.operators.update(fx.UUID_A, status="disabled"),
+        body=lambda b: b == {"status": "disabled"},
+        client_kwargs=PLATFORM,
+    ),
+    Case(
         "meta.plans",
         "/v1/plans",
         {"items": [{"code": "free", "name": "Free", "limits": {"stored_products": 5000}}]},
@@ -1053,8 +1102,9 @@ def test_required_scopes() -> None:
         for route in g.ROUTES.values()
         if route.auth != "none"
         and not route.key.startswith("platform.")
-        # Logout only needs a signed-in user, whatever their scopes.
-        and route.key != "auth.logout"
+        # Logout and the workspace status only need a signed-in user, whatever their scopes.
+        and route.key not in {"auth.logout", "account.status"}
+        and not route.key.startswith("operators.")
     ]
     assert tenant_routes and all(route.scope_enforced for route in tenant_routes)
     # A role delegates API-key-compatible scopes only. It need not hold every

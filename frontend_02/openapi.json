@@ -3713,6 +3713,53 @@
         "title": "TenantRegistrationResponse",
         "type": "object"
       },
+      "TenantStatusResponse": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "restricted_session": {
+            "title": "Restricted Session",
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "suspended",
+              "deleting",
+              "deleted",
+              "pending"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "name",
+          "status",
+          "message",
+          "restricted_session",
+          "created_at"
+        ],
+        "title": "TenantStatusResponse",
+        "type": "object"
+      },
       "TenantStatusUpdate": {
         "properties": {
           "reason": {
@@ -7143,6 +7190,28 @@
         "summary": "Get Subscription",
         "tags": [
           "subscription"
+        ]
+      }
+    },
+    "/v1/tenant/status": {
+      "get": {
+        "description": "Any signed-in member may read the workspace status; a member of a suspended\nworkspace can read only this (D-13). API keys are not accepted.",
+        "operationId": "get_tenant_status_v1_tenant_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Tenant Status",
+        "tags": [
+          "account"
         ]
       }
     },

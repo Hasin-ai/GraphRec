@@ -387,6 +387,12 @@ def test_platform_tenants_quotas_and_plans(ops: g.GraphRec, shop: Tenant) -> Non
         platform.plans.update(pro.id, name=pro.name, limits={"stored_products": 1}, is_active=True)
 
 
+def test_tenant_account_status(shop: Tenant) -> None:
+    """D-13: any signed-in member can read the workspace status."""
+    status = shop.admin.tenant.account.status()
+    assert status.status == "active" and status.restricted_session is False
+
+
 def test_platform_operators(public: g.GraphRec, ops: g.GraphRec) -> None:
     """D-04: create an operator with the bootstrap token, sign in, act under its own identity."""
     email, password = f"sdk-op-{uuid4().hex[:8]}@example.org", f"Sdk-operator-{uuid4().hex}"

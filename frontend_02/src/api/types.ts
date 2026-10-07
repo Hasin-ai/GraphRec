@@ -539,6 +539,16 @@ export interface RecommendationResult {
   rules_version: number | null;
 }
 
+/** D-13: `GET /v1/tenant/status`. */
+export interface TenantStatus {
+  tenant_id: string;
+  name: string;
+  status: "active" | "suspended" | "deleting" | "deleted" | "pending";
+  message: string;
+  restricted_session: boolean;
+  created_at: string;
+}
+
 /** D-04: `POST /v1/platform/auth/login`. */
 export interface OperatorSession {
   access_token: string;

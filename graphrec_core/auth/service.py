@@ -102,6 +102,11 @@ class LoginIdentity:
     user_role: str
 
 
+#: D-13: tenant states whose members get a status-only session.
+RESTRICTED_TENANT_STATUSES = frozenset({"suspended", "deleting"})
+RESTRICTED_SCOPE = "account:status"
+
+
 class AuthenticationService:
     def __init__(self, session: Session, settings: Settings) -> None:
         self.session = session
@@ -214,8 +219,17 @@ class AuthenticationService:
             # Only identities that could actually sign in take part in the
             # uniqueness check: a pending invitation (no password yet) or a
             # suspended tenant must not make another tenant's login ambiguous.
-            identities = [i for i in self._resolve_identities(request.email)
+            resolved = self._resolve_identities(request.email)
+            identities = [i for i in resolved
                           if i.credential_digest and i.user_status == "active" and i.tenant_status == "active"]
+            if not identities:
+                # D-13: a member of a suspended (or deleting) tenant may sign in to a
+                # restricted session that can only read the tenant's status.
+                held = [i for i in resolved if i.credential_digest and i.user_status == "active"
+                        and i.tenant_status in RESTRICTED_TENANT_STATUSES and i.user_role in ROLE_SCOPES]
+                if len(held) == 1 and verify_password(held[0].credential_digest, request.password):
+                    return self._issue_session(held[0], correlation_id=correlation_id, source=source,
+                                               email=request.email, restricted=True)
             if len(identities) != 1:
                 for identity in identities or [None]:
                     verify_password(
@@ -628,13 +642,14 @@ class AuthenticationService:
         email: str,
         rotated_from_id: UUID | None = None,
         refresh_expires_at: datetime | None = None,
+        restricted: bool = False,
     ) -> AuthTokenPair:
         now = datetime.now(timezone.utc)
         access_expires = now + timedelta(seconds=self.settings.access_token_ttl_seconds)
         # A rotated session keeps the family's absolute expiry: refreshing never
         # extends a sign-in beyond REFRESH_TOKEN_TTL_SECONDS.
         refresh_expires = refresh_expires_at or now + timedelta(seconds=self.settings.refresh_token_ttl_seconds)
-        scopes = list(ROLE_SCOPES[identity.user_role])
+        scopes = [RESTRICTED_SCOPE] if restricted else list(ROLE_SCOPES[identity.user_role])
         refresh_token = secrets.token_urlsafe(48)
         refresh_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
         set_local_tenant(self.session, identity.tenant_id)
@@ -649,6 +664,7 @@ class AuthenticationService:
                 "role": identity.user_role,
                 "av": auth_epoch,
                 "scopes": scopes,
+                **({"restricted": True} if restricted else {}),
                 "iat": now,
                 "exp": access_expires,
                 "jti": str(uuid4()),

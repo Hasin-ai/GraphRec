@@ -51,6 +51,7 @@ import type {
   OperatorSession,
   PlatformOperator,
   PlatformMe,
+  TenantStatus,
 } from "./types";
 
 const enc = encodeURIComponent;
@@ -66,6 +67,10 @@ function withReason(reason?: string): { json?: { reason: string } } {
   const trimmed = reason?.trim();
   return trimmed ? { json: { reason: trimmed } } : {};
 }
+
+export const tenantStatus = {
+  get: () => request<TenantStatus>("/v1/tenant/status"),
+};
 
 export const meta = {
   get: () => request<ProductMeta>("/v1/meta", { realm: "public" }),

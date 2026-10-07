@@ -9,6 +9,7 @@ import { LandingPage } from "./pages/marketing/LandingPage";
 import { PricingPage } from "./pages/marketing/PricingPage";
 import { PlatformAuditPage, PlatformStatusPage } from "./pages/platform/StatusAuditPages";
 import { PlatformOperatorsPage } from "./pages/platform/OperatorsPage";
+import { TenantStatusPage } from "./pages/tenant/TenantStatusPage";
 import { PlatformPlanPage, PlatformPlansPage, PlatformTenantPage, PlatformTenantsPage } from "./pages/platform/TenantPages";
 import { AdminLoginPage } from "./pages/public/AdminLoginPage";
 import { LoginPage } from "./pages/public/LoginPage";
@@ -69,6 +70,7 @@ export function AppRoutes() {
         <Route element={<TenantLayout />}>
           <Route path="/home" element={<HomePage />} />
           <Route path="/account" element={<AccountPage />} />
+          <Route path="/account/tenant-status" element={<TenantStatusPage />} />
           <Route path="/users" element={scoped("users:write", <UsersPage />)} />
           <Route path="/integration" element={<IntegrationPage />} />
           <Route path="/credentials" element={scoped("keys:write", <CredentialsPage />)} />

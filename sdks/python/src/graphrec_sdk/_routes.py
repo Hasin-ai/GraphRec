@@ -144,6 +144,7 @@ ROUTES: Dict[str, Route] = dict(
         _r(Route("recommendation_policy.get", "GET", "/v1/recommendation-policy", scope="models:read", scope_enforced=True, idempotent=True)),
         _r(Route("recommendation_policy.update", "PUT", "/v1/recommendation-policy", scope="models:deploy", scope_enforced=True, idempotent=True, body="json")),
         # -- platform administration (PLATFORM_ADMIN_TOKEN bearer) -------------------------
+        _r(Route("account.status", "GET", "/v1/tenant/status", auth="bearer", idempotent=True)),
         _r(Route("operators.login", "POST", "/v1/platform/auth/login", auth="none", body="json")),
         _r(Route("operators.me", "GET", "/v1/platform/me", auth="bearer", scope="platform:admin", idempotent=True)),
         _r(Route("operators.list", "GET", "/v1/platform/operators", auth="bearer", scope="platform:admin", idempotent=True)),
