@@ -28,7 +28,7 @@ tenant and suspends it at the end. Screenshots of every screen land in
 
 ```bash
 docker compose up -d --build          # stack on :5180 / :8010, PLATFORM_ADMIN_TOKEN set in .env
-cd frontend_02 && npx playwright install chromium && npm run e2e
+cd web && npx playwright install chromium && npm run e2e
 ```
 
 The suite carries one browser page through all steps because the API rate

@@ -25,19 +25,19 @@ Reviewed against `GraphRec_Complete_SRS.md`, verified September 20, 2026. This r
 
 | Area | Test/evidence | Result recorded so far |
 |---|---|---|
-| Frontend components | `cd frontend_02; npx vitest run` | 52 tests passed |
-| Frontend build | `cd frontend_02; npm run build` | Passed |
+| Frontend components | `cd web; npx vitest run` | 52 tests passed |
+| Frontend build | `cd web; npm run build` | Passed |
 | Backend integration | `python -m pytest tests/integration` | 76 passed, including stale-job retry exhaustion and tenant concurrency limits |
-| Full browser suite | `cd frontend_02; npx playwright test` | 16 passed in 2.6 minutes against the rebuilt Docker frontend and live API |
+| Full browser suite | `cd web; npx playwright test` | 16 passed in 2.6 minutes against the rebuilt Docker frontend and live API |
 | Real model compatibility/integrity | `tests/test_dgsr_serving.py`, `tests/test_movielens_serving.py` | 11 passed with both artifacts explicitly mounted; includes corruption and non-finite-weight rejection |
-| New account roles | `frontend_02/e2e/roles.spec.ts` | Passed with new administrators, developer, API key and two tenants |
-| Real training through UI | `frontend_02/e2e/training.spec.ts` | Passed: queue → completed model → UI activation → personalized API response |
-| Responsive route sweep | `frontend_02/e2e/routes.spec.ts` | Passed; covers both themes and responsive widths |
+| New account roles | `web/e2e/roles.spec.ts` | Passed with new administrators, developer, API key and two tenants |
+| Real training through UI | `web/e2e/training.spec.ts` | Passed: queue → completed model → UI activation → personalized API response |
+| Responsive route sweep | `web/e2e/routes.spec.ts` | Passed; covers both themes and responsive widths |
 | MovieLens API workflow | `scripts/verify_movielens.py` | Final rerun passed, including disabled-product replay rejection |
 
 The MovieLens probe imported 7,951 catalog items and 287 real interactions for three trained shoppers. It verified identified and anonymous recommendations, deterministic ranking, feedback persistence/replay, foreign-tenant denial, disabled-product filtering, and failed activation protection. The final 20 warm sequential requests measured P50 44.1 ms and P95 49.0 ms on the local container network. These numbers are not a concurrent-load certification.
 
-Generated browser evidence is in `frontend_02/e2e-screens/`; probe results and **local dummy-account passwords** are in ignored `tests/e2e/results/`. Do not publish the account file. The platform administrator uses the configured operator token, not a fabricated tenant user with a platform role. Shoppers are event identities, not console accounts.
+Generated browser evidence is in `web/e2e-screens/`; probe results and **local dummy-account passwords** are in ignored `tests/e2e/results/`. Do not publish the account file. The platform administrator uses the configured operator token, not a fabricated tenant user with a platform role. Shoppers are event identities, not console accounts.
 
 ## SRS coverage
 

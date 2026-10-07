@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 
 
 #: Single source of the accepted interaction types. The console's list
-#: (frontend_02/src/api/eventTypes.ts) is checked against this by tests.
+#: (web/src/api/eventTypes.ts) is checked against this by tests.
 EVENT_TYPES = ("view", "click", "add_to_cart", "remove_from_cart", "purchase", "rating", "search", "add_to_wishlist")
 EventType = Literal["view", "click", "add_to_cart", "remove_from_cart", "purchase", "rating", "search", "add_to_wishlist"]
 

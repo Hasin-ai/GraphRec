@@ -5,6 +5,14 @@ All notable changes to GraphRec. Entries reference the anomaly register in
 
 ## Unreleased
 
+### Added (Phase 3)
+- The console moved from `frontend_02/` to `web/` (earlier entries keep the old path).
+- UC-27: administrators change a member's role, lock, unlock or disable them, and resend invitations (`GET`/`PATCH /v1/tenant/users/{id}`, `POST …/invitation:resend`, migration `0037`). Every change ends the member's sessions; the last active administrator and your own account are protected.
+- UC-31: tenants read their own redacted audit trail (`GET /v1/audit`, scope `audit:read`, console page *Audit trail*). Platform operators appear by role, never by identity.
+- UC-29: operators see every tenant's usage against its limits (`GET /v1/platform/usage`, console page *Usage*); unreadable usage shows "Unavailable", never zero.
+- Generated TypeScript types (`web/src/api/schema.gen.ts`, `npm run gen:api`) and a compile-time contract between them and the console's types; CI fails on drift.
+- D-04 operator accounts, D-11 plan-limit semantics and D-13 restricted sessions for suspended tenants (see `docs/DECISIONS.md`).
+
 ### Fixed
 - A-04: `POST /v1/platform/tenants/{id}/plan` has a typed response (`PlatformPlanAssignmentResult`: the stored quota plus `warnings`); the acceptance test now checks both. Platform quota, recovery and status responses are typed in OpenAPI.
 - A-15: every database connection uses `timezone=UTC`, so replayed responses keep identical timestamps whatever the server's TimeZone. Connections also get a statement timeout and configurable pool/connect timeouts (A-22).

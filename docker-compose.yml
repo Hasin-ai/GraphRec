@@ -161,7 +161,7 @@ services:
 
   frontend:
     build:
-      context: ./frontend_02
+      context: ./web
       args:
         # Empty: nginx proxies /v1 to the api service on the same origin.
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
@@ -183,7 +183,7 @@ services:
     working_dir: /app
     command: ["sh", "-c", "npm ci && npm test -- --run && npm run build && npm audit"]
     volumes:
-      - ./frontend_02:/app:ro
+      - ./web:/app:ro
       - /app/node_modules
       - /app/dist
 

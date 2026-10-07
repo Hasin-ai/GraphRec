@@ -18,7 +18,7 @@ def test_version_file_is_the_single_source():
     assert __version__ == version == app.version
     sdk = (ROOT / "sdks/python/src/graphrec_sdk/_version.py").read_text(encoding="utf-8")
     assert re.search(r'__version__ = "([^"]+)"', sdk).group(1) == version
-    for name in ("frontend_02", "web"):
+    for name in ("web", "web"):
         package = ROOT / name / "package.json"
         if package.is_file():
             assert json.loads(package.read_text(encoding="utf-8"))["version"] == version

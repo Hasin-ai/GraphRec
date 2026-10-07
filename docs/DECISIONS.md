@@ -25,9 +25,9 @@ This completes the existing auth model rather than changing it.
 
 Placeholder training (random embeddings served with a zero query vector) and `POST /v1/model-versions` (tenant-asserted metrics) stay available for local development and tests, but `GRAPHREC_ENV=production` refuses them, refuses to activate or serve non-DGSR versions, and the console hides the placeholder option. Fake `rustfs://` URIs became honest `placeholder://` / `unregistered://` markers.
 
-## D-08 Rename `frontend_02/` — Not yet done
+## D-08 Rename `web/` — Not yet done
 
-The rename to `web/` touches Compose, both Dockerfiles, Playwright, READMEs and SDK docs. It is mechanical and will be done as one commit in Phase 3 so that it does not mix with behaviour changes. Until then every reference stays `frontend_02/`.
+The rename to `web/` touches Compose, both Dockerfiles, Playwright, READMEs and SDK docs. It is mechanical and will be done as one commit in Phase 3 so that it does not mix with behaviour changes. Until then every reference stays `web/`.
 
 ## D-14 XR-F-04 brand and seasonality — Decided (2026-10-07)
 
@@ -91,7 +91,7 @@ The cold-start fallback counts interactions in a window (`FALLBACK_POPULARITY_WI
 
 | # | Decision | Recommendation | Why it is waiting |
 |---|---|---|---|
-| D-02 | Source for the public marketing site | Send `frontend_02/LANDING_PAGE_PROMPT.md`. It is not in the repository; the in-progress marketing pages are the only spec today | The file is missing |
+| D-02 | Source for the public marketing site | Send `web/LANDING_PAGE_PROMPT.md`. It is not in the repository; the in-progress marketing pages are the only spec today | The file is missing |
 | D-04 | Operator accounts with roles (`platform`, `plan_management`, `monitoring`, `audit`), argon2 passwords, audit attribution; `PLATFORM_ADMIN_TOKEN` kept only to create the first operator | Approve | Changes the auth model |
 | D-05 | Email delivery: SMTP through stdlib `smtplib` plus a development outbox; self-service password recovery | Approve | Adds an outbound integration and changes the recovery flow |
 | D-07 | Defer real per-tenant serving replicas; keep logical per-tenant slot capacity (now labelled in the UI) | Approve the deferral | Deferring an SRS requirement (XR-F-08) |

@@ -147,10 +147,10 @@ one-time token.
 
 ## Operator console
 
-`frontend_02/` is the operator console (React 19, Vite, TypeScript) built from
-the Modernist design prototype kept under `frontend_02/design/`. It talks to
+`web/` is the operator console (React 19, Vite, TypeScript) built from
+the Modernist design prototype kept under `web/design/`. It talks to
 the API through the nginx `/v1/` proxy in Compose, or the Vite dev proxy
-locally. See `frontend_02/README.md` for the route map, which prototype
+locally. See `web/README.md` for the route map, which prototype
 screens are not backed by the API, and how to run it against a bare uvicorn.
 
 - Tenant realm: `/login`, `/register`, `/setup`, then `/home`, `/credentials`,
@@ -279,7 +279,7 @@ configurable in `.env`.
 For frontend development without rebuilding the image:
 
 ```bash
-cd frontend_02
+cd web
 npm install
 npm run dev        # http://localhost:5173, proxies /v1 to http://localhost:8010
 ```
@@ -289,10 +289,10 @@ npm run dev        # http://localhost:5173, proxies /v1 to http://localhost:8010
 ```bash
 docker compose --profile test run --rm api-test       # backend unit + integration
 docker compose --profile test run --rm frontend-test  # console unit tests, build, npm audit
-cd frontend_02 && E2E_BASE_URL=http://localhost:5180 npx playwright test   # browser suite
+cd web && E2E_BASE_URL=http://localhost:5180 npx playwright test   # browser suite
 ```
 
-Or, for the console alone: `cd frontend_02 && npm test -- --run && npm run build`.
+Or, for the console alone: `cd web && npm test -- --run && npm run build`.
 
 `GraphRec_Complete_SRS.md` is the in-repo specification. Integration tests
 require the Compose PostgreSQL database; the unit tests run without it.

@@ -1,10 +1,10 @@
 # GraphRec console: UI/UX audit and redesign
 
-*Audited Oct 3, 2026 · frontend `frontend_02` · data: the live `beauty` tenant (real API responses captured from the signed-in console, read-only)*
+*Audited Oct 3, 2026 · frontend `web` · data: the live `beauty` tenant (real API responses captured from the signed-in console, read-only)*
 
 ## How this audit was made
 
-- **Source:** the current working tree of `frontend_02/src`. The app on `:5180` is served by the Docker nginx image and only picks up source changes after a rebuild, so each build was rendered locally and served the real tenant's API responses (fixture: `docs/ui-audit/fixture.mjs`).
+- **Source:** the current working tree of `web/src`. The app on `:5180` is served by the Docker nginx image and only picks up source changes after a rebuild, so each build was rendered locally and served the real tenant's API responses (fixture: `docs/ui-audit/fixture.mjs`).
 - **Configurations:** every page in four of them: desktop 1440 px and mobile 390 px, each in light and dark. Full-page screenshots.
 - **Extra states:** the mobile navigation drawer, plus empty states (no products, no models, nothing deployed), error states (API returns 503) and loading states (API never answers).
 - **Screenshots:** `docs/ui-audit/docs/ui-audit/before/<page>--<config>.png` and `docs/ui-audit/after/<page>--<config>.png`. The `<config>` values are `desktop-light`, `desktop-dark`, `mobile-light`, `mobile-dark` and `mobile-nav`.

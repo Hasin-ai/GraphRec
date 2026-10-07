@@ -11,7 +11,7 @@ Requirements source: `docs/Complete_SRS.pdf` and the user's implementation brief
 
 ## 1. Repository analysis
 
-The tenant console is React 19, TypeScript, React Router 7 and Vite in `frontend_02`. Its central HTTP client and wire types are `src/api/index.ts` and `src/api/types.ts`; session hooks and route guards limit visible actions by server scopes. `apps/demo-storefront` is a separate tenant application that calls GraphRec through the Python SDK. Shoppers do not authenticate to the administration console.
+The tenant console is React 19, TypeScript, React Router 7 and Vite in `web`. Its central HTTP client and wire types are `src/api/index.ts` and `src/api/types.ts`; session hooks and route guards limit visible actions by server scopes. `apps/demo-storefront` is a separate tenant application that calls GraphRec through the Python SDK. Shoppers do not authenticate to the administration console.
 
 FastAPI in `apps/api` exposes `/v1` routes. Domain logic lives in `graphrec_core`; SQLAlchemy 2 uses PostgreSQL 17, and Alembic migrations `0001`–`0026` own schema changes. JWT/API-key principals derive tenant identity, and PostgreSQL RLS plus application predicates restrict tenant data. Platform operators use a separate credential. API errors carry a correlation ID in one envelope.
 
@@ -37,8 +37,8 @@ Each path below identifies a changed file and its purpose. Related paths share a
 | File(s) | Purpose |
 | --- | --- |
 | `.env.example`, `docker-compose.yml`, `graphrec_core/settings.py` | Configure and pass the training cooldown to API and worker. |
-| `frontend_02/nginx.conf` | Resolve the API address through Docker DNS when containers are recreated. |
-| `frontend_02/e2e/console.spec.ts`, `e2e/lifecycle.spec.ts`, `e2e/roles.spec.ts` | Assert current deployment wording and rollback protection; honor registration retry timing in repeated runs. |
+| `web/nginx.conf` | Resolve the API address through Docker DNS when containers are recreated. |
+| `web/e2e/console.spec.ts`, `e2e/lifecycle.spec.ts`, `e2e/roles.spec.ts` | Assert current deployment wording and rollback protection; honor registration retry timing in repeated runs. |
 | `.gitignore` | Track the two SRS deliverables while ignoring other generated docs. |
 | `docs/srs-implementation-matrix.md`, `docs/srs-implementation-report.md` | Record traceability, architecture, evidence and limits. |
 | `migrations/versions/0020_platform_plan_edit.py` | Allow bounded operator plan updates. |
@@ -57,13 +57,13 @@ Each path below identifies a changed file and its purpose. Related paths share a
 | `graphrec_core/schemas/deployment.py`, `apps/api/routes/deployment.py` | Expose persisted desired/active/readiness state. |
 | `graphrec_core/schemas/recommendations.py`, `apps/api/routes/recommendations.py`, `graphrec_core/feedback.py` | Request context/fallback controls, ranked-row persistence and result-linked feedback. |
 | `graphrec_core/usage/service.py`, `apps/api/routes/platform.py` | Shared aggregate tenant usage, plan editing, recovery issuance and platform deployment counts. |
-| `frontend_02/src/api/client.ts`, `client.test.ts`, `index.ts`, `types.ts` | Error presentation plus typed routes and DTOs for added workflows. |
-| `frontend_02/src/pages/public/RecoverPage.tsx` | Redeem an operator-issued one-time recovery token. |
-| `frontend_02/src/pages/platform/TenantPages.tsx`, `StatusAuditPages.tsx` | Plan edit, recovery issue, tenant usage and deployment counts. |
-| `frontend_02/src/pages/tenant/ProductSyncPage.tsx`, `EventsPage.tsx`, `SubmissionPage.tsx` | Durable sync/batch history and per-item outcomes. |
-| `frontend_02/src/pages/tenant/TrainingPages.tsx`, `ModelsPages.tsx` | Single-job polling, cooldown, readiness and rollback protection. |
-| `frontend_02/src/pages/tenant/IntegrationPage.tsx`, `ServiceStatusPage.tsx` | Show actual request controls and deployment state. |
-| `frontend_02/src/pages/tenant/Operations.test.tsx` | Verify operational route/state behavior. |
+| `web/src/api/client.ts`, `client.test.ts`, `index.ts`, `types.ts` | Error presentation plus typed routes and DTOs for added workflows. |
+| `web/src/pages/public/RecoverPage.tsx` | Redeem an operator-issued one-time recovery token. |
+| `web/src/pages/platform/TenantPages.tsx`, `StatusAuditPages.tsx` | Plan edit, recovery issue, tenant usage and deployment counts. |
+| `web/src/pages/tenant/ProductSyncPage.tsx`, `EventsPage.tsx`, `SubmissionPage.tsx` | Durable sync/batch history and per-item outcomes. |
+| `web/src/pages/tenant/TrainingPages.tsx`, `ModelsPages.tsx` | Single-job polling, cooldown, readiness and rollback protection. |
+| `web/src/pages/tenant/IntegrationPage.tsx`, `ServiceStatusPage.tsx` | Show actual request controls and deployment state. |
+| `web/src/pages/tenant/Operations.test.tsx` | Verify operational route/state behavior. |
 | `sdks/python/src/graphrec_sdk/_routes.py` | Register added route contract. |
 | `sdks/python/src/graphrec_sdk/models/__init__.py`, `models/catalog.py`, `models/events.py`, `models/ml.py`, `models/platform.py`, `models/serving.py` | Typed sync, batch, training, deployment and platform responses; preserve aggregated outcomes. |
 | `sdks/python/src/graphrec_sdk/resources/events.py`, `resources/ml.py`, `resources/platform.py`, `resources/products.py`, `resources/recommendations.py`, `resources/tenants.py` | Expose new read/write operations and request controls. |
@@ -142,7 +142,7 @@ Commands ran at the repository root unless noted. Compose applied migration `002
 | Python SDK: `docker compose run --rm --no-deps -e PYTHONPATH=/app/sdks/python/src -v 'C:\Users\ASUS\Documents\GraphRec\sdks\python:/app/sdks/python:ro' api python -m pytest -q -p no:cacheprovider /app/sdks/python/tests` | Passed. |
 | From `sdks/typescript`: `node ./node_modules/typescript/bin/tsc -p tsconfig.json --noEmit` and `node ./node_modules/vitest/vitest.mjs run` | Type check passed; 283 tests passed. |
 | `docker compose run --rm --no-deps frontend-test sh -c 'npm ci && npm test -- --run'` | 53 passed. |
-| From `frontend_02`: `node ./node_modules/@playwright/test/cli.js test` | 16 passed after `0026`, including role isolation, protected rollback/archive and real DGSR training. The training journey also passed after API recreation without restarting nginx. |
+| From `web`: `node ./node_modules/@playwright/test/cli.js test` | 16 passed after `0026`, including role isolation, protected rollback/archive and real DGSR training. The training journey also passed after API recreation without restarting nginx. |
 
 The 11 skipped backend tests require separately supplied prepared artifacts. Browser and integration tests exercise the local worker, but do not prove concurrent P95 or abrupt worker recovery. Python and TypeScript SDK tests were rerun after their aggregate-result correction; their route contracts did not change with migration `0026`.
 
@@ -154,4 +154,4 @@ The matrix marks UC-17, 18, 21, 22, 26, 30 and 31 as partial. There is no fresh 
 
 From the repository root in PowerShell, configure `.env` using `.env.example` and distinct database, JWT, API-key, audit and platform secrets. Start the stack with `docker compose up -d --build postgres qdrant migrate api worker frontend`. Migration exits after upgrade. The API is at `http://localhost:8010`, frontend at `http://localhost:5180`, and Qdrant at `http://localhost:6333` unless port overrides are set. Use `docker compose ps` for health and `docker compose logs -f api worker` for backend activity. The worker is required for real training; restart it with `docker compose up -d worker` if stopped.
 
-Run backend tests with `docker compose exec -T api python -m pytest -q`; frontend tests with the Compose command in section 11; TypeScript SDK checks from `sdks/typescript` after `npm ci` if needed; and browser tests from `frontend_02` while Compose is running. The Python SDK command bind-mounts its source because it is not copied into the API image. Prepared-artifact tests require compatible artifacts under `MODEL_ARTIFACT_DIR`.
+Run backend tests with `docker compose exec -T api python -m pytest -q`; frontend tests with the Compose command in section 11; TypeScript SDK checks from `sdks/typescript` after `npm ci` if needed; and browser tests from `web` while Compose is running. The Python SDK command bind-mounts its source because it is not copied into the API image. Prepared-artifact tests require compatible artifacts under `MODEL_ARTIFACT_DIR`.

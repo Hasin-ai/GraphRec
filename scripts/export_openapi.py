@@ -4,8 +4,8 @@ The FastAPI schema is the single source of truth for the HTTP contract. The web
 console's wire types are generated from the committed copy, so CI fails when the
 API changes without regenerating it:
 
-    python scripts/export_openapi.py frontend_02/openapi.json           # write
-    python scripts/export_openapi.py --check frontend_02/openapi.json   # CI gate
+    python scripts/export_openapi.py web/openapi.json           # write
+    python scripts/export_openapi.py --check web/openapi.json   # CI gate
 """
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ def main() -> int:
     if args.check:
         if not args.path.is_file() or args.path.read_text(encoding="utf-8") != current:
             print(f"{args.path} is out of date. Run: python scripts/export_openapi.py {args.path} "
-                  "and regenerate the web types (npm run gen:api in frontend_02).", file=sys.stderr)
+                  "and regenerate the web types (npm run gen:api in web).", file=sys.stderr)
             return 1
         print(f"{args.path} matches the API schema.")
         return 0

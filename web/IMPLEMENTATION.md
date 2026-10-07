@@ -1,6 +1,6 @@
 # GraphRec frontend implementation report
 
-September 19, 2026. Scope: the existing GraphRec console in `frontend_02`, including public, tenant and platform experiences. The separate demo storefront was not redesigned. Existing backend, SDK and other uncommitted work was preserved.
+September 19, 2026. Scope: the existing GraphRec console in `web`, including public, tenant and platform experiences. The separate demo storefront was not redesigned. Existing backend, SDK and other uncommitted work was preserved.
 
 The prior route inventory, API map, screenshot evidence and severity-ranked findings are in [AUDIT.md](AUDIT.md). This work improves the complete console rather than reproducing the supplied example. It does **not** certify the backend or overall platform as production-ready.
 
@@ -139,7 +139,7 @@ API examples remain clearly labelled examples. Unit fixtures remain isolated to 
 
 ## P. Verification commands
 
-Run in `frontend_02` with the existing local API stack available on port 8010:
+Run in `web` with the existing local API stack available on port 8010:
 
 ```powershell
 npm run dev -- --host 127.0.0.1
