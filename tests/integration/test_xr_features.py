@@ -223,3 +223,62 @@ def test_capacity_scales_with_load_is_observable_and_isolated(client, monkeypatc
     assert client.get('/v1/deployment/scaling', headers=dev).status_code == 403   # no deployments:read
     foreign = client.get('/v1/deployment/scaling', headers=other).json()
     assert foreign['managed'] is False and foreign['events'] == []
+
+
+# ---- XR-NF-03: scheduled retraining goes through the same gates as manual training --
+def _due_schedule(client, admin, tenant):
+    body = {'schedule_enabled': True, 'interval_minutes': get_settings().retraining_min_interval_minutes,
+            'event_trigger_enabled': False, 'event_threshold': 1000, 'epochs': 1}
+    assert client.put('/v1/retraining-policy', json=body, headers=admin).status_code == 200
+    tid = UUID(tenant)
+    with SessionLocal() as db, db.begin():
+        set_local_tenant(db, tid)
+        db.execute(update(RetrainingPolicy).where(RetrainingPolicy.tenant_id == tid)
+                   .values(next_run_at=datetime.now(timezone.utc) - timedelta(seconds=5)))
+    return tid
+
+
+def _jobs(tid):
+    with SessionLocal() as db, db.begin():
+        set_local_tenant(db, tid)
+        return db.scalar(select(func.count(TrainingJob.id)).where(TrainingJob.tenant_id == tid))
+
+
+def test_xr_nf_03_scheduled_retraining_respects_the_training_cooldown(client, monkeypatch):
+    monkeypatch.setattr(get_settings(), 'training_cooldown_seconds', 3600)
+    tenant, admin = provision(client)
+    operator(client, tenant, training_jobs=5)
+    seed_trainable(client, admin)
+    tid = UUID(tenant)
+    with SessionLocal() as db, db.begin():  # a DGSR job finished a moment ago
+        set_local_tenant(db, tid)
+        now = datetime.now(timezone.utc)
+        db.add(TrainingJob(id=uuid4(), tenant_id=tid, model_type='dgsr', status='succeeded', configuration={},
+                           created_at=now - timedelta(minutes=2), completed_at=now - timedelta(seconds=30)))
+    _due_schedule(client, admin, tenant)
+    before = _jobs(tid)
+    with SessionLocal() as db:
+        set_local_tenant(db, tid)
+        decision = RetrainingService(db).evaluate(tid)
+    assert decision.trigger is None and decision.reason == 'training_cooldown'
+    assert _jobs(tid) == before
+    policy = client.get('/v1/retraining-policy', headers=admin).json()
+    assert policy['last_outcome'] == 'blocked:training_cooldown'
+    # The missed slot is skipped, not retried on every tick.
+    assert datetime.fromisoformat(policy['next_run_at']) > datetime.now(timezone.utc)
+    audit = client.get('/v1/audit', params={'action': 'retraining_triggered'}, headers=admin).json()['items']
+    assert audit and audit[0]['outcome'] == 'failed'
+
+
+def test_xr_nf_03_scheduled_retraining_respects_the_plan_training_quota(client, monkeypatch):
+    monkeypatch.setattr(get_settings(), 'training_cooldown_seconds', 0)
+    tenant, admin = provision(client)
+    operator(client, tenant, training_jobs=0)
+    seed_trainable(client, admin)
+    tid = _due_schedule(client, admin, tenant)
+    with SessionLocal() as db:
+        set_local_tenant(db, tid)
+        decision = RetrainingService(db).evaluate(tid)
+    assert decision.trigger is None and decision.reason == 'quota_exceeded'
+    assert _jobs(tid) == 0
+    assert client.get('/v1/retraining-policy', headers=admin).json()['last_outcome'] == 'blocked:quota_exceeded'
