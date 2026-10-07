@@ -188,6 +188,11 @@ class GraphRec:
 
         return cast(Dict[str, Any], self._api.request("health.ready", cast_to=Dict[str, Any]))
 
+    def plans(self) -> Dict[str, Any]:
+        """``GET /v1/plans`` - active plans and their current limits (public)."""
+
+        return cast(Dict[str, Any], self._api.request("meta.plans", cast_to=Dict[str, Any]))
+
     def meta(self) -> Dict[str, Any]:
         """``GET /v1/meta`` - product version (shared by API, console and SDK) and environment."""
 
@@ -312,6 +317,11 @@ class AsyncGraphRec:
         """Async variant of :meth:`GraphRec.ready`."""
 
         return cast(Dict[str, Any], await self._api.request("health.ready", cast_to=Dict[str, Any]))
+
+    async def plans(self) -> Dict[str, Any]:
+        """Async variant of :meth:`GraphRec.plans`."""
+
+        return cast(Dict[str, Any], await self._api.request("meta.plans", cast_to=Dict[str, Any]))
 
     async def meta(self) -> Dict[str, Any]:
         """Async variant of :meth:`GraphRec.meta`."""

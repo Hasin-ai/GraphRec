@@ -73,6 +73,13 @@ CASES: List[Case] = [
         check=lambda r: r["status"] == "ready",
     ),
     Case(
+        "meta.plans",
+        "/v1/plans",
+        {"items": [{"code": "free", "name": "Free", "limits": {"stored_products": 5000}}]},
+        lambda c: c.plans(),
+        check=lambda r: r["items"][0]["code"] == "free",
+    ),
+    Case(
         "meta.get",
         "/v1/meta",
         {"product": "GraphRec", "version": "1.1.0", "environment": "development",

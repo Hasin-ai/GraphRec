@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useSession } from "../../hooks/useSession";
-import { LIMIT_KEYS, MONTHLY_LIMITS, PLANS, formatLimit, limitLabel, type MarketingPlan } from "../../marketing/plans";
+import { LIMIT_KEYS, MONTHLY_LIMITS, formatLimit, limitLabel, type MarketingPlan } from "../../marketing/plans";
+import { useLivePlans } from "../../marketing/useLivePlans";
 import { useDocumentTitle } from "../../marketing/useDocumentTitle";
 
 const CARD_LIMITS = ["accepted_events", "recommendation_requests", "stored_products", "training_jobs", "active_model_versions"] as const;
@@ -31,10 +32,11 @@ const FAQ: { q: string; a: string }[] = [
     a: "No. Plans carry no prices, and GraphRec has no checkout and collects no payments. Plans set capacity only." },
 ];
 
-/** `/pricing`: always reachable, signed in or not. Numbers come from `marketing/plans.ts`. */
+/** `/pricing`: always reachable, signed in or not. Limits are read live from `GET /v1/plans`. */
 export function PricingPage() {
   useDocumentTitle("Pricing · GraphRec");
   const { tenant } = useSession();
+  const { plans, live } = useLivePlans();
   return <>
     <section className="mkt-page-head" aria-labelledby="pricing-title">
       <div className="mkt-container">
@@ -47,8 +49,9 @@ export function PricingPage() {
     <section className="mkt-section mkt-section-tight" aria-labelledby="plans-title">
       <div className="mkt-container">
         <h2 id="plans-title" className="sr-only">Plans</h2>
+        {live ? null : <p className="mkt-plan-note" role="status">Showing the default plan limits. Your operator may have changed them.</p>}
         <ul className="mkt-plans">
-          {PLANS.map(plan => <li key={plan.code} className={`mkt-card mkt-plan${plan.code === "basic" ? " is-marked" : ""}`}>
+          {plans.map(plan => <li key={plan.code} className={`mkt-card mkt-plan${plan.code === "basic" ? " is-marked" : ""}`}>
             <div className="mkt-plan-head">
               <h3>{plan.name}</h3>
               {plan.code === "basic" ? <span className="tag mkt-tag">Room to grow</span> : null}
@@ -76,12 +79,12 @@ export function PricingPage() {
           <table className="mkt-compare">
             <caption id="compare-caption">Seeded plan limits. A platform operator can change them at runtime.</caption>
             <thead>
-              <tr><th scope="col">Limit</th>{PLANS.map(plan => <th key={plan.code} scope="col" className="num">{plan.name}</th>)}</tr>
+              <tr><th scope="col">Limit</th>{plans.map(plan => <th key={plan.code} scope="col" className="num">{plan.name}</th>)}</tr>
             </thead>
             <tbody>
               {LIMIT_KEYS.map(key => <tr key={key}>
                 <th scope="row">{limitLabel(key)}{MONTHLY_LIMITS.has(key) ? <span className="mkt-unit">per calendar month</span> : null}</th>
-                {PLANS.map(plan => <td key={plan.code} className="num">{formatLimit(key, plan.limits[key])}</td>)}
+                {plans.map(plan => <td key={plan.code} className="num">{formatLimit(key, plan.limits[key])}</td>)}
               </tr>)}
             </tbody>
           </table>

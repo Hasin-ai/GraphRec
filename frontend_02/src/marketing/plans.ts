@@ -7,10 +7,11 @@
  *   - migrations/versions/0012_basic_pro_plans.py       (Basic, Pro)
  *   - migrations/versions/0031_free_plan_serving_limits.py (Free serving limits: 8 concurrent, 120 rpm, 1 replica)
  *
- * A platform operator can edit plans at runtime (/admin/plans), so these
- * numbers are the seeded defaults, not a live read. There is no public plans
- * endpoint (GET /v1/platform/plans needs the operator token). Plans carry no
- * prices; every tenant starts on Free and only an operator assigns Basic or Pro.
+ * A platform operator can edit plans at runtime (/admin/plans). Pages read the
+ * live limits from the public `GET /v1/plans` through `useLivePlans()`; these
+ * seeded values are shown only while that read is pending or unavailable, and
+ * the pages say so (A-25). Plans carry no prices; every tenant starts on Free
+ * and only an operator assigns Basic or Pro.
  */
 import { fmtBytes, fmtNumber } from "../lib/format";
 import { humanizeKey } from "../lib/labels";
@@ -121,4 +122,16 @@ export function limitLabel(key: LimitKey): string {
 /** "50,000", "1.0 GB": the console's own number and byte formatters. */
 export function formatLimit(key: LimitKey, value: number): string {
   return key === "artifact_storage_bytes" ? fmtBytes(value) : fmtNumber(value);
+}
+
+
+/** Plans with the operator's current limits merged in, and whether they are live. */
+export function mergeLivePlans(live: { code: string; name: string; limits: Record<string, number> }[] | null): { plans: MarketingPlan[]; live: boolean } {
+  if (!live) return { plans: PLANS, live: false };
+  const byCode = new Map(live.map(plan => [plan.code, plan]));
+  const plans = PLANS.filter(plan => byCode.has(plan.code)).map(plan => {
+    const current = byCode.get(plan.code)!;
+    return { ...plan, name: current.name, limits: { ...plan.limits, ...current.limits } as Record<LimitKey, number> };
+  });
+  return { plans, live: true };
 }

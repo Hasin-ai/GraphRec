@@ -132,6 +132,7 @@ def test_health(public: g.GraphRec) -> None:
     assert public.health()["status"] in {"ok", "healthy"}
     assert public.meta()["version"] == g.__version__
     assert public.ready()["checks"]["database"]["status"] == "ok"
+    assert {plan["code"] for plan in public.plans()["items"]} >= {"free", "basic", "pro"}
 
 
 def test_catalog_lifecycle(shop: Tenant) -> None:

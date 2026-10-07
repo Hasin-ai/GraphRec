@@ -485,5 +485,5 @@ def _namespace_route_keys() -> Set[str]:
 
 
 def test_every_route_is_reachable_from_a_namespace() -> None:
-    reachable = _namespace_route_keys() | {"health.check", "health.ready", "meta.get"}
+    reachable = _namespace_route_keys() | {"health.check", "health.ready", "meta.get", "meta.plans"}
     assert set(g.ROUTES) - reachable == set()

@@ -47,12 +47,14 @@ import type {
   ScalingStatus,
   RecommendationResult,
   ProductMeta,
+  PublicPlan,
 } from "./types";
 
 const enc = encodeURIComponent;
 
 export const meta = {
   get: () => request<ProductMeta>("/v1/meta", { realm: "public" }),
+  plans: () => request<{ items: PublicPlan[] }>("/v1/plans", { realm: "public" }),
 };
 
 export const tenantUsers = {

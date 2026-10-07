@@ -537,3 +537,10 @@ export interface ProductMeta {
   environment: "development" | "production";
   features: { development_placeholders: boolean };
 }
+
+/** `GET /v1/plans`: active plans and their current limits (public). */
+export interface PublicPlan {
+  code: string;
+  name: string;
+  limits: Record<string, number>;
+}
