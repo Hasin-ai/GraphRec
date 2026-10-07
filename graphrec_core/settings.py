@@ -10,6 +10,13 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     database_url: str = "postgresql+psycopg://graphrec_app:graphrec_app_local_only@localhost:5432/graphrec"
+    # Connection pool sized for uvicorn's 40-thread sync pool per process.
+    db_pool_size: int = Field(default=10, ge=1, le=200)
+    db_max_overflow: int = Field(default=20, ge=0, le=400)
+    db_pool_timeout_seconds: int = Field(default=10, ge=1, le=120)
+    db_connect_timeout_seconds: int = Field(default=5, ge=1, le=60)
+    # Applied to every connection; the worker's long snapshot reads stay well below it.
+    db_statement_timeout_ms: int = Field(default=30_000, ge=100, le=3_600_000)
     audit_hash_secret: str = Field(default="local-development-only", min_length=16)
     jwt_signing_secret: str = Field(default="local-jwt-development-secret-change-me", min_length=32)
     access_token_ttl_seconds: int = Field(default=900, ge=60, le=3_600)
