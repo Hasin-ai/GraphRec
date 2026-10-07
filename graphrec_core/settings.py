@@ -82,6 +82,8 @@ class Settings(BaseSettings):
     qdrant_collection_prefix: str = Field(default="graphrec")
     qdrant_embedding_dim: int = Field(default=128, ge=16, le=4096)
     qdrant_top_k: int = Field(default=100, ge=1, le=1000)
+    # Bound on every Qdrant call; serving falls back to in-process scoring on timeout.
+    qdrant_timeout_seconds: float = Field(default=5.0, ge=0.1, le=60)
 
     # DGSR model artifacts. A training job with ``configuration.pretrained_artifact``
     # imports ``<model_artifact_root>/<name>/`` (best.pt, config.json, id_maps.json,

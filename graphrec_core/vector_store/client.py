@@ -27,4 +27,4 @@ def get_qdrant_client() -> QdrantClient:
     url = settings.qdrant_url
     # qdrant-client accepts grpc:// and http:// URLs; extract host and port.
     # For gRPC URLs like "http://qdrant:6334" prefer_grpc=True enables gRPC.
-    return QdrantClient(url=url, prefer_grpc=True, timeout=10.0)
+    return QdrantClient(url=url, prefer_grpc=True, timeout=settings.qdrant_timeout_seconds)
