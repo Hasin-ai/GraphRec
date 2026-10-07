@@ -17,6 +17,7 @@ from graphrec_core.database.models import (
     UsageEvent,
     Product,
     ModelVersion,
+    ModelDeployment,
 )
 from graphrec_core.database.tenancy import set_local_tenant
 from graphrec_core.errors import ApiError
@@ -35,6 +36,12 @@ DIMENSIONS: tuple[tuple[str, str | None, str], ...] = (
     ("inference_replicas", "maximum_inference_replicas", "count"),
     ("replica_runtime_minutes", None, "minutes"),
 )
+
+
+#: Dimensions defined by the SRS that nothing records yet. Real per-tenant replica
+#: runtime needs real serving instances (decision D-07), so it is reported as not
+#: measured instead of a nominal zero (NR-F-15).
+UNMEASURED = frozenset({"replica_runtime_minutes"})
 
 
 class UsageService:
@@ -109,6 +116,9 @@ class UsageService:
             totals["stored_products"] = Decimal(self.session.scalar(select(func.count(Product.id)).where(Product.tenant_id == tenant_id)) or 0)
             totals["active_model_versions"] = Decimal(self.session.scalar(select(func.count(ModelVersion.id)).where(ModelVersion.tenant_id == tenant_id, ModelVersion.status == "active")) or 0)
             totals["artifact_storage_bytes"] = Decimal(artifact_storage_used(self.session, tenant_id))
+            # Ready serving units right now (XR-F-08 logical capacity), not a ledger sum.
+            totals["inference_replicas"] = Decimal(self.session.scalar(select(ModelDeployment.ready_capacity).where(
+                ModelDeployment.tenant_id == tenant_id, ModelDeployment.active_model_version_id.is_not(None))) or 0)
             reconciled_at = datetime.now(timezone.utc)
             dimensions = [
                 self._dimension(
@@ -117,6 +127,7 @@ class UsageService:
                     unit=unit,
                     used=totals.get(usage_type, Decimal(0)),
                     effective_limits=limits,
+                    measured=usage_type not in UNMEASURED,
                 )
                 for usage_type, limit_key, unit in DIMENSIONS
             ]
@@ -163,6 +174,7 @@ class UsageService:
         unit: str,
         used: Decimal,
         effective_limits: dict[str, int],
+        measured: bool = True,
     ) -> UsageDimension:
         limit = effective_limits.get(limit_key) if limit_key is not None else None
         remaining = None if limit is None else max(Decimal(limit) - used, Decimal(0))
@@ -174,6 +186,7 @@ class UsageService:
                 UsageService._public_number(remaining) if remaining is not None else None
             ),
             unit=unit,
+            measured=measured,
         )
 
     @staticmethod

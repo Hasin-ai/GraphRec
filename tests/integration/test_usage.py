@@ -223,6 +223,7 @@ def test_durable_ledger_reconciles_used_remaining_and_informational_values(
         "limit": 50_000,
         "remaining": 49_875,
         "unit": "count",
+        "measured": True,
     }
     assert dimensions["training_cpu_seconds"]["used"] == 12.5
     assert dimensions["training_cpu_seconds"]["limit"] is None
@@ -342,3 +343,15 @@ def test_usage_read_limit_returns_retry_guidance(client: TestClient) -> None:
     assert limited.json()["error"]["code"] == "rate_limit_exceeded"
     assert limited.json()["error"]["retryable"] is True
     assert int(limited.headers["retry-after"]) >= 1
+
+
+def test_nr_f_15_unmeasured_dimensions_are_flagged_and_replicas_reflect_serving(client):
+    """A measurement GraphRec does not take is flagged, never shown as a zero."""
+    from tests.integration.test_srs_acceptance import provision
+
+    _, headers = provision(client)
+    body = client.get("/v1/usage", headers=headers).json()
+    by_type = {d["type"]: d for d in body["dimensions"]}
+    assert by_type["replica_runtime_minutes"]["measured"] is False
+    assert all(d["measured"] for t, d in by_type.items() if t != "replica_runtime_minutes")
+    assert by_type["inference_replicas"]["used"] == 0  # nothing active yet

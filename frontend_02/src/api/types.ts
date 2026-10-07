@@ -170,6 +170,8 @@ export interface UsageDimension {
   limit: number | null;
   remaining: number | null;
   unit: "count" | "seconds" | "bytes" | "minutes";
+  /** False when GraphRec does not measure this dimension yet (show "Not measured", never 0). */
+  measured?: boolean;
 }
 
 export interface UsageSummaryResult {

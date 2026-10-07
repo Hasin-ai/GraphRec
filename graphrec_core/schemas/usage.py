@@ -28,6 +28,9 @@ class UsageDimension(BaseModel):
     limit: int | None
     remaining: UsageNumber | None
     unit: UsageUnit
+    #: NR-F-15: ``False`` when GraphRec does not measure this dimension yet;
+    #: ``used`` is then 0 by convention and must not be shown as a measurement.
+    measured: bool = True
 
     @model_validator(mode="after")
     def validate_values(self) -> "UsageDimension":

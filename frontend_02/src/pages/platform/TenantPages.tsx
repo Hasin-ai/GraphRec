@@ -262,7 +262,7 @@ function PlatformTenantDetail() {
             <PanelTable columns={['Usage type', { label: 'Used', align: 'right' }, { label: 'Limit', align: 'right' }, { label: 'Remaining', align: 'right' }]}
               rows={tenantUsage.data.dimensions.map(d => <tr key={d.type}>
                 <Cell>{humanize(d.type)}</Cell>
-                <Cell mono align="right">{fmtQuantity(d.used, d.unit)}</Cell>
+                <Cell mono align="right">{d.measured === false ? 'Not measured' : fmtQuantity(d.used, d.unit)}</Cell>
                 <Cell mono align="right">{d.limit === null ? 'No limit' : fmtQuantity(d.limit, d.unit)}</Cell>
                 <Cell align="right">{d.remaining === null ? '—' : d.limit !== null && d.used > d.limit ? <span className="over-by">{fmtQuantity(d.used - d.limit, d.unit)} over</span> : fmtQuantity(d.remaining, d.unit)}</Cell>
               </tr>)} />

@@ -51,9 +51,9 @@ export function UsagePage() {
         rows={sortedDims.map(d => { const q = quotaState(d.used, d.limit); const isOver = d.limit !== null && d.used > d.limit; const pct = d.limit ? Math.round((d.used / d.limit) * 100) : null;
           const tone = q.status === 'exhausted' ? 'danger' : q.status === 'approaching' ? 'warning' : 'neutral';
           return <tr key={d.type} className={q.status === 'exhausted' ? 'row-over' : q.status === 'approaching' ? 'row-near' : undefined}>
-          <Cell>{usageLabel(d.type)}</Cell><Cell mono align="right">{fmtQuantity(d.used, d.unit)}</Cell>
+          <Cell>{usageLabel(d.type)}</Cell><Cell mono align="right">{d.measured === false ? '—' : fmtQuantity(d.used, d.unit)}</Cell>
           <Cell mono align="right">{d.limit === null ? 'No limit' : fmtQuantity(d.limit, d.unit)}</Cell>
-          <td>{d.limit === null ? <span className="td-muted">Tracked, no limit</span> : <div className="usage-cell">
+          <td>{d.measured === false ? <span className="td-muted">Not measured yet</span> : d.limit === null ? <span className="td-muted">Tracked, no limit</span> : <div className="usage-cell">
             <Progress value={d.used} max={d.limit} tone={tone} label={`${usageLabel(d.type)}: ${fmtQuantity(d.used, d.unit)} of ${fmtQuantity(d.limit, d.unit)}`} />
             <span className="u-text"><span>{fmtQuantity(d.used, d.unit)} of {fmtQuantity(d.limit, d.unit)}</span><span className="u-pct">{pct !== null ? `${pct}%` : 'Limit 0'}</span></span>
           </div>}</td>
