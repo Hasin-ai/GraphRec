@@ -251,7 +251,21 @@ There are no open Critical items beyond A-01. A-02, A-03, A-04, A-05, A-06, A-09
 
 ---
 
+### Anomaly status after Phase 2 (2026-10-08)
+
+| Status | Anomalies |
+|---|---|
+| **Fixed, with tests** | A-01 (Critical), A-02, A-03, A-04, A-05, A-10, A-12, A-13, A-14, A-15, A-16, A-17, A-18, A-19, A-20, A-21, A-21b, A-22, A-23, A-24, A-25, A-26, A-27, A-30, A-32, A-36 |
+| **Partly fixed** | A-09: reasons are audited and the platform audit is filtered and paged; operator identity waits for D-04. A-35: CI, `/readyz` and graceful shutdown are done; `/metrics`, JSON logs, backups and retention are Phase 5 |
+| **Waiting for sign-off** | A-06, A-07 (plan-limit semantics, D-11), A-08 (email, D-05), A-11 (WIP preserved on a branch; merging to `main` is your call), A-28 (D-13), A-33 (D-02), A-34 (D-12) |
+| **Out of scope, recorded** | A-29: `Recall@10` equals `Hit@10` for single-target evaluation; kept so stored metrics and the console stay compatible, documented here. A-31: the usage period filter is UC-24 work for Phase 4 (trends already cover past periods) |
+
+Found and fixed during Phase 2 (not in the original register): the getting-started checklist counted 6 steps while showing 4; placeholder runs were labelled "Trained on tenant data"; quality panels showed a version status as if it were a quality badge; hidden tooltips widened the page at 390 px; `replica_runtime_minutes` and `inference_replicas` showed a nominal 0; `docs/*.md` was gitignored; the e2e data used an availability value the API rejects.
+
 ## 5. Baseline test results (2026-10-07)
+
+**After Phase 2 (2026-10-08):** backend 245 passed / 14 skipped (artifacts not mounted), SDK all passed, vitest 80/80, Playwright 16/16, OpenAPI drift check clean, npm audit 0. Migrations upgrade from empty and round-trip 0034 → 0031 → 0034. Same environment caveats as below (PostgreSQL 16, no Docker, no nginx).
+
 
 **Environment limitation.** Docker could not run here: the daemon is not permitted in this session's container, and the Linux VM on your computer has no Docker. I therefore ran PostgreSQL **16** (the stack uses 17), Redis 7, and the Qdrant **1.12.0** binary natively, with the API, worker and scheduler under uvicorn/python and the console under Vite. Model artifacts were not mounted, so the artifact-dependent tests skipped.
 
