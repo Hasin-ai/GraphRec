@@ -74,6 +74,7 @@ ROUTES: Dict[str, Route] = dict(
     [
         # -- health ------------------------------------------------------------------------
         _r(Route("health.check", "GET", "/healthz", auth="none", idempotent=True)),
+        _r(Route("health.ready", "GET", "/readyz", auth="none", idempotent=True)),
         _r(Route("meta.get", "GET", "/v1/meta", auth="none", idempotent=True)),
         # -- tenants & authentication ------------------------------------------------------
         _r(Route("tenants.register", "POST", "/v1/tenants", auth="none", idempotent=True, body="json")),

@@ -6,6 +6,7 @@ The SDK now shares one version with the GraphRec API and console.
 
 - `storefront.events.list()` / `AsyncEvents.list()` read recently received events (`GET /v1/events`), with `user_id`, `event_type` and `product_id` filters.
 - `auth.refresh(refresh_token=...)` rotates a refresh token (`POST /v1/auth/refresh`).
+- `GraphRec.ready()` reads `/readyz`.
 - `GraphRec.meta()` reads the product version.
 - `Recommendations.active_model_version_id` is new; `model_version_id` is now `None` when a fallback served the request.
 - `AuthTokenPair.email` carries the signed-in account's email.

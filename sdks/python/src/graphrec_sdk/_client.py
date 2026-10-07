@@ -183,6 +183,11 @@ class GraphRec:
 
         return cast(Dict[str, Any], self._api.request("health.check", cast_to=Dict[str, Any]))
 
+    def ready(self) -> Dict[str, Any]:
+        """``GET /readyz`` - live status of the database, Redis and Qdrant (``ready``, ``degraded`` or ``not_ready``)."""
+
+        return cast(Dict[str, Any], self._api.request("health.ready", cast_to=Dict[str, Any]))
+
     def meta(self) -> Dict[str, Any]:
         """``GET /v1/meta`` - product version (shared by API, console and SDK) and environment."""
 
@@ -302,6 +307,11 @@ class AsyncGraphRec:
         """Async variant of :meth:`GraphRec.health`."""
 
         return cast(Dict[str, Any], await self._api.request("health.check", cast_to=Dict[str, Any]))
+
+    async def ready(self) -> Dict[str, Any]:
+        """Async variant of :meth:`GraphRec.ready`."""
+
+        return cast(Dict[str, Any], await self._api.request("health.ready", cast_to=Dict[str, Any]))
 
     async def meta(self) -> Dict[str, Any]:
         """Async variant of :meth:`GraphRec.meta`."""

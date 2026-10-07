@@ -66,6 +66,13 @@ CASES: List[Case] = [
         check=lambda r: r.access_token == "access-1",
     ),
     Case(
+        "health.ready",
+        "/readyz",
+        {"status": "ready", "version": "1.1.0", "checks": {}},
+        lambda c: c.ready(),
+        check=lambda r: r["status"] == "ready",
+    ),
+    Case(
         "meta.get",
         "/v1/meta",
         {"product": "GraphRec", "version": "1.1.0", "environment": "development",

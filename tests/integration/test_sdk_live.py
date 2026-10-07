@@ -131,6 +131,7 @@ def ops(public: g.GraphRec) -> g.GraphRec:
 def test_health(public: g.GraphRec) -> None:
     assert public.health()["status"] in {"ok", "healthy"}
     assert public.meta()["version"] == g.__version__
+    assert public.ready()["checks"]["database"]["status"] == "ok"
 
 
 def test_catalog_lifecycle(shop: Tenant) -> None:
