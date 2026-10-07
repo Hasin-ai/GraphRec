@@ -10,6 +10,9 @@ import csv
 import json
 import logging
 import math
+import shutil
+import signal
+import threading
 import time
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -40,6 +43,40 @@ logger = logging.getLogger(__name__)
 
 class Cancelled(Exception):
     pass
+
+
+class ShuttingDown(Exception):
+    """The worker received SIGTERM/SIGINT: hand the job back to the queue."""
+
+
+#: Set by the signal handler; checked at every progress pulse.
+STOP = threading.Event()
+
+#: ER-NF-05 (A-21): failures worth one more attempt. Everything else (invalid or
+#: insufficient data, non-finite training, exceeded budgets) is deterministic and
+#: fails the job immediately with its reason.
+MAX_ATTEMPTS = 2
+
+
+def is_transient(exc: BaseException) -> bool:
+    from sqlalchemy.exc import DBAPIError, OperationalError
+    if isinstance(exc, (OperationalError, ConnectionError, TimeoutError)):
+        return True
+    if isinstance(exc, DBAPIError) and exc.connection_invalidated:
+        return True
+    try:  # Qdrant over gRPC or HTTP
+        import grpc
+        if isinstance(exc, grpc.RpcError):
+            return True
+    except ImportError:  # pragma: no cover
+        pass
+    try:
+        from qdrant_client.http.exceptions import ResponseHandlingException
+        if isinstance(exc, ResponseHandlingException):
+            return True
+    except ImportError:  # pragma: no cover
+        pass
+    return False
 
 
 def progress(tenant_id, job_id, stage, percent):
@@ -89,6 +126,8 @@ def train_job(tenant_id, job_id):
                 for split in ('train', 'validation', 'test')}
 
     def pulse(stage, percent):
+        if STOP.is_set():
+            raise ShuttingDown()
         if time.monotonic() - started > 180:
             raise ValueError('Local training exceeded its 180-second processing budget; use a smaller snapshot or import a prepared checkpoint.')
         progress(tenant_id, job_id, stage, percent)
@@ -213,37 +252,85 @@ def run_once():
     try:
         train_job(tenant_id, job_id)
     except Exception as exc:
-        cancelled = isinstance(exc, Cancelled)
-        if not cancelled:
-            logger.exception('Training job %s failed', job_id)
-        with SessionLocal() as db, db.begin():
-            set_local_tenant(db, tenant_id)
-            job = db.get(TrainingJob, job_id)
-            job.status = job.stage = 'cancelled' if cancelled else 'failed'
-            job.failure_reason = None if cancelled else f'{type(exc).__name__}: {str(exc)[:500]}'
-            job.completed_at = datetime.now(timezone.utc)
-            ModelRegistryService(db)._audit(tenant_id, f'training_{job.status}', job_id,
-                outcome='succeeded' if cancelled else 'failed', details={'reason': type(exc).__name__})
+        finish_failed_job(tenant_id, job_id, exc)
     return True
+
+
+def _job_directory(tenant_id, job_id) -> Path:
+    return Path(get_settings().generated_model_root) / str(tenant_id) / str(job_id)
+
+
+def finish_failed_job(tenant_id, job_id, exc: BaseException) -> str:
+    """Record the outcome of a job that did not succeed; returns its new status.
+
+    * cancelled  - the tenant asked for it.
+    * queued     - the worker is shutting down, or a transient failure with
+                   attempts left: the job is handed back and retried once.
+    * failed     - a deterministic failure, or a transient one with no attempts left.
+    The partial artifact directory is removed in every case.
+    """
+    cancelled = isinstance(exc, Cancelled)
+    shutting_down = isinstance(exc, ShuttingDown)
+    transient = not cancelled and not shutting_down and is_transient(exc)
+    if not (cancelled or shutting_down):
+        logger.error('Training job %s failed (%s)', job_id, 'transient' if transient else 'deterministic',
+                     exc_info=exc)
+    shutil.rmtree(_job_directory(tenant_id, job_id), ignore_errors=True)
+    with SessionLocal() as db, db.begin():
+        set_local_tenant(db, tenant_id)
+        job = db.get(TrainingJob, job_id)
+        if shutting_down:
+            # Not the job's fault: give the attempt back.
+            job.status, job.stage, job.attempts = 'queued', 'requeued_on_shutdown', max(0, job.attempts - 1)
+            job.heartbeat_at = None
+            ModelRegistryService(db)._audit(tenant_id, 'training_requeued', job_id, outcome='succeeded',
+                                            details={'reason': 'worker_shutdown'})
+            return 'queued'
+        if transient and job.attempts < MAX_ATTEMPTS:
+            job.status, job.stage, job.failure_reason, job.heartbeat_at = 'queued', 'retry_scheduled', None, None
+            ModelRegistryService(db)._audit(tenant_id, 'training_retry_scheduled', job_id, outcome='failed',
+                                            details={'reason': type(exc).__name__, 'attempt': job.attempts})
+            return 'queued'
+        job.status = job.stage = 'cancelled' if cancelled else 'failed'
+        if cancelled:
+            job.failure_reason = None
+        else:
+            kind = 'transient failure, retry budget exhausted' if transient else 'deterministic failure'
+            job.failure_reason = f'{type(exc).__name__}: {str(exc)[:450]} ({kind})'
+        job.completed_at = datetime.now(timezone.utc)
+        ModelRegistryService(db)._audit(tenant_id, f'training_{job.status}', job_id,
+            outcome='succeeded' if cancelled else 'failed',
+            details={'reason': type(exc).__name__, 'transient': transient})
+        return job.status
+
+
+def _install_signal_handlers() -> None:
+    def stop(signum, _frame):  # noqa: ANN001
+        logger.warning('Received signal %s: finishing at the next checkpoint and requeueing the job', signum)
+        STOP.set()
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
 
 
 def main():
     logging.basicConfig(level=logging.INFO)
+    _install_signal_handlers()
     # One local CPU trainer across worker processes; Postgres releases the lock
     # automatically if its process or database connection dies.
     with engine.connect() as guard:
         if not guard.scalar(text('SELECT pg_try_advisory_lock(714629381)')):
             raise RuntimeError('A training worker already owns local CPU capacity.')
         guard.commit()
-        while True:
+        while not STOP.is_set():
             try:
                 guard.execute(text('SELECT 1'))
                 guard.commit()
                 if not run_once():
-                    time.sleep(2)
+                    STOP.wait(2)
             except Exception:
                 logger.exception('Worker polling failed; retrying in five seconds')
-                time.sleep(5)
+                STOP.wait(5)
+        logger.info('Training worker stopped')
 
 
 if __name__ == '__main__':
