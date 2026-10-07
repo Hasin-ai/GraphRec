@@ -2,8 +2,11 @@ import type { ReactElement } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { SessionProvider, useSession } from "./hooks/useSession";
 import { ToastProvider } from "./hooks/useToast";
+import { MarketingLayout } from "./layouts/MarketingLayout";
 import { ErrorLayout, PlatformLayout, PublicLayout, RequirePlatform, RequireScope, RequireTenant, TenantLayout } from "./layouts/Layouts";
 import { FailurePage, ForbiddenPage, NotFoundPage } from "./pages/errors/ErrorPages";
+import { LandingPage } from "./pages/marketing/LandingPage";
+import { PricingPage } from "./pages/marketing/PricingPage";
 import { PlatformAuditPage, PlatformStatusPage } from "./pages/platform/StatusAuditPages";
 import { PlatformPlanPage, PlatformPlansPage, PlatformTenantPage, PlatformTenantsPage } from "./pages/platform/TenantPages";
 import { AdminLoginPage } from "./pages/public/AdminLoginPage";
@@ -20,6 +23,7 @@ import { IntegrationPage } from "./pages/tenant/IntegrationPage";
 import { ModelVersionPage, ModelsPage } from "./pages/tenant/ModelsPages";
 import { ProductDetailPage, ProductNewPage } from "./pages/tenant/ProductFormPages";
 import { ProductSyncPage } from "./pages/tenant/ProductSyncPage";
+import { PlaygroundPage } from "./pages/tenant/PlaygroundPage";
 import { ProductsPage } from "./pages/tenant/ProductsPage";
 import { RecommendationRulesPage } from "./pages/tenant/RecommendationRulesPage";
 import { ServiceStatusPage } from "./pages/tenant/ServiceStatusPage";
@@ -28,12 +32,12 @@ import { TrainingJobPage, TrainingPage } from "./pages/tenant/TrainingPages";
 import { UsagePage } from "./pages/tenant/UsagePage";
 import { UsersPage } from "./pages/tenant/UsersPage";
 
-/** `/` resolves by identity: tenant -> /home, platform -> /admin, otherwise sign-in. */
+/** `/` resolves by identity: tenant -> /home, platform -> /admin/status, otherwise the public landing page. */
 function Root() {
   const { tenant, platform } = useSession();
   if (tenant) return <Navigate to="/home" replace />;
   if (platform) return <Navigate to="/admin/status" replace />;
-  return <Navigate to="/login" replace />;
+  return <MarketingLayout><LandingPage /></MarketingLayout>;
 }
 
 function SetupRedirect() { const location = useLocation(); return <Navigate to={{ pathname: "/setup", hash: location.hash }} replace />; }
@@ -44,6 +48,11 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<Root />} />
+
+      {/* Public marketing pages; /pricing stays reachable when signed in. */}
+      <Route element={<MarketingLayout />}>
+        <Route path="/pricing" element={<PricingPage />} />
+      </Route>
 
       <Route element={<PublicLayout />}>
         <Route path="/login" element={<LoginPage />} />
@@ -74,6 +83,7 @@ export function AppRoutes() {
           <Route path="/models" element={scoped("models:read", <ModelsPage />)} />
           <Route path="/models/:versionId" element={scoped("models:read", <ModelVersionPage />)} />
           <Route path="/recommendation-rules" element={scoped("models:read", <RecommendationRulesPage />)} />
+          <Route path="/playground" element={scoped("recommendations:read", <PlaygroundPage />)} />
           <Route path="/usage" element={scoped("usage:read", <UsagePage />)} />
           <Route path="/service-status" element={scoped("deployments:read", <ServiceStatusPage />)} />
         </Route>

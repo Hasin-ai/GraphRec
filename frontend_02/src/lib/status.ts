@@ -6,7 +6,7 @@ export type Tone = "ok" | "warn" | "danger" | "info" | "neu";
  */
 const GROUPS: Record<string, Record<string, Tone>> = {
   job: { queued: "info", running: "info", cancelled: "neu", succeeded: "ok", failed: "danger" },
-  model: { eligible: "info", active: "ok", retired: "warn", archived: "neu" },
+  model: { eligible: "neu", active: "ok", retired: "neu", archived: "neu" },
   deploy: { stopped: "neu", available: "ok" },
   tenant: { deleted: "neu", pending: "info", suspended: "warn", deleting: "warn", active: "ok" },
   key: { active: "ok", expired: "warn", revoked: "danger" },

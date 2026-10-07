@@ -1,47 +1,52 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { billing, datasets, events, models, products, recommendations, serving, training } from "../../api";
 import type { RecommendationResult } from "../../api/types";
 import { describeError } from "../../api/client";
 import { useResource } from "../../hooks/useResource";
 import { useSession } from "../../hooks/useSession";
-import { fmtDate, fmtDateTime, fmtDateTimeFull, fmtNumber } from "../../lib/format";
+import { fmtDate, fmtNumber } from "../../lib/format";
 import { daysAgoLabel, daysSince, modelLabel, modelTypeLabel } from "../../lib/labels";
 import { quotaMessage, quotaState } from "../../lib/quota";
 import { Dialog } from "../../ui/Dialog";
 import { Field, TextInput } from "../../ui/Form";
 import { Page } from "../../ui/Page";
 import { ErrorBanner, IdChip, Skeleton } from "../../ui/primitives";
+import { Alert, ButtonLink, HelpTip, RelativeTime, SectionHeader, StatusDot, StatusPill, type StatusTone } from "../../ui/kit";
 
 /**
  * Overview answers, in order: is the recommendation system healthy, how is it
  * performing, and what should I do next. Problems are listed compactly inside
  * the health summary rather than leading the page (critique round 5).
  */
-type Health = "ok" | "warn" | "danger" | "neu";
+type Health = "ok" | "warn" | "danger" | "info" | "neu";
 type Severity = "blocking" | "warning";
 interface Issue { id: string; severity: Severity; title: string; body: string; fix?: { label: string; to: string } }
 
-const HEALTH_WORD: Record<Health, string> = { ok: "Healthy", warn: "Needs attention", danger: "Blocked", neu: "Not set up" };
+const HEALTH_WORD: Record<Health, string> = { ok: "Healthy", warn: "Needs attention", danger: "Blocked", info: "Ready", neu: "Not set up" };
+const HEALTH_TONE: Record<Health, StatusTone> = { ok: "success", warn: "warning", danger: "danger", info: "info", neu: "neutral" };
+const HEALTH_STATE: Record<Health, string> = { ok: "OK", warn: "Attention", danger: "Problem", info: "Info", neu: "Unknown" };
 
 function HealthRow({ label, state, word, detail, to }: { label: string; state: Health; word?: string; detail: ReactNode; to: string }) {
   return <Link to={to} className={`hl-row hl-${state}`}>
-    <span className="hl-dot" aria-hidden="true" />
     <span className="hl-label">{label}</span>
-    <span className="hl-word">{word ?? HEALTH_WORD[state]}</span>
+    <span className="hl-word"><StatusDot tone={HEALTH_TONE[state]}>{word ?? HEALTH_WORD[state]}</StatusDot><span className="sr-only"> ({HEALTH_STATE[state]})</span></span>
     <span className="hl-detail">{detail}</span>
   </Link>;
 }
 
-function Metric({ label, value, note, help }: { label: string; value: ReactNode; note?: ReactNode; help?: string }) {
-  return <div className="metric-tile" title={help}>
-    <div className="mt-label">{label}</div>
-    <div className={`mt-value${value === "—" ? " is-empty" : ""}`}>{value}</div>
+function Metric({ label, value, note, help, empty }: { label: string; value: ReactNode; note?: ReactNode; help?: string; empty?: string }) {
+  return <div className="metric-tile">
+    <div className="mt-label">{label}{help ? <HelpTip label={label}>{help}</HelpTip> : null}</div>
+    <div className={`mt-value${value === "—" ? " is-empty" : ""}`}>{value === "—" ? (empty ?? "No data yet") : value}</div>
     {note ? <div className="mt-note">{note}</div> : null}
   </div>;
 }
 
-type Step = { label: string; state: "done" | "warn" | "todo"; detail: string; to: string };
+type Step = { label: string; state: "done" | "warn" | "todo" | "locked"; detail: string; to: string };
+
+// A role without the scope behind a stage cannot see its state; say so instead of "not started".
+const LOCKED_DETAIL = "Not visible to your role";
 
 function TryRecommendation({ onClose }: { onClose: () => void }) {
   const [userId, setUserId] = useState("");
@@ -81,12 +86,12 @@ export function HomePage() {
   const usage = useResource(() => can('usage:read') ? billing.usage() : Promise.resolve(null), [can('usage:read')], { watch: ['/training-jobs', '/products', '/events', '/datasets', '/model-versions', '/models/'] });
   const snapshots = useResource(() => can('training:read') ? datasets.listSnapshots().catch(() => null) : Promise.resolve(null), [can('training:read')]);
   const batches = useResource(() => can('events:read') ? events.listBatches().catch(() => null) : Promise.resolve(null), [can('events:read')]);
+  // Roles without usage:read (developers) still need to know whether events arrive.
+  const latestEvents = useResource(() => can('events:read') && !can('usage:read') ? events.list({ limit: 1 }).catch(() => null) : Promise.resolve(null), [can('events:read'), can('usage:read')], { watch: ['/events'] });
   const [trying, setTrying] = useState(false);
 
   const all = [catalog, jobs, versions, deployment, metrics, usage, snapshots, batches];
   const loading = all.some(r => r.loading);
-  const [refreshedAt, setRefreshedAt] = useState<number | null>(null);
-  useEffect(() => { if (!loading) setRefreshedAt(Date.now()); }, [loading]);
   const reloadAll = () => { all.forEach(r => void r.reload()); };
 
   // ── facts ───────────────────────────────────────────────────────────────
@@ -99,11 +104,11 @@ export function HomePage() {
   const score = (k: string) => typeof validation[k] === 'number' ? (validation[k] as number) : null;
   const latestJob = jobs.data?.items?.slice().sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
   const latestSnapshot = snapshots.data?.items?.slice().sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
-  const latestBatch = (batches.data ?? []).slice().sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
+  const latestBatch = (Array.isArray(batches.data) ? batches.data : []).slice().sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
+  const latestEvent = latestEvents.data?.[0];
   const dims = usage.data?.dimensions ?? [];
   const accepted = dims.find(x => x.type === 'accepted_events');
   const stored = dims.find(x => x.type === 'stored_products');
-  const periodStart = usage.data?.period_start;
   const d = deployment.data;
   const m = metrics.data;
   const servingUp = d?.status === 'available' && !!d.active_model_version_id;
@@ -128,7 +133,7 @@ export function HomePage() {
     const msg = quotaMessage(dim.type, dim.used, dim.limit);
     issues.push({ id: dim.type, severity: q.status === 'exhausted' ? 'blocking' : 'warning', title: msg.title, body: msg.body, fix: { label: 'Review limits', to: '/usage' } });
   }
-  if (noEvents) issues.push({ id: 'events', severity: 'warning', title: `No interaction events since ${periodStart ? fmtDate(periodStart) : 'the period started'}`,
+  if (noEvents) issues.push({ id: 'events', severity: 'warning', title: 'No interaction events this billing period',
     body: `The serving model was trained ${daysAgoLabel(active?.created_at)} and has received no new behaviour data, so recommendations don't reflect recent activity.`,
     fix: can('events:write') ? { label: 'Send events', to: '/events/submit' } : { label: 'Integration guide', to: '/integration' } });
   if (m?.error_rate && m.error_rate > 0.05) issues.push({ id: 'errors', severity: 'warning', title: `Error rate is ${(m.error_rate * 100).toFixed(1)}%`, body: 'More than 5% of recommendation requests failed in the last 24 hours.', fix: { label: 'Investigate', to: '/service-status' } });
@@ -138,26 +143,26 @@ export function HomePage() {
   const issueSummary = [blocking ? `${blocking} blocking ${blocking === 1 ? 'issue' : 'issues'}` : null, warnings ? `${warnings} ${warnings === 1 ? 'warning' : 'warnings'}` : null].filter(Boolean).join(' · ');
 
   // ── health rows ─────────────────────────────────────────────────────────
-  const servingHealth: Health = !d ? 'neu' : !servingUp ? 'danger' : requests === 0 ? 'warn' : 'ok';
+  const servingHealth: Health = !d ? 'neu' : !servingUp ? 'danger' : requests === 0 ? 'info' : 'ok';
   const modelHealth: Health = !versions.data ? 'neu' : !active ? 'danger' : 'ok';
   const eventHealth: Health = !accepted ? 'neu' : noEvents ? 'warn' : 'ok';
   const catalogHealth: Health = productCount === undefined ? 'neu' : productCount === 0 ? 'danger' : overBy > 0 ? 'danger' : 'ok';
 
   // ── pipeline: Catalog → Events → Dataset → Training → Model → Serving ───
-  const steps: Step[] = [
-    { label: 'Catalog', state: !productCount ? 'todo' : overBy > 0 ? 'warn' : 'done', detail: productCount ? `${fmtNumber(productCount)} products` : 'No products', to: '/products' },
-    { label: 'Events', state: noEvents ? 'warn' : accepted?.used ? 'done' : 'todo', detail: accepted?.used ? `${fmtNumber(accepted.used)} this period` : latestBatch ? `Last batch ${fmtDate(latestBatch.created_at)}` : 'None received', to: '/events/submit' },
-    { label: 'Dataset', state: latestSnapshot ? 'done' : 'todo', detail: latestSnapshot ? `Snapshot ${fmtDate(latestSnapshot.created_at)}` : 'No snapshot', to: '/datasets' },
-    { label: 'Training', state: latestJob?.status === 'succeeded' ? 'done' : latestJob?.status === 'failed' ? 'warn' : latestJob ? 'warn' : 'todo', detail: latestJob ? `Last run ${fmtDate(latestJob.created_at)}` : 'No runs', to: '/training' },
-    { label: 'Model', state: active ? 'done' : allVersions.length ? 'warn' : 'todo', detail: active ? `v${activeN} active` : allVersions.length ? 'None active' : 'No versions', to: '/models' },
-    { label: 'Serving', state: servingUp ? (requests ? 'done' : 'warn') : 'todo', detail: servingUp ? (requests ? `${fmtNumber(requests)} req · 24 h` : 'No traffic') : 'Not serving', to: '/service-status' },
+  const rawSteps: Array<Step & { scope: boolean }> = [
+    { scope: can('catalog:read'), label: 'Catalog', state: !productCount ? 'todo' : overBy > 0 ? 'warn' : 'done', detail: productCount ? `${fmtNumber(productCount)} products` : 'No products', to: '/products' },
+    { scope: can('usage:read') || can('events:read'), label: 'Events', state: noEvents ? 'warn' : (accepted?.used || (!accepted && (latestEvent || latestBatch))) ? 'done' : 'todo', detail: accepted?.used ? `${fmtNumber(accepted.used)} this period` : latestEvent ? `Last event ${fmtDate(latestEvent.created_at)}` : latestBatch ? `Last batch ${fmtDate(latestBatch.created_at)}` : 'None received', to: '/events/submit' },
+    { scope: can('training:read'), label: 'Dataset', state: latestSnapshot ? 'done' : 'todo', detail: latestSnapshot ? `Snapshot ${fmtDate(latestSnapshot.created_at)}` : 'No snapshot', to: '/datasets' },
+    { scope: can('training:read'), label: 'Training', state: latestJob?.status === 'succeeded' ? 'done' : latestJob?.status === 'failed' ? 'warn' : latestJob ? 'warn' : 'todo', detail: latestJob ? `Last run ${fmtDate(latestJob.created_at)}` : 'No runs', to: '/training' },
+    { scope: can('models:read'), label: 'Model', state: active ? 'done' : allVersions.length ? 'warn' : 'todo', detail: active ? `v${activeN} active` : allVersions.length ? 'None active' : 'No versions', to: '/models' },
+    { scope: can('deployments:read'), label: 'Serving', state: servingUp ? (requests ? 'done' : 'warn') : 'todo', detail: servingUp ? (requests ? `${fmtNumber(requests)} req · 24 h` : 'No traffic') : 'Not serving', to: '/service-status' },
   ];
+  const steps: Step[] = rawSteps.map(({ scope, ...step }) => scope ? step : { ...step, state: 'locked', detail: LOCKED_DETAIL });
 
   const pct = (v: number | null | undefined) => v === null || v === undefined ? '—' : `${(v * 100).toFixed(v < 0.01 && v > 0 ? 2 : 1)}%`;
   const canTry = servingUp && can('recommendations:read');
 
   return <Page title="Overview" subtitle="Health and performance of your recommendation system."
-    updated={refreshedAt ? <span title={fmtDateTimeFull(refreshedAt)}>{loading ? 'Refreshing…' : `Last refreshed ${new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(refreshedAt)}`}</span> : null}
     actions={[
       ...(canTry ? [{ label: 'Try a recommendation', variant: 'primary' as const, onClick: () => setTrying(true) }] : []),
       { label: 'Refresh', icon: 'refresh' as const, disabled: loading, onClick: reloadAll },
@@ -179,45 +184,45 @@ export function HomePage() {
       </ol>
     </section> : null}
 
+    {/* 2 — performance: what the API actually measures */}
+    {isNew || !can('deployments:read') ? null : <section className="ov-section" aria-labelledby="perf-title">
+      <SectionHeader id="perf-title" title="Performance" description="Live traffic over the last 24 hours. Model quality comes from offline evaluation." />
+      <div className="metric-row">
+        <Metric label="Requests (24 h)" value={m ? fmtNumber(requests) : '—'} empty="Not available" note={m ? (requests ? `${(m.request_rate ?? 0).toFixed(2)} per minute` : 'No traffic yet') : undefined} />
+        <Metric label="p95 latency" value={m?.p95_latency_ms != null ? `${Math.round(m.p95_latency_ms)} ms` : '—'} empty="No traffic yet" help="95th-percentile response time of successful recommendation requests." note={requests ? 'Successful requests' : undefined} />
+        <Metric label="Error rate" value={pct(m?.error_rate)} empty="No traffic yet" help="Share of recommendation requests that failed." note={requests ? `Fallback ${pct(m?.fallback_rate)}` : undefined} />
+        <Metric label="NDCG@10" value={score('NDCG@10') !== null ? score('NDCG@10')!.toFixed(3) : '—'} empty="Not evaluated"
+          help="Normalized Discounted Cumulative Gain at 10: how high the true next item ranks in the top 10, weighted by position (0–1, higher is better). Offline validation of the serving model."
+          note={score('Hit@10') !== null ? <span className="tt">Hit@10 {score('Hit@10')!.toFixed(3)}<HelpTip label="Hit@10">Share of test users whose true next item appears anywhere in the top 10.</HelpTip></span> : undefined} />
+      </div>
+      <Alert compact tone="info">Click-through and conversion aren't measured yet. They need impression and click feedback linked to recommendation requests.</Alert>
+    </section>}
+
     {/* 1 — compact system health; issues are a short list inside it */}
     {isNew || anyError ? null : (deployment.loading && !d) || (usage.loading && !usage.data) ? <Skeleton rows={2} /> :
       <section className="health-card" aria-labelledby="health-title">
         <div className="hc-head"><h2 id="health-title">System health</h2>
-          <span className={`hc-sum ${blocking ? 'tone-danger' : warnings ? 'tone-warn' : 'tone-ok'}`}>{issues.length ? issueSummary : 'All systems healthy'}</span></div>
+          <StatusPill tone={blocking ? 'danger' : warnings ? 'warning' : 'success'} icon={blocking ? 'alert-octagon' : warnings ? 'alert-triangle' : 'check-circle'}>{issues.length ? issueSummary : 'All systems healthy'}</StatusPill></div>
         <div className="hl-grid">
-          {can('deployments:read') ? <HealthRow label="Serving" state={servingHealth} word={servingHealth === 'warn' ? 'Ready, no traffic' : undefined} to="/service-status"
-            detail={!d ? '—' : servingUp ? (requests ? `${fmtNumber(requests)} requests in 24 h` : 'No requests in the last 24 hours') : 'No model active'} /> : null}
+          {can('deployments:read') ? <HealthRow label="Serving" state={servingHealth} word={servingHealth === 'info' ? 'Ready · no traffic' : undefined} to="/service-status"
+            detail={!d ? '—' : servingUp ? (requests ? `${fmtNumber(requests)} requests in 24 h` : 'No requests in 24 h') : 'No model active'} /> : null}
           {can('models:read') ? <HealthRow label="Model" state={modelHealth} word={active ? 'Active' : undefined} to={active ? `/models/${active.id}` : '/models'}
-            detail={active ? `${modelTypeLabel(active.model_type)} v${activeN} · trained ${daysAgoLabel(active.created_at)}` : 'No version active'} /> : null}
+            detail={active ? <>{modelTypeLabel(active.model_type)} v{activeN} · trained <RelativeTime value={active.created_at} /></> : 'No version active'} /> : null}
           {can('usage:read') ? <HealthRow label="Event pipeline" state={eventHealth} word={noEvents ? 'No events' : undefined} to="/events/submit"
-            detail={accepted ? (noEvents ? `None since ${periodStart ? fmtDate(periodStart) : 'period start'}${latestBatch ? ` · last batch ${fmtDate(latestBatch.created_at)}` : ''}` : `${fmtNumber(accepted.used)} accepted since ${periodStart ? fmtDate(periodStart) : 'period start'}`) : '—'} /> : null}
+            detail={accepted ? (noEvents ? <>None this period{latestBatch ? <> · last batch <RelativeTime value={latestBatch.created_at} /></> : null}</> : `${fmtNumber(accepted.used)} accepted this period`) : '—'} /> : null}
           {can('catalog:read') ? <HealthRow label="Catalog" state={catalogHealth} word={overBy > 0 ? 'Over quota' : undefined} to="/products"
             detail={productCount === undefined ? '—' : stored?.limit != null ? `${fmtNumber(productCount)} of ${fmtNumber(stored.limit)} products` : `${fmtNumber(productCount)} products`} /> : null}
         </div>
-        {issues.length ? <ul className="issue-list">{issues.map(issue => <li key={issue.id} className={`sev-${issue.severity}`}>
-          <span className="sev-pill">{issue.severity === 'blocking' ? 'Blocking' : 'Warning'}</span>
-          <div className="il-text"><strong>{issue.title}</strong><span>{issue.body}</span></div>
-          {issue.fix ? <Link className="btn btn-secondary btn-sm" to={issue.fix.to}>{issue.fix.label}</Link> : null}
+        {issues.length ? <ul className="issue-list" aria-label="Issues">{issues.map(issue => <li key={issue.id}>
+          <Alert compact tone={issue.severity === 'blocking' ? 'danger' : 'warning'} title={<><span className="sr-only">{issue.severity === 'blocking' ? 'Blocking: ' : 'Warning: '}</span>{issue.title}</>}
+            action={issue.fix ? <ButtonLink size="sm" to={issue.fix.to}>{issue.fix.label}</ButtonLink> : undefined}>{issue.body}</Alert>
         </li>)}</ul> : null}
       </section>}
-
-    {/* 2 — performance: what the API actually measures */}
-    {isNew ? null : <section className="ov-section" aria-labelledby="perf-title">
-      <div className="ov-section-head"><h2 id="perf-title">Performance</h2><span className="muted small">Live traffic over the last 24 hours · model quality from offline evaluation</span></div>
-      <div className="metric-row">
-        <Metric label="Recommendation requests" value={m ? fmtNumber(requests) : '—'} note={m ? (requests ? `${(m.request_rate ?? 0).toFixed(2)} per minute` : 'No requests yet') : 'Not available'} />
-        <Metric label="p95 latency" value={m?.p95_latency_ms != null ? `${Math.round(m.p95_latency_ms)} ms` : '—'} note={requests ? 'Successful requests' : 'Appears with traffic'} />
-        <Metric label="Error rate" value={pct(m?.error_rate)} note={requests ? `Fallback ${pct(m?.fallback_rate)}` : 'Appears with traffic'} />
-        <Metric label="Model quality" value={score('NDCG@10') !== null ? score('NDCG@10')!.toFixed(3) : '—'} help="Offline validation score of the serving model. Higher is better."
-          note={score('Hit@10') !== null ? <>NDCG@10 · Hit@10 {score('Hit@10')!.toFixed(3)}</> : 'No offline evaluation'} />
-      </div>
-      <p className="footnote">Click-through and conversion aren't measured yet: they need impression and click feedback linked to recommendation requests.</p>
-    </section>}
 
     {/* 3 — traffic + active model side by side */}
     {isNew ? null : <div className="split">
       {can('deployments:read') ? <section className="panel-card" aria-labelledby="traffic-title">
-        <div className="pc-head"><h2 id="traffic-title">Recommendation traffic</h2><span className="muted small">Last 24 hours</span></div>
+        <div className="pc-head"><h2 id="traffic-title">Recommendation traffic</h2><span className="muted small">Last 24 h</span></div>
         {metrics.loading && !m ? <Skeleton rows={2} /> : requests === 0 ? <div className="empty-inline">
           <svg aria-hidden="true" viewBox="0 0 120 48" width="120" height="48"><path d="M2 44h116" stroke="currentColor" strokeWidth="1.5" opacity=".3" /><path d="M6 38l18-10 16 6 18-18 16 9 18-12 20 4" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" strokeLinecap="round" opacity=".45" /></svg>
           <strong>No recommendation requests in the last 24 hours</strong>
@@ -233,15 +238,15 @@ export function HomePage() {
       </section> : null}
 
       {can('models:read') ? <section className="panel-card" aria-labelledby="model-title">
-        <div className="pc-head"><h2 id="model-title">Serving model</h2>{active ? <span className="tag badge badge-ok badge-dot no-cap"><span className="dot" aria-hidden="true" />Serving</span> : null}</div>
+        <div className="pc-head"><h2 id="model-title">Serving model</h2>{active ? <StatusPill tone="success">Serving</StatusPill> : null}</div>
         {active ? <>
           <div className="pm-name">{modelTypeLabel(active.model_type)} <span>v{activeN}</span><span className="muted small"> of {allVersions.length}</span></div>
           <dl className="pm-stats">
             <div><dt>NDCG@10</dt><dd>{score('NDCG@10')?.toFixed(3) ?? '—'}</dd></div>
             <div><dt>Hit@10</dt><dd>{score('Hit@10')?.toFixed(3) ?? '—'}</dd></div>
-            <div><dt>Trained</dt><dd title={fmtDateTimeFull(active.created_at)}>{daysAgoLabel(active.created_at)}</dd></div>
+            <div><dt>Trained</dt><dd><RelativeTime value={active.created_at} /></dd></div>
           </dl>
-          {rolledBackFrom ? <p className="pm-note">↩ Rolled back from {modelLabel(rolledBackFrom, allVersions).split(' · ')[1]} on {fmtDateTime(active.activated_at ?? rolledBackFrom.activated_at)}. No reason was recorded.</p> : null}
+          {rolledBackFrom ? <p className="pm-note">Rolled back from {modelLabel(rolledBackFrom, allVersions).split(' · ')[1]} <RelativeTime value={active.activated_at ?? rolledBackFrom.activated_at} />.</p> : null}
           {modelAge > 14 && noEvents ? <p className="pm-note warn">Trained on data that is {modelAge} days old.</p> : null}
           <div className="row small muted">Version <IdChip value={active.version_tag} length={24} label="Version ID" /></div>
         </> : <p className="muted">No version is active. {allVersions.length ? 'Activate one on Model Versions.' : 'Train a model to create the first version.'}</p>}
@@ -251,11 +256,11 @@ export function HomePage() {
 
     {/* 4 — the pipeline the product is built around */}
     {isNew ? null : <section className="ov-section" aria-labelledby="pipe-title">
-      <div className="ov-section-head"><h2 id="pipe-title">Data and model pipeline</h2></div>
+      <SectionHeader id="pipe-title" title="Data and model pipeline" />
       <ol className="pipeline">{steps.map(step => <li key={step.label} className={`pl-${step.state}`}>
-        <Link to={step.to}><span className="pl-icon" aria-hidden="true">{step.state === 'done' ? '✓' : step.state === 'warn' ? '!' : '○'}</span>
+        <Link to={step.to}><span className="pl-icon" aria-hidden="true">{step.state === 'done' ? '✓' : step.state === 'warn' ? '!' : step.state === 'locked' ? '–' : '○'}</span>
           <span className="pl-label">{step.label}</span><span className="pl-detail">{step.detail}</span>
-          <span className="sr-only">{step.state === 'done' ? 'complete' : step.state === 'warn' ? 'needs attention' : 'not started'}</span></Link>
+          <span className="sr-only">{step.state === 'done' ? 'complete' : step.state === 'warn' ? 'needs attention' : step.state === 'locked' ? 'not visible to your role' : 'not started'}</span></Link>
       </li>)}</ol>
     </section>}
 

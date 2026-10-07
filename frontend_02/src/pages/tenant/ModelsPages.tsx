@@ -7,12 +7,14 @@ import { useQueryState } from "../../hooks/useQueryState";
 import { useResource } from "../../hooks/useResource";
 import { useSession } from "../../hooks/useSession";
 import { useToast } from "../../hooks/useToast";
-import { fmtDateTime, fmtDateTimeFull, shortId, flattenMetrics } from "../../lib/format";
+import { fmtDateTime, shortId, flattenMetrics } from "../../lib/format";
 import { Dialog } from "../../ui/Dialog";
 import { Field, Select } from "../../ui/Form";
 import { Page, type HeaderAction } from "../../ui/Page";
 import { Badge, Cell, DataTable, DefinitionList, ErrorBanner, FilterBar, Footnote, IdChip, Panel, PanelTable, Skeleton, StatusLegend, Banner } from "../../ui/primitives";
 import { NotFoundPage } from "../errors/ErrorPages";
+import { Alert, Button, ButtonLink, OverflowMenu, RelativeTime } from "../../ui/kit";
+import { Icon } from "../../ui/icons";
 import { evaluationModeLabel, formatMetricValue, humanizeKey, modelLabel, modelTypeLabel } from "../../lib/labels";
 
 const STATUSES = ["eligible", "active", "retired", "archived"];
@@ -21,8 +23,7 @@ const metric = (v: ModelVersionResource, key: string): number | null => {
   const value = (v.metrics as { validation?: Record<string, unknown> } | null)?.validation?.[key];
   return typeof value === "number" ? value : null;
 };
-const STATUS_HELP_MODEL: Record<string, string> = { eligible: "Ready to activate.", active: "Serving now.", retired: "Rollback target.", archived: "Audit only; cannot serve." };
-const STATUS_ORDER: Record<string, number> = { active: 0, eligible: 1, retired: 2, archived: 3 };
+const STATUS_HELP_MODEL: Record<string, string> = { eligible: "Available; never served. Activate to serve it.", active: "Serving now.", retired: "Available; served before and can be rolled back to.", archived: "Audit only; cannot serve." };
 /** A signature of the offline scores; equal signatures mean "same checkpoint, same numbers". */
 const scoreSignature = (v: ModelVersionResource) => JSON.stringify((v.metrics as { validation?: unknown } | null)?.validation ?? null);
 const checkpointOf = (v: ModelVersionResource) => { const src = (v.metrics as { source?: { artifact?: unknown } } | null)?.source; return typeof src?.artifact === "string" ? src.artifact : null; };
@@ -55,7 +56,7 @@ function ActivateDialog({ version, active, onClose, onDone }: { version: ModelVe
 
 export function ModelsPage() {
   const { can } = useSession();
-  const { flash } = useToast();
+  const { flash, copy } = useToast();
   const navigate = useNavigate();
   const versions = useResource(() => models.list(), []);
   const [status, setStatus] = useQueryState("status", "all statuses");
@@ -65,7 +66,7 @@ export function ModelsPage() {
   const active = items.find((v) => v.status === "active");
   const canDeploy = can("models:deploy");
 
-  const ordered = list.slice().sort((a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9) || Date.parse(b.created_at) - Date.parse(a.created_at));
+  const ordered = list.slice().sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
   const byAge = items.slice().sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
   const vNum = (v: ModelVersionResource) => byAge.findIndex(x => x.id === v.id) + 1;
   // Rollback context: the active version is older than a version that was activated later.
@@ -84,39 +85,53 @@ export function ModelsPage() {
   };
   const go = (v: ModelVersionResource) => navigate(`/models/${v.id}`);
 
-  const rows = ordered.map((v) => (
-    <tr key={v.id} className={`reg-row${v.status === "active" ? " row-highlight" : ""}`} onClick={e => { if (!(e.target as HTMLElement).closest("a,button")) go(v); }}>
+  const rows = ordered.map((v) => {
+    const isServing = v.status === "active";
+    const rollbackTo = v.status === "retired" && active && canDeploy ? `/models/${active.id}?rollback=${v.id}` : null;
+    const primary = v.status === "eligible" && canDeploy
+      ? <Button size="sm" variant="secondary" onClick={() => setActivating(v)}>Activate</Button>
+      : rollbackTo ? <ButtonLink size="sm" to={rollbackTo} icon="rotate-ccw">Roll back</ButtonLink>
+      : <ButtonLink size="sm" variant="ghost" to={`/models/${v.id}`}>Details</ButtonLink>;
+    return (
+    <tr key={v.id} className={`reg-row${isServing ? " serving-mark" : ""}`} onClick={e => { if (!(e.target as HTMLElement).closest("a,button,[role=menu]")) go(v); }}>
       <td>
         <div className="ver-cell">
-          <span className="ver"><Link to={`/models/${v.id}`} aria-label={`Version ${vNum(v)} details`}>v{vNum(v)}</Link></span>
-          <span className="ver-meta">{modelTypeLabel(v.model_type)} · <IdChip value={v.version_tag} length={22} label="Version ID" /></span>
-          {v.status === "active" && rolledBackFrom ? <span className="rollback-pill" title={`Activated ${fmtDateTime(v.activated_at)}`}>↩ Rolled back from v{vNum(rolledBackFrom)} · {fmtDateTime(v.activated_at)}</span> : null}
+          <span className="ver-line"><span className="ver"><Link to={`/models/${v.id}`} aria-label={`Version ${vNum(v)} details`}>v{vNum(v)}</Link></span><span className="muted small">{modelTypeLabel(v.model_type)}</span></span>
+          <span className="ver-id" title={v.version_tag}><span>{v.version_tag}</span><button type="button" className="icon-button copy-hover" aria-label={`Copy version ID ${v.version_tag}`} onClick={() => copy(v.version_tag)}><Icon name="copy" size={13} /></button></span>
+          {isServing && rolledBackFrom ? <span className="ver-note"><Icon name="rotate-ccw" size={12} />Rolled back from v{vNum(rolledBackFrom)} <RelativeTime value={v.activated_at} /></span> : null}
         </div>
       </td>
       <td><Badge group="model" value={v.status} /></td>
       <td className="num" data-label="Hit@10">{scoreCell(v, "Hit@10")}</td>
       <td className="num" data-label="NDCG@10">{scoreCell(v, "NDCG@10")}</td>
-      <td data-hide-mobile><time dateTime={v.created_at} title={fmtDateTimeFull(v.created_at)}>{fmtDateTime(v.created_at)}</time></td>
+      <td data-hide-mobile><RelativeTime value={v.created_at} /></td>
       <td className="right">
-        {v.status === "eligible" ? (canDeploy ? <button type="button" className="btn btn-primary btn-sm" onClick={() => setActivating(v)}>Activate</button> : <span className="td-muted small" title="Your role cannot activate models.">Ready</span>)
-          : v.status === "retired" && active ? (canDeploy ? <Link className="btn btn-secondary btn-sm" to={`/models/${active.id}?rollback=${v.id}`}>Roll back…</Link> : <span className="td-muted small">Rollback available</span>)
-          : <Link className="btn btn-ghost btn-sm" to={`/models/${v.id}`}>Details</Link>}
+        <span className="row-actions">
+          {primary}
+          <OverflowMenu label={`More actions for v${vNum(v)}`} items={[
+            { label: "View details", icon: "arrow-right", to: `/models/${v.id}` },
+            ...(v.status === "eligible" ? [{ label: "Activate", icon: "play" as const, disabled: !canDeploy, hint: canDeploy ? undefined : "Your role cannot activate models.", onSelect: () => setActivating(v) }] : []),
+            ...(v.status === "retired" ? [{ label: "Roll back to this version", icon: "rotate-ccw" as const, disabled: !rollbackTo, hint: rollbackTo ? undefined : "Your role cannot activate models.", to: rollbackTo ?? undefined }] : []),
+            { label: "Copy version ID", icon: "copy", onSelect: () => copy(v.version_tag) },
+          ]} />
+        </span>
       </td>
     </tr>
-  ));
+  ); });
 
   return (
-    <Page crumbs={[{ label: "Home", to: "/home" }, { label: "Model Versions" }]} kicker="Model registry" title="Model Versions"
+    <Page kicker="Model registry" title="Model Versions"
       subtitle={items.length ? <span className="reg-head"><strong>{types.join(", ") || "Model"}{workspace ? ` · ${workspace}` : ""}</strong><span>{items.length} {items.length === 1 ? "version" : "versions"} · {active ? `v${vNum(active)} serving` : "none serving"}</span></span> : "Each training run registers a version. Exactly one version serves at a time."}
       actions={canTrain ? [{ label: "+ Train new version", variant: "primary", onClick: () => navigate("/training") }] : can("training:read") ? [{ label: "Training", onClick: () => navigate("/training") }] : []}>
       {versions.error ? <ErrorBanner error={versions.error} onRetry={versions.reload} /> : null}
-      {versions.data && !active && items.length ? <div className="callout warn" role="status"><p><strong>No version is serving.</strong> Activate a version that is ready to start answering recommendation requests.</p></div> : null}
+      {versions.data && !active && items.length ? <Alert tone="warning" title="No version is serving">Activate an available version to start answering recommendation requests.</Alert> : null}
       {items.length > 4 ? <FilterBar filters={[{ id: "status", label: "Status", value: status, onChange: setStatus, options: ["all statuses", ...STATUSES] }]} onClear={() => setStatus("all statuses")} /> : null}
       {!versions.data ? (versions.loading ? <Skeleton /> : null) : (
         <div className="table-mobile-cards"><DataTable minWidth={760} columns={["Version", "Status", { label: "Hit@10", align: "right" }, { label: "NDCG@10", align: "right" }, "Created", { label: "", align: "right" }]} rows={rows} empty={{ title: status === "all statuses" ? "No model versions yet" : "No versions match this filter", body: status === "all statuses" ? "Train or import a model to produce your first version." : "Choose another status or clear the filter.", action: can("training:read") ? { label: "Go to training", onClick: () => navigate("/training") } : undefined }} /></div>
       )}
-      {items.length ? <p className="footnote">Scores are offline validation results (higher is better){(() => { const mode = (items[0].metrics as { validation?: { mode?: unknown; evaluated_examples?: unknown } } | null)?.validation; return mode?.mode ? `: ${evaluationModeLabel(mode.mode).toLowerCase()}${typeof mode.evaluated_examples === "number" ? `, ${formatMetricValue("evaluated_examples", mode.evaluated_examples)} examples` : ""}` : ""; })()}. Differences are shown against the serving version.</p> : null}
-      {identicalScores ? <div className="compact-note"><span className="i" aria-hidden="true">i</span><p><strong>All versions were imported from the same checkpoint{sharedCheckpoint ? <> (<code className="inline-code">{sharedCheckpoint}</code>)</> : null}.</strong> Their evaluation metrics are therefore identical. Train on new data or import a different checkpoint to produce a distinct version.</p></div> : null}
+      {items.length ? (() => { const val = (items[0].metrics as { validation?: { mode?: unknown; evaluated_examples?: unknown } } | null)?.validation; return <Alert compact tone="info" title={identicalScores ? <>All versions were imported from the same checkpoint{sharedCheckpoint ? <> (<code className="inline-code">{sharedCheckpoint}</code>)</> : null}, so their scores are identical.</> : undefined}>
+        Hit@10 and NDCG@10 are offline validation scores (higher is better){val?.mode ? `, ${evaluationModeLabel(val.mode).toLowerCase()}${typeof val.evaluated_examples === "number" ? ` over ${formatMetricValue("evaluated_examples", val.evaluated_examples)} examples` : ""}` : ""}. Differences are shown against the serving version.{identicalScores ? " Train on new data or import a different checkpoint to produce a distinct version." : ""}
+      </Alert>; })() : null}
       {items.length ? <details className="details-section legend-details"><summary>Status definitions</summary><StatusLegend group="model" values={STATUSES} /></details> : null}
       {activating ? (
         <ActivateDialog
@@ -200,8 +215,8 @@ function ModelVersionDetail() {
           { label: "Model type", value: modelTypeLabel(v.model_type) },
           { label: "Version tag", value: v.version_tag, mono: true, copy: v.version_tag },
           { label: "Status", badge: <Badge group="model" value={v.status} />, value: STATUS_HELP_MODEL[v.status] },
-          { label: "Created", value: fmtDateTime(v.created_at) },
-          { label: "Activated", value: v.activated_at ? fmtDateTime(v.activated_at) : "Never" },
+          { label: "Created", value: <RelativeTime value={v.created_at} /> },
+          { label: "Activated", value: v.activated_at ? <RelativeTime value={v.activated_at} /> : "Never" },
           { label: "Internal ID", value: v.id, mono: true, copy: v.id },
         ]}
       />

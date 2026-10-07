@@ -49,7 +49,7 @@ export function SetupPage() {
     try {
       const normalized = email.trim().toLowerCase();
       const pair = await auth.setupPassword({ setup_token: token.trim(), password, ...(normalized ? { email: normalized } : {}) });
-      setTenantSession(normalized, pair);
+      setTenantSession(pair.email ?? normalized, pair);
       refresh();
       flash("Account activated.");
       navigate("/home", { replace: true });

@@ -1,60 +1,107 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation } from "react-router-dom";
 import { consumeExplicitSignOut, roleLabel, sessionTenantId } from "../auth/session";
 import { useSession } from "../hooks/useSession";
-import { useTheme } from "../hooks/useTheme";
-import { IdChip } from "../ui/primitives";
+import { useTheme, type ThemeMode } from "../hooks/useTheme";
+import { useToast } from "../hooks/useToast";
+import { BrandMark, GraphIllustration } from "../brand/BrandMark";
+import { ThemeButton } from "../brand/ThemeButton";
+import { BRAND } from "../marketing/copy";
+import { Icon, type IconName } from "../ui/icons";
+import { menuKeys, usePopover } from "../ui/kit";
 
-interface NavItem { label: string; to: string; scope?: string; end?: boolean }
-interface NavGroup { label: string; items: NavItem[] }
+interface NavItem { label: string; to: string; icon: IconName; scope?: string; end?: boolean }
+interface NavGroup { id: string; label: string; items: NavItem[] }
+/** Information architecture. Every route predates this pass except /playground. */
 const TENANT_NAV: NavGroup[] = [
-  { label: "", items: [{ label: "Overview", to: "/home" }] },
-  { label: "Data", items: [
-    { label: "Products", to: "/products", scope: "catalog:read", end: true },
-    { label: "Catalog sync", to: "/products/sync", scope: "catalog:write" },
-    { label: "Events", to: "/events/submit", scope: "events:write" },
-    { label: "Datasets", to: "/datasets", scope: "training:read" },
+  { id: "top", label: "", items: [{ label: "Overview", to: "/home", icon: "home" }] },
+  { id: "data", label: "Data", items: [
+    { label: "Products", to: "/products", icon: "box", scope: "catalog:read", end: true },
+    { label: "Catalog sync", to: "/products/sync", icon: "refresh-cw", scope: "catalog:write" },
+    { label: "Events", to: "/events/submit", icon: "activity", scope: "events:write" },
+    { label: "Datasets", to: "/datasets", icon: "database", scope: "training:read" },
   ] },
-  { label: "Models", items: [
-    { label: "Training", to: "/training", scope: "training:read" },
-    { label: "Model Versions", to: "/models", scope: "models:read" },
+  { id: "models", label: "Models", items: [
+    { label: "Training", to: "/training", icon: "cpu", scope: "training:read" },
+    { label: "Model Versions", to: "/models", icon: "layers", scope: "models:read" },
   ] },
-  { label: "Recommendations", items: [
-    { label: "Rules", to: "/recommendation-rules", scope: "models:read" },
+  { id: "recs", label: "Recommendations", items: [
+    { label: "Rules", to: "/recommendation-rules", icon: "sliders", scope: "models:read" },
+    { label: "Playground", to: "/playground", icon: "play", scope: "recommendations:read" },
   ] },
-  { label: "Monitoring", items: [
-    { label: "Service Status", to: "/service-status", scope: "deployments:read" },
-    { label: "Usage & Quotas", to: "/usage", scope: "usage:read" },
+  { id: "monitoring", label: "Monitoring", items: [
+    { label: "Service Status", to: "/service-status", icon: "server", scope: "deployments:read" },
+    { label: "Usage & Quotas", to: "/usage", icon: "gauge", scope: "usage:read" },
   ] },
-  { label: "Developer", items: [
-    { label: "API Credentials", to: "/credentials", scope: "keys:write" },
-    { label: "Integration", to: "/integration" },
+  { id: "developer", label: "Developer", items: [
+    { label: "API Credentials", to: "/credentials", icon: "key", scope: "keys:write" },
+    { label: "Integration", to: "/integration", icon: "plug" },
   ] },
-  { label: "Administration", items: [{ label: "Team members", to: "/users", scope: "users:write" }] },
+  { id: "admin", label: "Admin", items: [{ label: "Team members", to: "/users", icon: "users", scope: "users:write" }] },
 ];
-const PLATFORM_NAV: NavGroup[] = [{ label: "Platform", items: [
-  { label: "Platform Status", to: "/admin/status" }, { label: "Tenants", to: "/admin/tenants" },
-  { label: "Plans & Quotas", to: "/admin/plans" }, { label: "Failures & Audit", to: "/admin/audit" },
+const PLATFORM_NAV: NavGroup[] = [{ id: "platform", label: "Platform", items: [
+  { label: "Platform Status", to: "/admin/status", icon: "server" }, { label: "Tenants", to: "/admin/tenants", icon: "users" },
+  { label: "Plans & Quotas", to: "/admin/plans", icon: "gauge" }, { label: "Failures & Audit", to: "/admin/audit", icon: "activity" },
 ] }];
 
 function isActive(item: NavItem, pathname: string) {
   if (item.to === "/products") return pathname === "/products" || (pathname.startsWith("/products/") && pathname !== "/products/sync");
   return item.end ? pathname === item.to : pathname === item.to || pathname.startsWith(item.to + "/");
 }
-function Nav({ groups, can }: { groups: NavGroup[]; can: (scope: string) => boolean }) {
+
+/* ── persisted UI prefs (per browser) ── */
+function readPref<T>(key: string, fallback: T): T {
+  try { const raw = window.localStorage.getItem(key); return raw === null ? fallback : (JSON.parse(raw) as T); } catch { return fallback; }
+}
+function usePref<T>(key: string, fallback: T): [T, (v: T) => void] {
+  const [value, setValue] = useState<T>(() => readPref(key, fallback));
+  const set = useCallback((v: T) => { setValue(v); try { window.localStorage.setItem(key, JSON.stringify(v)); } catch { /* ignore */ } }, [key]);
+  return [value, set];
+}
+
+function Nav({ groups, can, collapsed }: { groups: NavGroup[]; can: (scope: string) => boolean; collapsed: boolean }) {
   const { pathname } = useLocation();
-  return <nav aria-label="Primary">{groups.map(group => {
-    const items = group.items.filter(item => !item.scope || can(item.scope));
-    if (!items.length) return null;
-    return <div className="nav-group" key={group.label}>
-      {group.label ? <div className="nav-label">{group.label}</div> : null}
-      <div className="nav-items">{items.map(item => <NavLink key={item.to} to={item.to} end={item.end}
-        aria-current={isActive(item, pathname) ? "page" : undefined}
-        className={() => `nav-item${isActive(item, pathname) ? " active" : ""}`}>
-        {item.label}
-      </NavLink>)}</div>
-    </div>;
-  })}</nav>;
+  const [closed, setClosed] = usePref<string[]>("graphrec.nav.closed", []);
+  const scroller = useRef<HTMLDivElement>(null);
+  const [edges, setEdges] = useState({ top: false, bottom: false });
+  const measure = useCallback(() => {
+    const el = scroller.current; if (!el) return;
+    setEdges({ top: el.scrollTop > 2, bottom: el.scrollTop + el.clientHeight < el.scrollHeight - 2 });
+  }, []);
+  useEffect(() => {
+    measure();
+    const el = scroller.current; if (!el) return;
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    ro?.observe(el);
+    return () => ro?.disconnect();
+  }, [measure, closed, collapsed]);
+  // Keep the current page visible when the nav is taller than the viewport.
+  useEffect(() => { scroller.current?.querySelector<HTMLElement>('[aria-current="page"]')?.scrollIntoView?.({ block: "nearest" }); }, [pathname]);
+
+  return <div ref={scroller} className={`sb-nav${edges.top ? " at-top-shadow" : ""}${edges.bottom ? " at-bottom-shadow" : ""}`} onScroll={measure}>
+    <nav aria-label="Primary">{groups.map(group => {
+      const items = group.items.filter(item => !item.scope || can(item.scope));
+      if (!items.length) return null;
+      const hasActive = items.some(item => isActive(item, pathname));
+      const isClosed = !collapsed && group.label !== "" && closed.includes(group.id) && !hasActive;
+      const listId = `nav-group-${group.id}`;
+      return <div className={`nav-group${isClosed ? " is-closed" : ""}`} key={group.id}>
+        {group.label ? (collapsed ? <div className="nav-sep" role="separator" aria-label={group.label} />
+          : <button type="button" className="nav-heading" aria-expanded={!isClosed} aria-controls={listId}
+              onClick={() => setClosed(isClosed ? closed.filter(id => id !== group.id) : [...closed, group.id])}>
+              <span>{group.label}</span><Icon name="chevron-down" size={14} className="nav-chev" />
+            </button>) : null}
+        <ul className="nav-items" id={listId} hidden={isClosed}>{items.map(item => {
+          const active = isActive(item, pathname);
+          return <li key={item.to}><NavLink to={item.to} end={item.end} aria-current={active ? "page" : undefined}
+            aria-label={collapsed ? item.label : undefined} data-tip={collapsed ? item.label : undefined}
+            className={() => `nav-item${active ? " active" : ""}`}>
+            <Icon name={item.icon} size={17} className="nav-icon" /><span className="nav-text">{item.label}</span>
+          </NavLink></li>;
+        })}</ul>
+      </div>;
+    })}</nav>
+  </div>;
 }
 
 /** A readable workspace name derived from the account's email domain ("beauty.example" → "Beauty"). */
@@ -64,13 +111,104 @@ function workspaceName(email: string | undefined): string | null {
   const label = domain.split(".")[0].replace(/[-_]+/g, " ");
   return label ? label.replace(/\b\w/g, c => c.toUpperCase()) : null;
 }
-function Avatar({ email }: { email?: string }) {
-  const local = (email ?? "?").split("@")[0].replace(/[^a-z0-9]/gi, "");
-  return <span className="avatar" aria-hidden="true">{(local.slice(0, 1) || "?").toUpperCase()}</span>;
+/** A friendly display name: "dana.lee@x" → "Dana Lee"; machine-like handles ("owner-39f889") → "Workspace owner". */
+function displayName(email: string | undefined, role?: string): string {
+  const local = (email ?? "").split("@")[0];
+  if (!local) return "Signed-in user";
+  if (/\d{3,}|^[a-f0-9-]{8,}$/i.test(local)) return role === "tenant_administrator" ? "Workspace owner" : "Team member";
+  return local.split(/[._-]+/).filter(Boolean).map(w => w[0].toUpperCase() + w.slice(1)).join(" ");
+}
+function initials(name: string): string {
+  const parts = name.split(/\s+/).filter(Boolean);
+  return ((parts[0]?.[0] ?? "?") + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
 }
 
-function Shell({ aside, children, narrow }: { aside?: ReactNode; children: ReactNode; narrow?: boolean }) {
+function WorkspaceSwitcher({ name, tenantId, home, collapsed, caption }: { name: string; tenantId: string | null; home: string; collapsed: boolean; caption: string }) {
+  const pop = usePopover<HTMLDivElement>();
+  const { copy } = useToast();
+  useEffect(() => { if (pop.open) pop.ref.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus(); }, [pop.open, pop.ref]);
+  return <div className="ws">
+    <button ref={pop.triggerRef} type="button" className="ws-trigger" aria-haspopup="menu" aria-expanded={pop.open} onClick={pop.toggle}
+      aria-label={`Workspace: ${name}`} data-tip={collapsed ? name : undefined}>
+      <span className="ws-avatar" aria-hidden="true">{name.slice(0, 1).toUpperCase()}</span>
+      <span className="ws-text"><span className="ws-name">{name}</span><span className="ws-caption">{caption}</span></span>
+      <Icon name="chevrons-up-down" size={14} className="ws-chev" />
+    </button>
+    {pop.open ? <div ref={pop.ref} className="menu ws-menu" role="menu" aria-label="Workspace" onKeyDown={menuKeys}>
+      <div className="menu-label">Workspaces</div>
+      <Link role="menuitemradio" aria-checked="true" className="menu-item" to={home} onClick={() => pop.setOpen(false)}>
+        <span className="ws-avatar sm" aria-hidden="true">{name.slice(0, 1).toUpperCase()}</span>{name}<Icon name="check" size={15} className="menu-check" />
+      </Link>
+      {tenantId ? <>
+        <div className="menu-sep" role="separator" />
+        <div className="menu-meta"><span>Tenant ID</span><code title={tenantId}>{tenantId}</code></div>
+        <button type="button" role="menuitem" className="menu-item" onClick={() => { copy(tenantId); pop.setOpen(false); }}><Icon name="copy" size={15} />Copy tenant ID</button>
+      </> : null}
+    </div> : null}
+  </div>;
+}
+
+const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: IconName }[] = [
+  { mode: "light", label: "Light", icon: "sun" }, { mode: "dark", label: "Dark", icon: "moon" }, { mode: "system", label: "System", icon: "monitor" },
+];
+function UserMenu({ name, detail, role, collapsed, onSignOut, accountTo, plansTo }: { name: string; detail?: string; role: string; collapsed: boolean; onSignOut: () => void; accountTo?: string; plansTo?: string }) {
+  const pop = usePopover<HTMLDivElement>();
+  const [, , mode, setMode] = useTheme();
+  useEffect(() => { if (pop.open) pop.ref.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus(); }, [pop.open, pop.ref]);
+  return <div className="um">
+    {pop.open ? <div ref={pop.ref} className="menu um-menu" role="menu" aria-label="Account" onKeyDown={menuKeys}>
+      <div className="menu-head"><strong>{name}</strong>{detail ? <span title={detail}>{detail}</span> : null}</div>
+      <div className="menu-sep" role="separator" />
+      {accountTo ? <Link role="menuitem" className="menu-item" to={accountTo} onClick={() => pop.setOpen(false)}><Icon name="user" size={15} />Account</Link> : null}
+      {plansTo ? <Link role="menuitem" className="menu-item muted" to={plansTo} onClick={() => pop.setOpen(false)}><Icon name="gauge" size={15} />Plans &amp; limits</Link> : null}
+      <div className="menu-label">Theme</div>
+      <div className="seg" role="group" aria-label="Theme">
+        {THEME_OPTIONS.map(o => <button key={o.mode} type="button" role="menuitemradio" aria-checked={mode === o.mode} className={`seg-btn${mode === o.mode ? " on" : ""}`} onClick={() => setMode(o.mode)}>
+          <Icon name={o.icon} size={14} />{o.label}</button>)}
+      </div>
+      <div className="menu-sep" role="separator" />
+      <button type="button" role="menuitem" className="menu-item" onClick={() => { pop.setOpen(false); onSignOut(); }}><Icon name="log-out" size={15} />Sign out</button>
+    </div> : null}
+    <button ref={pop.triggerRef} type="button" className="um-trigger" aria-haspopup="menu" aria-expanded={pop.open} onClick={pop.toggle}
+      aria-label={`Account menu for ${name}`} data-tip={collapsed ? name : undefined}>
+      <span className="avatar" aria-hidden="true">{initials(name)}</span>
+      <span className="um-text"><span className="um-name">{name}</span><span className="role-badge">{role}</span></span>
+      <Icon name="chevrons-up-down" size={14} className="ws-chev" />
+    </button>
+  </div>;
+}
+
+function Sidebar({ home, groups, can, header, footer, collapsed, onCollapse, onClose }: {
+  home: string; groups: NavGroup[]; can: (s: string) => boolean; header: (collapsed: boolean) => ReactNode; footer: (collapsed: boolean) => ReactNode;
+  collapsed: boolean; onCollapse: () => void; onClose: () => void;
+}) {
+  return <aside id="console-navigation" className="sidebar" aria-label="Sidebar">
+    <div className="sb-head">
+      <div className="sb-brand">
+        <Link to={home} className="sb-logo" aria-label="GraphRec home"><BrandMark /><span className="sb-logo-text">GraphRec</span></Link>
+        <button type="button" className="icon-button sb-collapse" onClick={onCollapse} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} data-tip={collapsed ? "Expand sidebar" : undefined}><Icon name="panel-left" /></button>
+        <button type="button" className="icon-button sb-close" onClick={onClose} aria-label="Close navigation"><Icon name="x" /></button>
+      </div>
+      {header(collapsed)}
+    </div>
+    <Nav groups={groups} can={can} collapsed={collapsed} />
+    <div className="sb-foot">{footer(collapsed)}</div>
+  </aside>;
+}
+
+function Shell({ home, sidebar, children }: { home: string; sidebar: (state: { collapsed: boolean; toggleCollapsed: () => void; closeDrawer: () => void }) => ReactNode; children: ReactNode }) {
   const [open, setOpen] = useState(false);
+  const midWidth = typeof window !== "undefined" && window.matchMedia?.("(max-width: 1279px)").matches;
+  const [collapsed, setCollapsed] = usePref<boolean>("graphrec.sidebar.collapsed", !!midWidth);
+  const [drawer, setDrawer] = useState(() => typeof window !== "undefined" && !!window.matchMedia?.("(max-width: 1023px)").matches);
+  useEffect(() => {
+    const mq = window.matchMedia?.("(max-width: 1023px)");
+    if (!mq) return;
+    const on = () => setDrawer(mq.matches);
+    mq.addEventListener?.("change", on);
+    return () => mq.removeEventListener?.("change", on);
+  }, []);
+  const railCollapsed = collapsed && !drawer;
   const { pathname } = useLocation();
   useEffect(() => {
     setOpen(false);
@@ -82,46 +220,16 @@ function Shell({ aside, children, narrow }: { aside?: ReactNode; children: React
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [open]);
-  return <div className={`shell${open ? ' nav-open' : ''}`}>
+  return <div className={`app-shell${open ? ' nav-open' : ''}${railCollapsed ? ' sb-collapsed' : ''}`}>
     <a className="skip-link" href="#main-content">Skip to content</a>
-    {aside ? <div className="mobile-header"><Link to="/"><BrandMark />GraphRec</Link><button type="button" className="icon-btn nav-toggle" aria-label={open ? 'Close navigation' : 'Open navigation'} aria-expanded={open} aria-controls="console-navigation" onClick={() => setOpen(!open)}>
-      {open ? <svg aria-hidden="true" viewBox="0 0 20 20" width="20" height="20"><path d="M5 5l10 10M15 5L5 15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
-        : <svg aria-hidden="true" viewBox="0 0 20 20" width="20" height="20"><path d="M3 5.5h14M3 10h14M3 14.5h14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>}
-    </button></div> : null}
-    {aside}
-    {aside && open ? <div className="nav-scrim" aria-hidden="true" onClick={() => setOpen(false)} /> : null}
-    <main id="main-content" tabIndex={-1} className={`main${narrow ? " narrow" : ""}`}>{children}</main>
+    <header className="topbar">
+      <button type="button" className="icon-button" aria-label={open ? 'Close navigation' : 'Open navigation'} aria-expanded={open} aria-controls="console-navigation" onClick={() => setOpen(!open)}><Icon name={open ? "x" : "menu"} size={18} /></button>
+      <Link to={home} className="sb-logo"><BrandMark />GraphRec</Link>
+    </header>
+    {sidebar({ collapsed: railCollapsed, toggleCollapsed: () => setCollapsed(!collapsed), closeDrawer: () => setOpen(false) })}
+    {open ? <div className="nav-scrim" aria-hidden="true" onClick={() => setOpen(false)} /> : null}
+    <main id="main-content" tabIndex={-1} className="main"><div className="content">{children}</div></main>
   </div>;
-}
-function ThemeButton({ compact }: { compact?: boolean }) {
-  const [theme, toggle] = useTheme();
-  const next = theme === "light" ? "Dark" : "Light";
-  return <button type="button" className={`theme-toggle${compact ? " compact" : ""}`} onClick={toggle} aria-label={`Switch to ${next.toLowerCase()} theme`} title={`Switch to ${next.toLowerCase()} theme`}>
-    {theme === "light"
-      ? <svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" /></svg>
-      : <svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>}
-    {compact ? null : <span>{next}</span>}
-  </button>;
-}
-function BrandMark() {
-  return <svg className="brand-mark" aria-hidden="true" viewBox="0 0 32 32" width="26" height="26">
-    <rect width="32" height="32" rx="8" fill="var(--color-ink)" />
-    <g stroke="var(--color-on-ink)" strokeWidth="1.6" opacity=".55"><path d="M10 11l12 -1M10 11l5 11M22 10l-7 12M22 10l2 9" /></g>
-    <circle cx="10" cy="11" r="3" fill="var(--color-on-ink)" /><circle cx="22" cy="10" r="2.4" fill="var(--color-on-ink)" />
-    <circle cx="15" cy="22" r="3" fill="var(--color-accent)" /><circle cx="24" cy="19" r="2" fill="var(--color-on-ink)" />
-  </svg>;
-}
-/** Decorative user–item graph for the auth showcase panel. */
-function GraphIllustration() {
-  const nodes: [number, number, number, boolean][] = [
-    [60, 70, 7, false], [170, 40, 5, false], [260, 95, 8, true], [120, 150, 6, false], [215, 185, 5, false],
-    [320, 175, 6, false], [70, 235, 5, false], [175, 265, 9, true], [295, 270, 5, false], [345, 60, 4, false],
-  ];
-  const edges = [[0,1],[0,3],[1,2],[2,3],[2,5],[2,9],[3,4],[3,6],[4,7],[5,8],[6,7],[7,8],[4,5],[1,9]];
-  return <svg className="auth-graph" aria-hidden="true" viewBox="0 0 400 310" preserveAspectRatio="xMidYMid meet">
-    {edges.map(([a, b], i) => <line key={i} x1={nodes[a][0]} y1={nodes[a][1]} x2={nodes[b][0]} y2={nodes[b][1]} className={nodes[a][3] && nodes[b][3] ? "e hot" : nodes[a][3] || nodes[b][3] ? "e warm" : "e"} />)}
-    {nodes.map(([x, y, r, hot], i) => <g key={i}>{hot ? <circle cx={x} cy={y} r={r + 7} className="halo" /> : null}<circle cx={x} cy={y} r={r} className={hot ? "n hot" : "n"} /></g>)}
-  </svg>;
 }
 export function PublicLayout() {
   const { pathname } = useLocation();
@@ -132,23 +240,20 @@ export function PublicLayout() {
       <Link to="/" className="auth-logo"><BrandMark />GraphRec</Link>
       <div className="auth-pitch">
         <GraphIllustration />
-        <h2>Recommendations that learn from every interaction.</h2>
-        <p>Sync your catalog, stream events, and serve time-aware graph recommendations from one multi-tenant console.</p>
-        <ul>
-          <li>Train and version models on your own event history</li>
-          <li>Promote, roll back and monitor serving deployments</li>
-          <li>Scoped API keys and per-tenant usage quotas</li>
-        </ul>
+        <h2>{BRAND.tagline}</h2>
+        <p>{BRAND.lede}</p>
+        <ul>{BRAND.pillars.map(pillar => <li key={pillar}>{pillar}</li>)}</ul>
       </div>
-      <div className="auth-foot">© {new Date().getFullYear()} GraphRec</div>
+      <div className="auth-foot">© {new Date().getFullYear()} GraphRec<span aria-hidden="true"> · </span><Link to="/pricing">Plans &amp; limits</Link></div>
     </aside>
     <div className="auth-pane">
       <header className="auth-top">
         <Link to="/" className="auth-logo mobile-only"><BrandMark />GraphRec</Link>
+        <Link to="/" className="auth-back" aria-label="Back to GraphRec home"><span aria-hidden="true">←</span><span className="auth-back-long">Back to GraphRec</span><span className="auth-back-short">Home</span></Link>
         <ThemeButton />
       </header>
       <main id="main-content" tabIndex={-1} className="auth-main">
-        <div className="auth-card"><p className="auth-pitch-mobile">Recommendations that learn from every interaction.</p><Outlet /></div>
+        <div className="auth-card"><p className="auth-pitch-mobile">{BRAND.tagline}</p><Outlet /></div>
       </main>
     </div>
   </div>;
@@ -173,15 +278,14 @@ export function TenantLayout() {
   const { tenant, can, signOutTenant } = useSession();
   if (!tenant) return <Navigate to="/login" replace />;
   const tenantId = sessionTenantId(tenant);
-  return <Shell key={tenant.accessToken} aside={<aside id="console-navigation" className="aside">
-    <div className="aside-brand"><Link to="/home" className="name"><BrandMark />GraphRec</Link>
-      <div className="workspace-block"><span className="wb-eyebrow">Workspace</span><Link to="/account" className="wb-name">{workspaceName(tenant.email) ?? "Tenant console"}</Link>{tenantId ? <span className="wb-id">Tenant ID <IdChip value={tenantId} length={8} label="Tenant ID" /></span> : null}</div></div>
-    <Nav groups={TENANT_NAV} can={can} />
-    <div className="aside-foot">
-      <Link to="/account" className="who-card" title={tenant.email}><Avatar email={tenant.email} /><span className="who-text"><span className="who">{(tenant.email || "Signed-in user").split("@")[0]}</span><span className="role">{roleLabel(tenant.role)}</span></span></Link>
-      <div className="links"><Link to="/account" className="foot-link">Account</Link><button type="button" className="foot-link" onClick={signOutTenant}>Sign out</button><ThemeButton compact /></div>
-    </div>
-  </aside>}><Outlet /></Shell>;
+  const name = displayName(tenant.email, tenant.role);
+  const role = roleLabel(tenant.role).replace(/^tenant /, "");
+  return <Shell key={tenant.accessToken} home="/home" sidebar={({ collapsed, toggleCollapsed, closeDrawer }) => <Sidebar home="/home" groups={TENANT_NAV} can={can}
+    collapsed={collapsed} onCollapse={toggleCollapsed} onClose={closeDrawer}
+    header={c => <WorkspaceSwitcher name={workspaceName(tenant.email) ?? "Workspace"} tenantId={tenantId} home="/home" collapsed={c} caption="Tenant workspace" />}
+    footer={c => <UserMenu name={name} detail={tenant.email} role={role[0].toUpperCase() + role.slice(1)} collapsed={c} onSignOut={signOutTenant} accountTo="/account" plansTo="/pricing" />} />}>
+    <Outlet />
+  </Shell>;
 }
 export function RequirePlatform() {
   const { platform } = useSession();
@@ -192,11 +296,12 @@ export function RequirePlatform() {
 export function PlatformLayout() {
   const { platform, signOutPlatform } = useSession();
   if (!platform) return <Navigate to="/admin/login" replace />;
-  return <Shell key={platform.token} aside={<aside id="console-navigation" className="aside">
-    <div className="aside-brand"><Link to="/admin/status" className="name"><BrandMark />GraphRec</Link><div className="workspace-block"><span className="wb-eyebrow">Console</span><span className="wb-name">Platform operator</span></div></div>
-    <Nav groups={PLATFORM_NAV} can={() => true} />
-    <div className="aside-foot"><div className="who-card"><span className="avatar" aria-hidden="true">P</span><span className="who-text"><span className="who">Platform operator</span><span className="role">Administrator token</span></span></div><div className="links"><button type="button" className="foot-link" onClick={signOutPlatform}>Sign out</button><ThemeButton compact /></div></div>
-  </aside>}><Outlet /></Shell>;
+  return <Shell key={platform.token} home="/admin/status" sidebar={({ collapsed, toggleCollapsed, closeDrawer }) => <Sidebar home="/admin/status" groups={PLATFORM_NAV} can={() => true}
+    collapsed={collapsed} onCollapse={toggleCollapsed} onClose={closeDrawer}
+    header={c => <WorkspaceSwitcher name="Platform" tenantId={null} home="/admin/status" collapsed={c} caption="Operator console" />}
+    footer={c => <UserMenu name="Platform operator" detail="Administrator token" role="Operator" collapsed={c} onSignOut={signOutPlatform} />} />}>
+    <Outlet />
+  </Shell>;
 }
 export function ErrorLayout() {
   const { tenant, platform } = useSession();

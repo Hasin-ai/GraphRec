@@ -39,6 +39,7 @@ DOMAIN_ROUTES: list[tuple[str, str, object, set[str]]] = [
     ("POST", "/v1/events", EVENT, {"events:write"}),
     ("POST", "/v1/events/batches", {"events": [{**EVENT, "event_id": "e-2"}]}, {"events:write"}),
     ("GET", "/v1/events/batches", None, {"events:read"}),
+    ("GET", "/v1/events", None, {"events:read"}),
     ("GET", f"/v1/events/batches/{MISSING}", None, {"events:read"}),
     ("POST", "/v1/datasets/snapshots", {}, {"training:write"}),
     ("GET", "/v1/datasets/snapshots", None, {"training:read"}),

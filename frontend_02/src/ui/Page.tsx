@@ -1,4 +1,5 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { Icon } from "./icons";
 import { Link } from "react-router-dom";
 
 export interface Crumb {
@@ -16,7 +17,6 @@ export interface HeaderAction {
   icon?: "refresh";
 }
 
-const REFRESH_ICON = <svg aria-hidden="true" viewBox="0 0 16 16" width="14" height="14"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 
 export function Breadcrumbs({ items }: { items: Crumb[] }) {
   return (
@@ -35,7 +35,7 @@ export function Breadcrumbs({ items }: { items: Crumb[] }) {
                 {c.label === "Home" ? "Overview" : c.label}
               </span>
             )}
-            {!last ? <span className="sep">{"›"}</span> : null}
+            {!last ? <Icon name="chevron-right" size={13} className="sep" /> : null}
           </span>
         );
       })}
@@ -43,9 +43,17 @@ export function Breadcrumbs({ items }: { items: Crumb[] }) {
   );
 }
 
+function useLoadedStamp(loading: boolean | undefined): number | null {
+  const [stamp, setStamp] = useState<number | null>(loading === undefined ? null : loading ? null : Date.now());
+  useEffect(() => { if (loading === false) setStamp(Date.now()); }, [loading]);
+  return stamp;
+}
+const timeFmt = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" });
+
 /**
- * The page frame every screen shares: optional breadcrumbs, kicker, title with
- * a state badge and actions, a subtitle, and the body stack.
+ * PageHeader + body. Breadcrumbs only render for nested pages (detail / create);
+ * top-level pages rely on the sidebar for location. A refresh action shows a
+ * spinner while loading and the time of the last successful load.
  */
 export function Page({
   crumbs,
@@ -66,34 +74,41 @@ export function Page({
   children?: ReactNode;
 }) {
   useEffect(() => { document.title = `${title} · GraphRec`; }, [title]);
+  const nested = crumbs && crumbs.length > 2 ? crumbs.slice(1) : null;
+  const refresh = actions?.find(a => a.icon === "refresh" || /^refresh/i.test(a.label));
+  const stamp = useLoadedStamp(refresh ? !!refresh.disabled : undefined);
   return (
     <>
-      {crumbs && crumbs.length ? <Breadcrumbs items={crumbs} /> : null}
       <header className="page-header">
+        {nested ? <Breadcrumbs items={nested} /> : null}
         <div className="title-row">
-          <h1>{title}</h1>
-          {badge}
+          <div className="title-block">
+            <div className="title-line"><h1>{title}</h1>{badge}</div>
+            {subtitle ? <p className="subtitle">{subtitle}</p> : null}
+          </div>
           {actions && actions.length ? (
             <div className="actions">
-              {actions.map((a) => (
-                <span className="action" key={a.label}>
+              {refresh ? <span className="updated-stamp" aria-live="polite">{refresh.disabled ? "Refreshing…" : updated ?? (stamp ? `Updated ${timeFmt.format(stamp)}` : null)}</span> : null}
+              {actions.map((a) => {
+                const isRefresh = a === refresh;
+                return <span className="action" key={a.label}>
                   <button
                     type="button"
-                    className={`btn ${a.variant === "primary" ? "btn-primary" : "btn-secondary"}`}
+                    className={`btn ${a.variant === "primary" ? "btn-primary" : a.variant === "danger" ? "btn-danger" : "btn-secondary"}`}
                     disabled={a.disabled}
                     title={a.reason}
+                    aria-busy={isRefresh && a.disabled ? true : undefined}
                     onClick={a.onClick}
                   >
-                    {a.icon === "refresh" || /^refresh/i.test(a.label) ? REFRESH_ICON : null}{a.label === "Refresh" ? "Refresh data" : a.label}
+                    {isRefresh ? <Icon name="refresh-cw" size={15} className={a.disabled ? "spin" : undefined} /> : /^\+\s*/.test(a.label) ? <Icon name="plus" size={15} /> : null}
+                    {a.label === "Refresh" ? "Refresh" : a.label.replace(/^\+\s*/, "")}
                   </button>
-                  {a.reason ? <span className="reason">{a.reason}</span> : null}
-                </span>
-              ))}
+                  {a.reason && !isRefresh ? <span className="reason">{a.reason}</span> : null}
+                </span>;
+              })}
             </div>
-          ) : null}
+          ) : updated ? <div className="actions"><span className="updated-stamp">{updated}</span></div> : null}
         </div>
-        {subtitle ? <p className="subtitle">{subtitle}</p> : null}
-        {updated ? <div className="updated">{updated}</div> : null}
       </header>
       <div className="page-body">{children}</div>
     </>

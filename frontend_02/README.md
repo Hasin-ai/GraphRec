@@ -45,12 +45,28 @@ src/
   api/          request() wrapper (auth, error envelope, 401 handling) + typed endpoints
   auth/         tenant and platform sessions (sessionStorage, tab-scoped)
   hooks/        useSession, useResource, useToast, useTheme
-  layouts/      PublicLayout, TenantLayout, PlatformLayout, route guards (gates 1-3)
+  brand/        BrandMark, GraphIllustration, ThemeButton (shared by every layout)
+  marketing/    BRAND copy (hero + auth showcase) and plan limits (plans.ts)
+  layouts/      MarketingLayout, PublicLayout, TenantLayout, PlatformLayout, route guards (gates 1-3)
   ui/           Page, Form, Dialog, primitives (the prototype's shared renderer)
   lib/          formatting, state->tone map (GROUPS), scope vocabulary
-  pages/        public/, tenant/, platform/, errors/
-  styles/       modernist.css (tokens + components), console.css (layout + primitives)
+  pages/        marketing/ (landing + pricing, sections/), public/, tenant/, platform/, errors/
+  styles/       modernist.css (tokens + components), console.css (layout + primitives),
+                system.css + app.css (semantic layer, console tokens), marketing.css (public site, scoped under .mkt)
 ```
+
+### Public site and `MarketingLayout`
+
+`/` is the public landing page for signed-out visitors; a tenant session still
+redirects to `/home` and a platform session to `/admin/status` (`Root()` in
+`App.tsx`). `/pricing` is always reachable, signed in or not. Both render in
+`MarketingLayout`: a sticky header (anchor links to the landing sections, a
+light/dark toggle and a session-aware call to action), a hamburger menu below
+960 px, and a footer that links into the console. It is separate from
+`PublicLayout`, which stays the split-screen auth shell. Plan limits on
+`/pricing` come from `src/marketing/plans.ts`, which mirrors the seeded
+`pricing_plans` rows (migrations `0001`, `0012`, `0031`); operators can change
+plans at runtime, so the page shows the seeded defaults. Plans carry no prices.
 
 ## Authorization gates
 
@@ -72,6 +88,8 @@ list.
 
 | Prototype route | Console | Backed by |
 |---|---|---|
+| — | `/` (new, signed out) | public landing page in `MarketingLayout`; signed in, redirects to `/home` or `/admin/status` |
+| — | `/pricing` (new) | public plans and limits from `src/marketing/plans.ts` (no API call; there is no public plans endpoint) |
 | `/register` | `/register` | `POST /v1/tenants` (business name + admin email; shows the one-time setup link) |
 | `/invite/accept` | `/setup` (alias `/invite/accept`) | `POST /v1/auth/setup-password` |
 | `/login` | `/login` | `POST /v1/auth/login` |

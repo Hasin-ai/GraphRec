@@ -92,6 +92,8 @@ export interface AuthTokenPair {
   refresh_token: string;
   user_role: TenantUserRole;
   scopes: string[];
+  /** Normalized sign-in email; labels the session when the client sent none. */
+  email?: string | null;
 }
 
 // ── api keys ───────────────────────────────────────────────────
@@ -247,6 +249,17 @@ export interface EventSubmitResponse {
   accepted: boolean;
   duplicate: boolean;
   received_at: string;
+}
+
+/** One stored interaction from GET /v1/events. */
+export interface EventRecord {
+  event_id: string;
+  event_type: string;
+  user_id?: string | null;
+  external_product_id?: string | null;
+  context: Record<string, unknown>;
+  occurred_at: string;
+  created_at: string;
 }
 
 export interface EventBatchResponse {

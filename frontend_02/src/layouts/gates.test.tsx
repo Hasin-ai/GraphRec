@@ -74,7 +74,8 @@ describe("authorization gates", () => {
       { path: /\/v1\/.*/, body: { items: [], total: 0 } },
     ]);
     renderAt("/credentials");
-    await user.click(await screen.findByRole("button", { name: "Sign out" }));
+    await user.click(await screen.findByRole("button", { name: /Account menu/ }));
+    await user.click(await screen.findByRole("menuitem", { name: "Sign out" }));
     await user.type(await screen.findByLabelText("Email"), "ruben@northgate.example");
     await user.type(screen.getByLabelText("Password"), "pw");
     await user.click(screen.getByRole("button", { name: "Sign in" }));

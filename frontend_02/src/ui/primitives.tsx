@@ -38,7 +38,7 @@ export function Tag({
 
 /** A state badge: the value in mono, with its fixed semantic colour and a status dot. */
 /** Display labels where the API vocabulary isn't what an operator thinks in. */
-const BADGE_LABEL: Record<string, Record<string, string>> = { model: { active: "Serving", retired: "Rollback available", eligible: "Ready to activate", archived: "Archived" } };
+const BADGE_LABEL: Record<string, Record<string, string>> = { model: { active: "Serving", retired: "Available", eligible: "Available", archived: "Archived" } };
 const COMPLETION_GROUPS = new Set(["job", "outcome", "batch"]);
 /**
  * A state badge with a shape that matches its meaning: completed work gets a

@@ -81,6 +81,10 @@ def _zero_query_vector(dim: int) -> list[float]:
 
 #: Most recent stored events considered for one shopper's history.
 HISTORY_LIMIT = 1000
+#: Event types that become DGSR history edges. The checkpoint learns one
+#: undifferentiated "interacted with" edge, so negative or product-less signals
+#: (``remove_from_cart``, ``search``) must not be replayed as interactions.
+HISTORY_EVENT_TYPES = ("view", "click", "add_to_cart", "purchase", "rating", "add_to_wishlist")
 #: Session items accepted from ``context.recent_product_ids``.
 SESSION_ITEMS_LIMIT = 50
 #: The only availability a product may have and still be served (BRULE-09).
@@ -162,6 +166,7 @@ def _stored_history(db: Session, tenant_id: UUID, user_id: str) -> list[tuple[st
             CustomerEvent.tenant_id == tenant_id,
             CustomerEvent.user_id == user_id,
             CustomerEvent.external_product_id.is_not(None),
+            CustomerEvent.event_type.in_(HISTORY_EVENT_TYPES),
         )
         .order_by(CustomerEvent.occurred_at.desc(), CustomerEvent.created_at.desc())
         .limit(HISTORY_LIMIT)

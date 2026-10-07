@@ -56,12 +56,14 @@ async function signIn(page: Page) {
   await expect(page.getByRole("navigation", { name: "Primary" })).toBeVisible();
 }
 
-test("public: root redirects to sign-in and registration creates a tenant with a one-time setup link", async () => {
+test("public: the landing page leads to registration, which creates a tenant with a one-time setup link", async () => {
   await page.goto("/");
-  await expect(page).toHaveURL(/\/login$/);
-  await shot(page, "login");
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Recommendations that learn from every interaction." })).toBeVisible();
+  await shot(page, "landing");
 
-  await page.goto("/register");
+  await page.getByRole("main").getByRole("link", { name: "Create a tenant" }).first().click();
+  await expect(page).toHaveURL(/\/register$/);
   await page.getByLabel("Business name").fill(tenantName);
   await page.getByLabel("Administrator email").fill(adminEmail);
   await shot(page, "register");

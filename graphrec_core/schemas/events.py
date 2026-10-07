@@ -44,6 +44,18 @@ class EventItemOutcome(BaseModel):
     reason: str | None = None
 
 
+class EventRecord(BaseModel):
+    """One stored interaction, as listed by ``GET /v1/events``."""
+
+    event_id: str
+    event_type: str
+    user_id: str | None = None
+    external_product_id: str | None = None
+    context: dict[str, Any] = Field(default_factory=dict)
+    occurred_at: datetime
+    created_at: datetime
+
+
 class EventBatchResponse(BaseModel):
     id: UUID
     status: str

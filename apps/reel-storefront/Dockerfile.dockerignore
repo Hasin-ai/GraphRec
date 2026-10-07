@@ -1,0 +1,12 @@
+**
+!sdks/python/pyproject.toml
+!sdks/python/README.md
+!sdks/python/src/**
+!apps/reel-storefront/app/**
+!apps/reel-storefront/scripts/**
+!apps/reel-storefront/data/**
+!apps/reel-storefront/frontend/**
+apps/reel-storefront/frontend/node_modules
+apps/reel-storefront/frontend/dist
+**/__pycache__
+**/*.pyc

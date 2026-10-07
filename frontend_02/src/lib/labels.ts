@@ -54,6 +54,11 @@ const KEY_LABELS: Record<string, string> = {
   maximum_training_duration_minutes: "Maximum training duration (min)", concurrent_recommendation_requests: "Concurrent recommendation requests",
 };
 
+/** True when `key` has a curated label (the pricing page asserts every plan limit does). */
+export function hasKeyLabel(key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(KEY_LABELS, key);
+}
+
 /** "embedding_dim" -> "Embedding size"; unknown snake_case keys are sentence-cased. Ranking keys (Hit@5) pass through. */
 export function humanizeKey(key: string): string {
   const last = key.split(".").pop() ?? key;
@@ -99,9 +104,9 @@ export function daysAgoLabel(value: string | number | null | undefined): string 
 /** What each lifecycle status means, for badge tooltips and legends (audit X-5). */
 export const STATUS_HELP: Record<string, Record<string, string>> = {
   model: {
-    eligible: "Trained and evaluated. Not serving until you activate it.",
-    active: "This version answers every recommendation request.",
-    retired: "Served before. You can roll back to it.",
+    eligible: "Available: trained and evaluated, never served. Activate it to serve.",
+    active: "Serving: this version answers every recommendation request.",
+    retired: "Available: served before. Roll back to serve it again.",
     archived: "Kept for audit only. Can't serve or be rolled back to.",
   },
   job: {
@@ -111,3 +116,13 @@ export const STATUS_HELP: Record<string, Record<string, string>> = {
   deploy: { available: "A model is loaded and can answer requests.", stopped: "No model is serving." },
   key: { active: "Can authenticate requests.", expired: "Past its expiry date; refused.", revoked: "Revoked; refused." },
 };
+
+const USAGE_LABELS: Record<string, string> = {
+  accepted_events: "Accepted events", recommendation_requests: "Recommendation requests", training_jobs: "Training jobs",
+  training_cpu_seconds: "Training CPU seconds", stored_products: "Stored products", artifact_storage_bytes: "Artifact storage",
+  active_model_versions: "Active model versions", inference_replicas: "Inference replicas", replica_runtime_minutes: "Replica runtime",
+};
+/** Usage dimension label with correct casing ("training_cpu_seconds" -> "Training CPU seconds"). */
+export function usageLabel(type: string): string {
+  return USAGE_LABELS[type] ?? humanize(type).replace(/ bytes$/, "");
+}

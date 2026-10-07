@@ -125,7 +125,7 @@ export function RegisterPage() {
           <TextInput id="email" type="email" value={email} onChange={setEmail} placeholder="admin@company.example" autoComplete="email" required />
         </Field>
       </Form>
-      <Footnote>A setup link is shown after registration. Use it to activate your administrator account.</Footnote>
+      <Footnote>A setup link is shown after registration. Use it to activate your administrator account. New tenants start on the Free plan. <Link to="/pricing">Compare plans</Link>.</Footnote>
     </Page>
   );
 }

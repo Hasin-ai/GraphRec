@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { events } from "../../api";
 import { isApiError } from "../../api/client";
 import { EVENT_TYPES } from "../../api/eventTypes";
-import type { EventBatchResponse, EventSubmit, EventSubmitResponse } from "../../api/types";
+import type { EventBatchResponse, EventRecord, EventSubmit, EventSubmitResponse } from "../../api/types";
 import { useQueryState } from "../../hooks/useQueryState";
 import { useResource } from "../../hooks/useResource";
 import { useSession } from "../../hooks/useSession";
@@ -50,6 +50,50 @@ export function mapError(caught: unknown): FormError {
 }
 
 type Result = { kind: "single"; event: EventSubmitResponse; type: string } | { kind: "batch"; batch: EventBatchResponse; received: number };
+
+const RECENT_EVENT_LIMIT = 50;
+
+/** Every stored event, single or batched, newest first, so a storefront's traffic can be traced. */
+function RecentEvents({ refreshKey }: { refreshKey: unknown }) {
+  const { can } = useSession();
+  const [customer, setCustomer] = useState("");
+  const [applied, setApplied] = useState("");
+  const list = useResource(
+    () => (can("events:read") ? events.list({ limit: RECENT_EVENT_LIMIT, user_id: applied || undefined }) : Promise.resolve([] as EventRecord[])),
+    [can("events:read"), applied, refreshKey],
+  );
+  if (!can("events:read")) return null;
+  const rows = (list.data ?? []).map((e) => (
+    <tr key={e.event_id}>
+      <td><span className="mono">{e.event_id}</span></td>
+      <td><Badge group="neutral" value={e.event_type} /></td>
+      <td><span className="mono">{e.user_id ?? "—"}</span></td>
+      <td><span className="mono">{e.external_product_id ?? "—"}</span></td>
+      <Cell>{fmtDateTime(e.occurred_at)}</Cell>
+      <Cell>{fmtDateTime(e.created_at)}</Cell>
+    </tr>
+  ));
+  return (
+    <>
+      <form className="row" onSubmit={(ev) => { ev.preventDefault(); setApplied(customer.trim()); }} style={{ gap: 8, alignItems: "flex-end", marginTop: 24 }}>
+        <Field id="recent-customer" label="Filter by customer identifier">
+          <TextInput id="recent-customer" value={customer} onChange={setCustomer} placeholder="e.g. cus-9931" />
+        </Field>
+        <button type="submit" className="btn btn-secondary btn-sm">Apply</button>
+        <button type="button" className="btn btn-link btn-sm" onClick={() => list.reload()}>Refresh</button>
+      </form>
+      {list.error ? <ErrorBanner error={list.error} onRetry={list.reload} /> : null}
+      {!list.data ? list.loading ? <Skeleton /> : null : <DataTable
+        title="Recent events"
+        minWidth={900}
+        columns={["Event identifier", "Type", "Customer", "Product", "Occurred at", "Received at"]}
+        rows={rows}
+        count={`${rows.length} most recent${applied ? ` for ${applied}` : ""}`}
+        empty={{ title: "No events yet", body: "Events from your storefront, the SDK or this form appear here as soon as they are accepted." }}
+      />}
+    </>
+  );
+}
 
 function RecentBatches() {
   const { can } = useSession();
@@ -227,8 +271,9 @@ export function EventsPage() {
           </Field>
         </Form>
       )}
+      <RecentEvents refreshKey={result} />
       <RecentBatches />
-      <Footnote>Single events are confirmed on submit and are not listed here; this table shows batches only. Re-sending an event identifier returns a duplicate confirmation, not an error.</Footnote>
+      <Footnote>Recent events lists every accepted event, single or batched, newest first. Re-sending an event identifier returns a duplicate confirmation, not an error.</Footnote>
     </Page>
   );
 }

@@ -4,6 +4,8 @@ import { App } from "./App";
 import "./styles/modernist.css";
 import "./styles/console.css";
 import "./styles/system.css";
+import "./styles/app.css";
+import "./styles/marketing.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

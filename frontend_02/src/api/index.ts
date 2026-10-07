@@ -9,6 +9,7 @@ import type {
   DatasetUploadResponse,
   DeploymentStatus,
   EventBatchResponse,
+  EventRecord,
   EventSubmit,
   EventSubmitResponse,
   LoginInput,
@@ -138,6 +139,12 @@ export const events = {
   submit: (input: EventSubmit) => request<EventSubmitResponse>("/v1/events", { method: "POST", json: input }),
   submitBatch: (items: EventSubmit[], requestId?: string) =>
     request<EventBatchResponse>("/v1/events/batches", { method: "POST", json: { events: items, ...(requestId ? { request_id: requestId } : {}) } }),
+  list: (filter: { limit?: number; user_id?: string; event_type?: string; external_product_id?: string } = {}) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(filter)) if (v !== undefined && v !== "") q.set(k, String(v));
+    const qs = q.toString();
+    return request<EventRecord[]>(`/v1/events${qs ? `?${qs}` : ""}`);
+  },
   listBatches: () => request<EventBatchResponse[]>("/v1/events/batches"),
   getBatch: (id: string) => request<EventBatchResponse>(`/v1/events/batches/${enc(id)}`),
 };

@@ -145,6 +145,8 @@
 
 /* ══ Visual polish pass ═══════════════════════════════════════════════════ */
 :root { --color-canvas: #f6f7f9; --auth-panel: #12151c; --auth-panel-2: #1b2029; }
+/* Dark brand panel (auth showcase + marketing hero). The panel is dark in both themes, so these are theme-independent. */
+:root { --auth-text-strong: #fff; --auth-text: #e9ebf0; --auth-text-2: #c9cfd9; --auth-text-3: #a8b0bd; --auth-text-4: #6d7583; --brand-hot: #ff6d50; --brand-hot-soft: #ffa891; }
 :root[data-theme="dark"] { --color-canvas: #0e1015; --auth-panel: #0a0c10; --auth-panel-2: #141820; }
 .text-link { font-size: 13.5px; font-weight: 600; color: var(--color-accent); }
 
@@ -158,31 +160,37 @@
 
 /* ── auth / public pages: split layout ─────────────────────────────────── */
 .auth-shell { display: grid; grid-template-columns: minmax(380px, 5fr) 7fr; min-height: 100dvh; background: var(--color-canvas); color: var(--color-text); }
-.auth-showcase { position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; gap: 32px; padding: 40px clamp(32px, 4vw, 64px); color: #e9ebf0; background: radial-gradient(120% 80% at 0% 0%, var(--auth-panel-2), var(--auth-panel) 60%); }
-.auth-showcase::after { content: ""; position: absolute; inset: auto -20% -30% auto; width: 70%; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(closest-side, color-mix(in srgb, #ff6d50 22%, transparent), transparent); pointer-events: none; }
+.auth-showcase { position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; gap: 32px; padding: 40px clamp(32px, 4vw, 64px); color: var(--auth-text); background: radial-gradient(120% 80% at 0% 0%, var(--auth-panel-2), var(--auth-panel) 60%); }
+.auth-showcase::after { content: ""; position: absolute; inset: auto -20% -30% auto; width: 70%; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(closest-side, color-mix(in srgb, var(--brand-hot) 22%, transparent), transparent); pointer-events: none; }
 .auth-logo { display: inline-flex; align-items: center; gap: 10px; font-size: 19px; font-weight: 750; letter-spacing: -.03em; color: inherit; text-decoration: none; }
 .auth-logo:hover { color: inherit; text-decoration: none; }
-.auth-showcase .auth-logo { color: #fff; }
-.auth-showcase .brand-mark rect { fill: #fff; }
+.auth-showcase .auth-logo { color: var(--auth-text-strong); }
+.auth-showcase .brand-mark rect { fill: var(--auth-text-strong); }
 .auth-showcase .brand-mark g, .auth-showcase .brand-mark circle:not([fill="var(--color-accent)"]) { stroke: #12151c; fill: #12151c; }
 .auth-pitch { position: relative; z-index: 1; max-width: 460px; }
-.auth-pitch h2 { font-size: clamp(24px, 2.2vw, 32px); font-weight: 750; letter-spacing: -.03em; line-height: 1.15; color: #fff; margin: 8px 0 14px; }
-.auth-pitch p { color: #a8b0bd; font-size: 15px; line-height: 1.6; margin: 0 0 22px; }
+.auth-pitch h2 { font-size: clamp(24px, 2.2vw, 32px); font-weight: 750; letter-spacing: -.03em; line-height: 1.15; color: var(--auth-text-strong); margin: 8px 0 14px; }
+.auth-pitch p { color: var(--auth-text-3); font-size: 15px; line-height: 1.6; margin: 0 0 22px; }
 .auth-pitch ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-.auth-pitch li { position: relative; padding-left: 26px; font-size: 14px; color: #c9cfd9; }
-.auth-pitch li::before { content: ""; position: absolute; left: 0; top: 4px; width: 14px; height: 14px; border-radius: 50%; background: color-mix(in srgb, #ff6d50 20%, transparent); box-shadow: inset 0 0 0 4px #ff6d50; }
+.auth-pitch li { position: relative; padding-left: 26px; font-size: 14px; color: var(--auth-text-2); }
+.auth-pitch li::before { content: ""; position: absolute; left: 0; top: 4px; width: 14px; height: 14px; border-radius: 50%; background: color-mix(in srgb, var(--brand-hot) 20%, transparent); box-shadow: inset 0 0 0 4px var(--brand-hot); }
 .auth-graph { width: 100%; max-width: 420px; height: auto; margin-bottom: 20px; }
 .auth-graph .e { stroke: #3a4250; stroke-width: 1.4; }
 .auth-graph .e.warm { stroke: #6b4a42; }
-.auth-graph .e.hot { stroke: #ff6d50; stroke-width: 2; }
+.auth-graph .e.hot { stroke: var(--brand-hot); stroke-width: 2; }
 .auth-graph .n { fill: #2a303b; stroke: #6d7583; stroke-width: 1.4; }
-.auth-graph .n.hot { fill: #ff6d50; stroke: #ffa891; }
-.auth-graph .halo { fill: none; stroke: #ff6d50; stroke-opacity: .35; stroke-width: 1.2; }
-.auth-foot { position: relative; z-index: 1; font-size: 12px; color: #6d7583; }
+.auth-graph .n.hot { fill: var(--brand-hot); stroke: var(--brand-hot-soft); }
+.auth-graph .halo { fill: none; stroke: var(--brand-hot); stroke-opacity: .35; stroke-width: 1.2; }
+.auth-foot { position: relative; z-index: 1; font-size: 12px; color: var(--auth-text-4); }
+.auth-foot a { color: var(--auth-text-3); text-decoration: underline; text-underline-offset: 3px; }
+.auth-foot a:hover { color: var(--auth-text-strong); }
 
 .auth-pane { display: flex; flex-direction: column; min-width: 0; }
 .auth-top { display: flex; align-items: center; justify-content: flex-end; gap: 12px; width: 100%; max-width: 640px; margin: 0 auto; padding: 24px 24px 0; }
-.auth-top .mobile-only { display: none; margin-right: auto; color: var(--color-text); }
+.auth-top .mobile-only { display: none; color: var(--color-text); }
+/* "← Back to GraphRec": left on desktop, beside the mobile logo on narrow screens */
+.auth-back { display: inline-flex; align-items: center; gap: 6px; margin-right: auto; min-height: 32px; font-size: 13.5px; font-weight: 500; color: var(--color-text-2); text-decoration: none; }
+.auth-back:hover { color: var(--color-text); text-decoration: underline; }
+.auth-back-short { display: none; }
 .auth-main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 32px 24px 56px; }
 .auth-main:focus { outline: none; }
 .auth-card { width: 100%; max-width: 480px; padding: 36px 40px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 14px; box-shadow: var(--shadow-md); }
@@ -213,6 +221,8 @@
 }
 @media (max-width: 520px) {
   .auth-top { padding: 16px 16px 0; }
+  .auth-back-long { display: none; }
+  .auth-back-short { display: inline; }
   .auth-main { padding: 20px 16px 40px; align-items: flex-start; }
   .auth-card { padding: 24px 20px; border-radius: 12px; }
 }

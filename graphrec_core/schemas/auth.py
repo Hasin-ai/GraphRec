@@ -60,6 +60,9 @@ class AuthTokenPair(BaseModel):
     refresh_token: str
     user_role: Literal["tenant_administrator", "tenant_developer", "platform_administrator"]
     scopes: list[str]
+    # Normalized sign-in email of the authenticated user, so clients can label
+    # the session even when the caller did not supply an email (setup/recovery).
+    email: str | None = None
 
 
 class RecoverPasswordRequest(BaseModel):

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <style>.bg{fill:#1a1d24}.fg{fill:#fff;stroke:#fff}@media (prefers-color-scheme:dark){.bg{fill:#e9ebf0}.fg{fill:#0e1015;stroke:#0e1015}}</style>
+  <rect class="bg" width="32" height="32" rx="8"/>
+  <g class="fg" stroke-width="1.6" opacity=".55" fill="none"><path d="M10 11l12 -1M10 11l5 11M22 10l-7 12M22 10l2 9"/></g>
+  <circle class="fg" cx="10" cy="11" r="3" stroke="none"/><circle class="fg" cx="22" cy="10" r="2.4" stroke="none"/>
+  <circle cx="15" cy="22" r="3" fill="#ff6d50"/><circle class="fg" cx="24" cy="19" r="2" stroke="none"/>
+</svg>

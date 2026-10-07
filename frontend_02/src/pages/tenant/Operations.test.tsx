@@ -15,10 +15,10 @@ describe('operational state', () => {
     mockFetch([{ path: '/v1/usage', body: usage }, { path: '/v1/subscription', body: { plan_code: 'free', status: 'active', limits: {} } }]);
     renderAt('/usage');
     expect(await screen.findByText('Training job limit reached')).toBeInTheDocument();
-    expect(screen.getByRole('row', { name: /Training jobs/ })).toHaveTextContent('0 remaining');
-    expect(screen.getByRole('row', { name: /Training jobs/ })).toHaveTextContent('Exhausted');
-    expect(screen.getByRole('row', { name: /Stored products/ })).toHaveTextContent('Approaching limit');
-    expect(screen.getByRole('row', { name: /Training cpu seconds/ })).toHaveTextContent('Informational');
+    expect(screen.getByRole('row', { name: /Training jobs/ })).toHaveTextContent('0 of 0');
+    expect(screen.getByRole('row', { name: /Training jobs/ })).toHaveTextContent('At limit');
+    expect(screen.getByRole('row', { name: /Stored products/ })).toHaveTextContent('Near limit');
+    expect(screen.getByRole('row', { name: /Training CPU seconds/ })).toHaveTextContent('No limit');
   });
   it('blocks training on a zero limit even if the API remaining field is inconsistent', async () => {
     signInAsAdmin();

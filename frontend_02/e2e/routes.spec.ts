@@ -56,9 +56,13 @@ test('all routes render in both themes and at responsive widths', async ({ page,
     report.push({ route, width, title: await page.locator('h1').innerText(), overflow });
     if (phase !== 'before') expect(overflow, `${route} at ${width}px overflows`).toBe(false);
   };
-  for (const route of ['/login', '/register', '/setup', '/invite/accept', '/recover', '/recover/confirm', '/admin/login', '/403', '/404', '/error', '/missing']) {
+  for (const route of ['/', '/pricing', '/login', '/register', '/setup', '/invite/accept', '/recover', '/recover/confirm', '/admin/login', '/403', '/404', '/error', '/missing']) {
     await capture(route, `public-${route.replaceAll('/', '-')}`);
     await capture(route, `public-${route.replaceAll('/', '-')}`, 390);
+  }
+  // The public marketing pages at every sweep width, signed out (signed in, `/` redirects to the console).
+  for (const width of [1024, 768, 320]) {
+    for (const route of ['/', '/pricing']) await capture(route, `responsive-public-${route === '/' ? 'landing' : route.slice(1)}`, width);
   }
   await page.goto('/login');
   await page.getByLabel('Email', { exact: true }).fill(email);

@@ -13,7 +13,7 @@ from graphrec_core.customers import ensure_customers
 from graphrec_core.ingestion.idempotency import payload_hash
 from graphrec_core.usage.limits import lock_dimension, require_capacity
 from graphrec_core.errors import ApiError
-from graphrec_core.schemas.events import EventBatchResponse, EventBatchSubmit, EventSubmit
+from graphrec_core.schemas.events import EventBatchResponse, EventBatchSubmit, EventRecord, EventSubmit
 
 
 class EventService:
@@ -175,6 +175,39 @@ class EventService:
         if external_id is not None and self.db.scalar(select(Product.id).where(
             Product.tenant_id == tenant_id, Product.external_id == external_id)) is None:
             raise ApiError(422, "invalid_product_reference", "The event product does not exist in this tenant catalog.")
+
+    def list_events(
+        self,
+        tenant_id: UUID,
+        *,
+        limit: int = 50,
+        user_id: str | None = None,
+        event_type: str | None = None,
+        external_product_id: str | None = None,
+    ) -> list[EventRecord]:
+        """Most recently received events first (single and batched alike)."""
+        query = select(CustomerEvent).where(CustomerEvent.tenant_id == tenant_id)
+        if user_id:
+            query = query.where(CustomerEvent.user_id == user_id.strip())
+        if event_type:
+            query = query.where(CustomerEvent.event_type == event_type)
+        if external_product_id:
+            query = query.where(CustomerEvent.external_product_id == external_product_id.strip())
+        rows = self.db.execute(
+            query.order_by(CustomerEvent.created_at.desc(), CustomerEvent.id.desc()).limit(limit)
+        ).scalars().all()
+        return [
+            EventRecord(
+                event_id=row.event_id,
+                event_type=row.event_type,
+                user_id=row.user_id,
+                external_product_id=row.external_product_id,
+                context=row.context_json or {},
+                occurred_at=row.occurred_at,
+                created_at=row.created_at,
+            )
+            for row in rows
+        ]
 
     def list_batches(self, tenant_id: UUID) -> list[EventBatchResponse]:
         batches = (

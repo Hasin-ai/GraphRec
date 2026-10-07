@@ -3,13 +3,13 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from graphrec_core.auth.principal import AuthenticatedPrincipal, authenticated_principal
 from graphrec_core.database.session import get_db
 from graphrec_core.events.service import EventService
-from graphrec_core.schemas.events import EventBatchResponse, EventBatchSubmit, EventSubmit
+from graphrec_core.schemas.events import EventBatchResponse, EventBatchSubmit, EventRecord, EventSubmit, EventType
 
 router = APIRouter(tags=["events"])
 
@@ -23,6 +23,27 @@ def submit_event(
     principal.require_scope("events:write")
     service = EventService(db)
     return service.submit_event(principal.tenant_id, payload)
+
+
+@router.get("/v1/events", response_model=list[EventRecord])
+def list_events(
+    limit: int = Query(default=50, ge=1, le=500),
+    user_id: str | None = Query(default=None, max_length=256),
+    event_type: EventType | None = None,
+    external_product_id: str | None = Query(default=None, max_length=100),
+    principal: AuthenticatedPrincipal = Depends(authenticated_principal),
+    db: Session = Depends(get_db),
+) -> list[EventRecord]:
+    """Recently received events, newest first, including single submissions."""
+    principal.require_scope("events:read")
+    service = EventService(db)
+    return service.list_events(
+        principal.tenant_id,
+        limit=limit,
+        user_id=user_id,
+        event_type=event_type,
+        external_product_id=external_product_id,
+    )
 
 
 @router.post("/v1/events/batches", response_model=EventBatchResponse)

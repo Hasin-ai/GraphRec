@@ -1,0 +1,58 @@
+# Reel storefront, run separately from the GraphRec stack and joined to its network.
+#
+#   # 1. GraphRec stack (repository root)
+#   docker compose up -d --build
+#   # 2. one-off: tenant, catalogue, persona histories, imported checkpoint -> apps/reel-storefront/.env
+#   docker compose -f apps/reel-storefront/docker-compose.yml --env-file .env run --rm reel-bootstrap
+#   # 3. storefront on http://localhost:5290
+#   docker compose -f apps/reel-storefront/docker-compose.yml up -d --build reel
+#
+# Run the commands from the repository root. If the GraphRec project has another
+# name than the folder "graphrec", set GRAPHREC_NETWORK (see `docker network ls`).
+name: reel
+
+x-image: &image
+  build:
+    context: ../..
+    dockerfile: apps/reel-storefront/Dockerfile
+  image: graphrec/reel-storefront:local
+
+services:
+  reel:
+    <<: *image
+    env_file:
+      - path: ./.env
+        required: true
+    environment:
+      GRAPHREC_BASE_URL: http://api:8000
+    ports:
+      - "${REEL_PORT:-5290}:5290"
+    volumes:
+      - reel_state:/app/state
+    networks: [graphrec]
+    restart: unless-stopped
+
+  reel-bootstrap:
+    <<: *image
+    profiles: [setup]
+    user: root   # writes /out/.env on the host bind mount
+    command:
+      - python
+      - scripts/bootstrap_reel.py
+      - --base-url=http://api:8000
+      - --env-file=/out/.env
+    environment:
+      # Empty unless you pass --env-file .env; the script itself stops with a clear message.
+      PLATFORM_ADMIN_TOKEN: ${PLATFORM_ADMIN_TOKEN:-}
+    volumes:
+      - ./:/out
+      - reel_state:/app/state
+    networks: [graphrec]
+
+volumes:
+  reel_state:
+
+networks:
+  graphrec:
+    external: true
+    name: ${GRAPHREC_NETWORK:-graphrec_default}

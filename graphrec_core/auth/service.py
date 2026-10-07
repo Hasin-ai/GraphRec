@@ -638,6 +638,7 @@ class AuthenticationService:
             refresh_token=refresh_token,
             user_role=identity.user_role,  # type: ignore[arg-type]
             scopes=scopes,
+            email=identity.normalized_email,
         )
 
     def _record_failure(

@@ -40,7 +40,7 @@ export function LoginPage() {
     setError(null);
     try {
       const pair = await auth.login({ email: normalized, password });
-      setTenantSession(normalized, pair);
+      setTenantSession(pair.email ?? normalized, pair);
       refresh();
       flash("Signed in.");
       navigate(returnTo, { replace: true });
