@@ -349,7 +349,7 @@ export function PlatformPlansPage() {
     </tr>
   ));
   return (
-    <Page crumbs={[{ label: "Platform", to: "/admin/status" }, { label: "Plans & Quotas" }]} kicker="Plan-management permission" title="Plans & Quotas" subtitle="Plans carry the limits that become a tenant’s effective quota. Plans are defined by migration in this release; per-tenant overrides are approved from the tenant detail.">
+    <Page crumbs={[{ label: "Platform", to: "/admin/status" }, { label: "Plans & Quotas" }]} kicker="Plan-management permission" title="Plans & Quotas" subtitle="Plans carry the limits that become a tenant’s effective quota. Edit a plan to change every assigned tenant; approve per-tenant overrides from the tenant detail.">
       {plans.error ? <ErrorBanner error={plans.error} onRetry={plans.reload} /> : null}
       {!plans.data ? (plans.loading ? <Skeleton /> : null) : <DataTable minWidth={760} columns={["Plan code", "Name", "Limits", "Active", { label: "", align: "right" }]} rows={rows} count={`${rows.length} plans`} empty={{ title: "No plans defined", body: "Plans are seeded by the database migrations." }} />}
     </Page>

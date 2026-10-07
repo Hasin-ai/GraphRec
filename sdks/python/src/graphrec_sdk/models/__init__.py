@@ -24,6 +24,7 @@ from .events import (
     EventReceipt,
 )
 from .ml import ModelVersion, ModelVersionList, TrainingJob, TrainingJobList
+from .operators import Operator, OperatorList, OperatorMe, OperatorSession
 from .platform import (
     AuditRecord,
     AuditRecordList,
@@ -57,6 +58,10 @@ from .serving import (
 from .tenant_users import TenantUser, TenantUserInvitation, TenantUserList
 
 __all__ = [
+    "Operator",
+    "OperatorList",
+    "OperatorMe",
+    "OperatorSession",
     "ApiKey",
     "ApiKeyList",
     "ApiKeyWithSecret",

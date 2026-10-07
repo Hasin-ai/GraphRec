@@ -8,6 +8,7 @@ import { FailurePage, ForbiddenPage, NotFoundPage } from "./pages/errors/ErrorPa
 import { LandingPage } from "./pages/marketing/LandingPage";
 import { PricingPage } from "./pages/marketing/PricingPage";
 import { PlatformAuditPage, PlatformStatusPage } from "./pages/platform/StatusAuditPages";
+import { PlatformOperatorsPage } from "./pages/platform/OperatorsPage";
 import { PlatformPlanPage, PlatformPlansPage, PlatformTenantPage, PlatformTenantsPage } from "./pages/platform/TenantPages";
 import { AdminLoginPage } from "./pages/public/AdminLoginPage";
 import { LoginPage } from "./pages/public/LoginPage";
@@ -98,6 +99,7 @@ export function AppRoutes() {
           <Route path="/admin/plans" element={<PlatformPlansPage />} />
           <Route path="/admin/plans/:planId" element={<PlatformPlanPage />} />
           <Route path="/admin/audit" element={<PlatformAuditPage />} />
+          <Route path="/admin/operators" element={<PlatformOperatorsPage />} />
         </Route>
       </Route>
 

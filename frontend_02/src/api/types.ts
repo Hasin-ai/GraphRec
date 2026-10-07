@@ -539,6 +539,34 @@ export interface RecommendationResult {
   rules_version: number | null;
 }
 
+/** D-04: `POST /v1/platform/auth/login`. */
+export interface OperatorSession {
+  access_token: string;
+  token_type: "Bearer";
+  expires_in: number;
+  operator_id: string;
+  email: string;
+  display_name: string;
+  roles: ("platform" | "plan_management" | "monitoring" | "audit" | "operator_admin")[];
+}
+
+export interface PlatformOperator {
+  id: string;
+  email: string;
+  display_name: string;
+  roles: OperatorSession["roles"];
+  status: "active" | "disabled";
+  created_at: string;
+  last_login_at: string | null;
+}
+
+export interface PlatformMe {
+  operator_id: string | null;
+  email: string | null;
+  roles: OperatorSession["roles"];
+  kind: "operator" | "bootstrap_token";
+}
+
 /** `GET /v1/meta`: one product version shared by API, console and SDK. */
 export interface ProductMeta {
   product: string;

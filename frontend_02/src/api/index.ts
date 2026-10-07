@@ -48,6 +48,9 @@ import type {
   RecommendationResult,
   ProductMeta,
   PublicPlan,
+  OperatorSession,
+  PlatformOperator,
+  PlatformMe,
 } from "./types";
 
 const enc = encodeURIComponent;
@@ -240,6 +243,15 @@ export const platform = {
   listPlans: () => request<PlatformPlan[]>("/v1/platform/plans", platformRealm),
   updatePlan: (id: string, value: Pick<PlatformPlan, "name" | "limits" | "is_active">, acknowledge = false, reason?: string) =>
     request<PlatformPlan>(`/v1/platform/plans/${enc(id)}`, { ...platformRealm, method: "PUT", json: { ...value, acknowledge_below_usage: acknowledge, ...reasonBody(reason) } }),
+  login: (email: string, password: string) =>
+    request<OperatorSession>("/v1/platform/auth/login", { realm: "public", method: "POST", json: { email, password } }),
+  me: (token?: string) =>
+    request<PlatformMe>("/v1/platform/me", { realm: token ? "public" : "platform", headers: token ? { Authorization: `Bearer ${token}` } : undefined }),
+  listOperators: () => request<{ items: PlatformOperator[] }>("/v1/platform/operators", platformRealm),
+  createOperator: (input: { email: string; display_name: string; password: string; roles: PlatformOperator["roles"] }) =>
+    request<PlatformOperator>("/v1/platform/operators", { ...platformRealm, method: "POST", json: input }),
+  updateOperator: (id: string, change: Partial<{ display_name: string; roles: PlatformOperator["roles"]; status: PlatformOperator["status"]; password: string }>) =>
+    request<PlatformOperator>(`/v1/platform/operators/${enc(id)}`, { ...platformRealm, method: "PATCH", json: change }),
   listFailures: () => request<{ items: PlatformFailure[] }>("/v1/platform/failures", platformRealm),
   /** UC-31: filtered, paginated audit history (newest first). */
   listAudit: (filters: { tenant_id?: string; action?: string; outcome?: string; before?: string; limit?: number } = {}) => {

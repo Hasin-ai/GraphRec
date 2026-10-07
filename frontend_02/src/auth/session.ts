@@ -24,10 +24,22 @@ export interface TenantSession {
   signedInAt: number;
 }
 
+export type OperatorRole = "platform" | "plan_management" | "monitoring" | "audit" | "operator_admin";
+
+/**
+ * D-04: a named operator (email + password, roles from the account) or, in
+ * development, the bootstrap token (all roles, no identity).
+ */
 export interface PlatformSession {
   kind: "platform";
   token: string;
   signedInAt: number;
+  credential?: "operator" | "bootstrap_token";
+  email?: string | null;
+  displayName?: string | null;
+  roles?: OperatorRole[];
+  /** Operator tokens expire; the bootstrap token does not. */
+  expiresAt?: number;
 }
 
 const TENANT_KEY = "graphrec.session.tenant";
@@ -95,11 +107,15 @@ export function consumeExplicitSignOut(): boolean { const value = signedOutExpli
 
 export function getPlatformSession(): PlatformSession | null {
   if (platformCache === undefined) platformCache = read<PlatformSession>(PLATFORM_KEY);
+  if (platformCache?.expiresAt && platformCache.expiresAt <= Date.now()) {
+    platformCache = null;
+    write(PLATFORM_KEY, null);
+  }
   return platformCache;
 }
 
-export function setPlatformSession(token: string): PlatformSession {
-  const session: PlatformSession = { kind: "platform", token, signedInAt: Date.now() };
+export function setPlatformSession(token: string, details: Omit<PlatformSession, "kind" | "token" | "signedInAt"> = {}): PlatformSession {
+  const session: PlatformSession = { kind: "platform", token, signedInAt: Date.now(), ...details };
   platformCache = session;
   write(PLATFORM_KEY, session);
   return session;
@@ -108,6 +124,13 @@ export function setPlatformSession(token: string): PlatformSession {
 export function clearPlatformSession(): void {
   platformCache = null;
   write(PLATFORM_KEY, null);
+}
+
+/** True when the operator holds any of the roles (bootstrap sessions hold all). */
+export function hasOperatorRole(session: PlatformSession | null, ...roles: OperatorRole[]): boolean {
+  if (!session) return false;
+  if (!session.roles) return true;
+  return roles.some(role => session.roles!.includes(role));
 }
 
 export function hasScope(session: TenantSession | null, scope: string): boolean {

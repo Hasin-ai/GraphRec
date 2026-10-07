@@ -103,11 +103,12 @@ test('all routes render in both themes and at responsive widths', async ({ page,
   if (admin) {
     await page.setViewportSize({ width: 1440, height: 940 });
     await page.goto('/admin/login');
-    await page.getByLabel('Platform administrator token').fill(admin);
+    await page.getByRole('button', { name: 'Use the development bootstrap token instead' }).click();
+    await page.getByLabel('Bootstrap token').fill(admin);
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(page).toHaveURL(/\/admin\/status$/);
     const plans = await api('/platform/plans', undefined, admin);
-    const platformRoutes = ['/admin/status', '/admin/tenants', `/admin/tenants/${registration.id}`, '/admin/plans', `/admin/plans/${plans[0].id}`, '/admin/audit'];
+    const platformRoutes = ['/admin/status', '/admin/tenants', `/admin/tenants/${registration.id}`, '/admin/plans', `/admin/plans/${plans[0].id}`, '/admin/audit', '/admin/operators'];
     for (const [i, route] of platformRoutes.entries()) {
       await capture(route, `platform-${i}`);
       await capture(route, `platform-${i}`, 390);

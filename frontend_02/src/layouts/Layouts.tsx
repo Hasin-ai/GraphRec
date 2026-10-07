@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation } from "react-router-dom";
-import { consumeExplicitSignOut, roleLabel, sessionTenantId } from "../auth/session";
+import { consumeExplicitSignOut, hasOperatorRole, roleLabel, sessionTenantId, type OperatorRole } from "../auth/session";
 import { useMeta } from "../hooks/useMeta";
 import { useSession } from "../hooks/useSession";
 import { useTheme, type ThemeMode } from "../hooks/useTheme";
@@ -40,9 +40,13 @@ const TENANT_NAV: NavGroup[] = [
   ] },
   { id: "admin", label: "Admin", items: [{ label: "Team members", to: "/users", icon: "users", scope: "users:write" }] },
 ];
+/** D-04: platform items name the operator roles that may open them ("a|b" = any of). */
 const PLATFORM_NAV: NavGroup[] = [{ id: "platform", label: "Platform", items: [
-  { label: "Platform Status", to: "/admin/status", icon: "server" }, { label: "Tenants", to: "/admin/tenants", icon: "users" },
-  { label: "Plans & Quotas", to: "/admin/plans", icon: "gauge" }, { label: "Failures & Audit", to: "/admin/audit", icon: "activity" },
+  { label: "Platform Status", to: "/admin/status", icon: "server" },
+  { label: "Tenants", to: "/admin/tenants", icon: "users", scope: "platform|plan_management|monitoring|audit" },
+  { label: "Plans & Quotas", to: "/admin/plans", icon: "gauge", scope: "plan_management|platform|monitoring" },
+  { label: "Failures & Audit", to: "/admin/audit", icon: "activity", scope: "audit|monitoring" },
+  { label: "Operators", to: "/admin/operators", icon: "users", scope: "operator_admin" },
 ] }];
 
 function isActive(item: NavItem, pathname: string) {
@@ -297,10 +301,10 @@ export function RequirePlatform() {
 export function PlatformLayout() {
   const { platform, signOutPlatform } = useSession();
   if (!platform) return <Navigate to="/admin/login" replace />;
-  return <Shell key={platform.token} home="/admin/status" sidebar={({ collapsed, toggleCollapsed, closeDrawer }) => <Sidebar home="/admin/status" groups={PLATFORM_NAV} can={() => true}
+  return <Shell key={platform.token} home="/admin/status" sidebar={({ collapsed, toggleCollapsed, closeDrawer }) => <Sidebar home="/admin/status" groups={PLATFORM_NAV} can={scope => hasOperatorRole(platform, ...(scope.split("|") as OperatorRole[]))}
     collapsed={collapsed} onCollapse={toggleCollapsed} onClose={closeDrawer}
     header={c => <WorkspaceSwitcher name="Platform" tenantId={null} home="/admin/status" collapsed={c} caption="Operator console" />}
-    footer={c => <UserMenu name="Platform operator" detail="Administrator token" role="Operator" collapsed={c} onSignOut={signOutPlatform} />} />}>
+    footer={c => <UserMenu name={platform.displayName ?? "Platform operator"} detail={platform.email ?? "Development bootstrap token"} role={platform.credential === "operator" ? "Operator" : "Bootstrap"} collapsed={c} onSignOut={signOutPlatform} />} />}>
     <Outlet />
   </Shell>;
 }

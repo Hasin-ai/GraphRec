@@ -420,16 +420,28 @@ test("gates: expired session, unknown resource, and sign out", async () => {
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
 });
 
-test("platform realm: token sign-in, tenant detail, quota override, suspension and audit", async () => {
+test("platform realm: operator sign-in, tenant detail, quota override, suspension and audit", async () => {
+  // D-04: the bootstrap token creates a named operator; the operator signs in with email and password.
+  const operatorEmail = `operator-${tag}@example.org`;
+  const operatorPassword = `Operator-${tag}-password`;
+  const created = await page.request.post("/v1/platform/operators", {
+    headers: { Authorization: `Bearer ${platformToken()}`, Accept: "application/json" },
+    data: { email: operatorEmail, display_name: "E2E Operator", password: operatorPassword,
+            roles: ["platform", "plan_management", "monitoring", "audit", "operator_admin"] },
+  });
+  expect(created.status()).toBe(201);
+
   await page.goto("/admin/tenants");
   await expect(page.getByRole("heading", { name: "Platform sign-in" })).toBeVisible();
-  await page.getByLabel("Platform administrator token").fill("wrong-token");
+  await page.getByLabel("Operator email").fill(operatorEmail);
+  await page.getByLabel("Password", { exact: true }).fill("not-the-password");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByText("Sign-in failed")).toBeVisible();
 
-  await page.getByLabel("Platform administrator token").fill(platformToken());
+  await page.getByLabel("Password", { exact: true }).fill(operatorPassword);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "Tenants" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Account menu for E2E Operator/ })).toBeVisible();
   await shot(page, "platform-tenants");
 
   await page.getByLabel("Search").fill(tenantName);
@@ -462,7 +474,10 @@ test("platform realm: token sign-in, tenant detail, quota override, suspension a
 
   await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Failures & Audit" }).click();
   await page.getByRole("tab", { name: "Audit records" }).click();
-  await expect(page.getByRole("row", { name: /quota.overrides_changed/ }).first()).toBeVisible();
+  const overrideRow = page.getByRole("row", { name: /quota.overrides_changed/ }).first();
+  await expect(overrideRow).toBeVisible();
+  // ER-F-11: the reason given in the dialog is in the audit trail.
+  await expect(overrideRow).toContainText("Launch campaign allowance");
   await shot(page, "platform-audit");
 
   // Suspend the tenant: its sessions stop verifying immediately.

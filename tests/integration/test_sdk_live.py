@@ -387,6 +387,20 @@ def test_platform_tenants_quotas_and_plans(ops: g.GraphRec, shop: Tenant) -> Non
         platform.plans.update(pro.id, name=pro.name, limits={"stored_products": 1}, is_active=True)
 
 
+def test_platform_operators(public: g.GraphRec, ops: g.GraphRec) -> None:
+    """D-04: create an operator with the bootstrap token, sign in, act under its own identity."""
+    email, password = f"sdk-op-{uuid4().hex[:8]}@example.org", f"Sdk-operator-{uuid4().hex}"
+    created = ops.platform.operators.create(email=email, display_name="SDK Operator", password=password,
+                                            roles=["monitoring", "operator_admin"])
+    session = public.platform.operators.login(email=email, password=password)
+    operator = public.with_credentials(access_token=session.access_token)
+    assert operator.platform.operators.me().operator_id == created.id
+    assert any(o.id == created.id for o in operator.platform.operators.list())
+    assert operator.platform.operators.update(created.id, display_name="SDK Operator 2").display_name == "SDK Operator 2"
+    with pytest.raises(g.PermissionDeniedError):
+        operator.platform.list_audit_logs()
+
+
 def test_platform_status_and_monitoring(ops: g.GraphRec, shop: Tenant) -> None:
     status = ops.platform.status()
     assert status.database == "connected" and status.status in {"healthy", "degraded"}

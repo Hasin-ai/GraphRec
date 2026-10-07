@@ -432,3 +432,8 @@ tr:hover .ver-id .copy-hover, .ver-id .copy-hover:focus-visible { opacity: 1; }
 .issue-list .alert.tone-warning { border-left: 3px solid var(--warn-solid); }
 .plan-cta { display: inline-flex; align-items: center; gap: 6px; max-width: 360px; }
 .pg-results { margin: 0; padding-left: 22px; columns: 3; font-size: var(--text-sm); } @media (max-width: 800px) { .pg-results { columns: 1; } }
+
+/* D-04 operator console */
+.btn-link { padding: 0; border: 0; background: none; color: var(--color-link, var(--color-accent)); cursor: pointer; text-decoration: underline; font: inherit; }
+.role-picker { display: grid; gap: 8px; border: 0; padding: 0; margin: 0; }
+.role-picker legend { font-weight: 600; margin-bottom: 4px; }

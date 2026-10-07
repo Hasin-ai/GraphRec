@@ -25,6 +25,8 @@ from apps.api.routes.deployment import router as deployment_router
 from apps.api.routes.events import router as events_router
 from apps.api.routes.meta import router as meta_router
 from apps.api.routes.model_versions import router as model_versions_router
+from apps.api.routes.operators import public_router as operator_auth_router
+from apps.api.routes.operators import router as operators_router
 from apps.api.routes.platform import router as platform_router
 from apps.api.routes.products import router as products_router
 from apps.api.routes.recommendations import router as recommendations_router
@@ -74,6 +76,8 @@ app.include_router(recommendations_router)
 app.include_router(retraining_router)
 app.include_router(recommendation_policy_router)
 app.include_router(platform_router)
+app.include_router(operator_auth_router)
+app.include_router(operators_router)
 
 
 @app.get("/healthz", include_in_schema=False)

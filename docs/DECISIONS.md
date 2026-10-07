@@ -79,6 +79,14 @@ The cold-start fallback counts interactions in a window (`FALLBACK_POPULARITY_WI
 | D-12 | Stray material | No answer: files are left where they are. |
 | D-13 | Suspended tenants | **Approved.** A restricted session that can only read the tenant's status. |
 
+## Operator accounts (D-04) — Implemented 2026-10-08
+
+- Migration `0036` adds `platform_operators` (email, name, argon2 password hash, roles, status, `auth_epoch`). Operators are disabled, never deleted, so audit attribution keeps resolving.
+- Roles: `platform` (tenant status, recovery), `plan_management` (plans, assignment, quota overrides), `monitoring` (status, failures, usage), `audit` (audit history), `operator_admin` (operators). Every platform route declares its roles in `graphrec_core/auth/platform.py:ROUTE_ROLES`; a route missing from the map is refused, and a test fails if one is added without an entry.
+- `POST /v1/platform/auth/login` returns a 1-hour bearer token (`OPERATOR_TOKEN_TTL_SECONDS`) for the `graphrec-platform` audience. Roles and status are re-read on every request; a role, status or password change ends the operator's sessions.
+- Every audit row written during an operator request carries the operator id (`app.audit_actor`, migration `0034` trigger). Sign-ins, failures and operator changes are security events.
+- `PLATFORM_ADMIN_TOKEN` is the bootstrap credential. In development it still works everywhere (local tooling, tests). In production it can only create operators, and only while no active operator exists. `scripts/create_operator.py` creates one from the command line.
+
 ## Needs your sign-off (historical: answered above)
 
 | # | Decision | Recommendation | Why it is waiting |

@@ -74,7 +74,11 @@ class Settings(BaseSettings):
     # per-source limits. Comma-separated IPs/CIDRs, or "*" when the API is reachable
     # only through the bundled nginx (never publish the API port with "*").
     forwarded_allow_ips: str = "127.0.0.1"
-    # Shared secret for /v1/platform routes; unset disables platform administration.
+    # D-04: lifetime of an operator's bearer token (operators sign in again after it).
+    operator_token_ttl_seconds: int = Field(default=3_600, ge=300, le=43_200)
+    # Bootstrap secret for /v1/platform. Development: a full-role credential for local
+    # tooling. Production: only creates the first operator, then opens nothing.
+    # Unset disables it entirely.
     platform_admin_token: str | None = None
 
     # Qdrant vector store

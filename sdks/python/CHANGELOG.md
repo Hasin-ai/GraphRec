@@ -6,6 +6,7 @@ The SDK now shares one version with the GraphRec API and console.
 
 - `storefront.events.list()` / `AsyncEvents.list()` read recently received events (`GET /v1/events`), with `user_id`, `event_type` and `product_id` filters.
 - `auth.refresh(refresh_token=...)` rotates a refresh token (`POST /v1/auth/refresh`).
+- `client.platform.operators`: `login()`, `me()`, `list()`, `create()`, `update()` for named operators (D-04).
 - `UsageDimension.measured` flags dimensions GraphRec does not measure yet.
 - `GraphRec.plans()` reads the public plan limits.
 - `GraphRec.ready()` reads `/readyz`.
