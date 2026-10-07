@@ -36,9 +36,18 @@ workflows, local capacity limits, and remaining requirements.
 - Serving: `/v1/recommendations`, `/v1/feedback/*`, `/v1/deployment*`, `/v1/metrics/summary`
 - Platform administration: `/v1/platform/*`, authenticated with the
   `PLATFORM_ADMIN_TOKEN` shared secret (leave it empty to disable these routes)
+- Product: public `/v1/meta` (one version for API, console and SDK), `/v1/plans`
+  (live plan limits), `/healthz` (liveness) and `/readyz` (database, Redis and
+  Qdrant, measured live)
+
+Configuration lives in `graphrec_core/settings.py` and is documented, setting by
+setting, in `.env.example`. With `GRAPHREC_ENV=production` the services refuse
+to start on default, placeholder or short secrets. Decisions and their status are
+in `docs/DECISIONS.md`; requirement traceability is in `docs/GAP_ANALYSIS.md`.
 
 Training without an artifact queues real tenant-data training in the Compose
-worker. Synthetic embeddings require explicit `configuration.mode="placeholder"`.
+worker. Synthetic embeddings require explicit `configuration.mode="placeholder"`
+and are refused when `GRAPHREC_ENV=production`.
 Feedback is persisted with tenant ownership and replay validation, and admission
 limits enforce the main plan quotas. Serving status and metrics are
 measured: `/v1/deployment` reports the tenant's active model version and
@@ -278,8 +287,9 @@ npm run dev        # http://localhost:5173, proxies /v1 to http://localhost:8010
 ## Verify
 
 ```bash
-docker compose exec -T api pytest -q
-docker compose --profile test run --rm frontend-test
+docker compose --profile test run --rm api-test       # backend unit + integration
+docker compose --profile test run --rm frontend-test  # console unit tests, build, npm audit
+cd frontend_02 && E2E_BASE_URL=http://localhost:5180 npx playwright test   # browser suite
 ```
 
 Or, for the console alone: `cd frontend_02 && npm test -- --run && npm run build`.
