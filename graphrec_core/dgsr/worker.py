@@ -220,6 +220,9 @@ def train_job(tenant_id, job_id):
     pulse('validating_artifact', 95)
     artifact = DGSRArtifact(directory)
     artifact.encode_known(0)
+    pulse('comparing_versions', 97)
+    metrics['comparison'] = compare_with_active(tenant_id, artifact, data, directory)
+    (directory / 'final_metrics.json').write_text(json.dumps(metrics, allow_nan=False), encoding='utf-8')
     size = sum(p.stat().st_size for p in directory.iterdir() if p.is_file())
     with SessionLocal() as db, db.begin():
         set_local_tenant(db, tenant_id)
@@ -258,6 +261,37 @@ def train_job(tenant_id, job_id):
             db.add(UsageEvent(id=uuid4(), tenant_id=tenant_id, usage_type=dimension, quantity=Decimal(str(quantity)),
                 source_id=str(job_id), idempotency_key=f'{dimension}-{job_id}', occurred_at=now))
         ModelRegistryService(db)._audit(tenant_id, 'training_completed', job_id, details={'model_version_id': str(version_id), 'mode': 'train'})
+
+
+def compare_with_active(tenant_id, candidate: DGSRArtifact, data: InteractionData, directory: Path) -> dict:
+    """XR-F-10: score the candidate, the tenant's active DGSR version and a popularity
+    baseline on the candidate's held-out test examples (``common_evaluation.json``)."""
+    from graphrec_core.dgsr.evaluation import common_set_from_split, compare
+    from graphrec_core.dgsr.serving import load_artifact
+    from graphrec_core.models_reg.service import DGSR_MODEL_TYPE, artifact_directory, validate_artifact_binding
+    examples = common_set_from_split(data, data.examples['test'])
+    (directory / 'common_evaluation.json').write_text(json.dumps({'examples': [e.as_dict() for e in examples]}), encoding='utf-8')
+    train_items = [data.item_ids[int(i)] for i in data.items[data.roles == 0]]
+    with SessionLocal() as db, db.begin():
+        set_local_tenant(db, tenant_id)
+        active = db.scalar(select(ModelVersion).where(ModelVersion.tenant_id == tenant_id, ModelVersion.status == 'active',
+                                                      ModelVersion.model_type == DGSR_MODEL_TYPE))
+        active_id, active_uri = (str(active.id), active.artifact_uri) if active else (None, None)
+    active_artifact, reason = None, None
+    if active_id:
+        try:
+            path = artifact_directory(active_uri)
+            if path is None:
+                raise ValueError('artifact directory not found')
+            validate_artifact_binding(path, tenant_id)
+            active_artifact = load_artifact(path)
+        except Exception as exc:  # the comparison is reported as unavailable, never invented
+            reason = f'{type(exc).__name__}: {str(exc)[:200]}'
+            logger.warning('Active version %s could not be loaded for comparison: %s', active_id, reason)
+    result = compare(candidate, examples, train_items, active_artifact, active_id)
+    if active_id and active_artifact is None:
+        result['active'] = {'model_version_id': active_id, 'unavailable_reason': reason}
+    return result
 
 
 def run_once():

@@ -1,3 +1,4 @@
+import { CommonComparison, comparisonOf } from "../../ui/CommonComparison";
 import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { models, training } from "../../api";
@@ -225,8 +226,11 @@ function ModelVersionDetail() {
           { label: "Internal ID", value: v.id, mono: true, copy: v.id },
         ]}
       />
+      {comparisonOf(v.metrics) ? <Panel title="Comparison on a common evaluation set" body={<>Every column is scored on the same {comparisonOf(v.metrics)!.examples.toLocaleString()} held-out examples from this version's training snapshot, through the same serving encoder. {comparisonOf(v.metrics)!.active ? "The active column is the version that was active when this one was trained." : "No version was active when this one was trained."}</>}>
+        <CommonComparison comparison={comparisonOf(v.metrics)!} activeLabel={comparisonOf(v.metrics)!.active?.model_version_id && all.data ? (() => { const a = all.data.items.find(i => i.id === comparisonOf(v.metrics)!.active!.model_version_id); return a ? a.version_tag : undefined; })() : undefined} />
+      </Panel> : null}
       <div className="panels">
-        <Panel title={compare ? "Quality compared with the active version" : "Offline quality"} body={metricEntries.length ? <>{compare ? "Use the difference to decide whether to activate this version. " : ""}Evaluated on {formatMetricValue("evaluated_examples", validation.evaluated_examples)} examples. {evaluationModeLabel(validation.mode)}.</> : "No offline metrics were recorded for this version. Versions imported from a DGSR checkpoint carry the checkpoint's validation Hit@k and NDCG@k; placeholder training records none."}>
+        <Panel title={compare ? (comparisonOf(v.metrics) ? "Recorded quality (each version on its own split)" : "Quality compared with the active version") : "Offline quality"} body={metricEntries.length ? <>{compare ? "Use the difference to decide whether to activate this version. " : ""}Evaluated on {formatMetricValue("evaluated_examples", validation.evaluated_examples)} examples. {evaluationModeLabel(validation.mode)}.</> : "No offline metrics were recorded for this version. Versions imported from a DGSR checkpoint carry the checkpoint's validation Hit@k and NDCG@k; placeholder training records none."}>
           {metricEntries.length ? (
             <PanelTable
               columns={compare ? ["Measure", { label: "This version", align: "right" }, { label: `Active (${all.data ? modelLabel(active!, all.data.items).split(" · ")[1] : "current"})`, align: "right" }, { label: "Difference", align: "right" }] : ["Measure", { label: "Score", align: "right" }]}
