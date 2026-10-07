@@ -1,5 +1,11 @@
 # GraphRec SRS implementation and acceptance record
 
+> **Status, 2026-10-08.** This record was written on 2026-09-20 and parts of it
+> were out of date. The current, per-requirement traceability (all 101 SRS IDs,
+> with code, endpoint, UI, tests and gaps) is `docs/GAP_ANALYSIS.md`; open
+> product decisions are in `docs/DECISIONS.md`; changes since are in
+> `CHANGELOG.md`. The rows below that contradicted the code have been corrected.
+
 Reviewed against `GraphRec_Complete_SRS.md`, verified September 20, 2026. This report distinguishes implemented core behavior from optional enhancements and unverified deployment objectives. It does not certify every SRS statement or production readiness.
 
 ## What changed
@@ -47,15 +53,18 @@ Generated browser evidence is in `frontend_02/e2e-screens/`; probe results and *
 | ER-F-01–07 | Actual tenant snapshots, tenant-generated parameters, held-out metrics, replay handling, serving identity and validated lifecycle transitions implemented. |
 | ER-F-08–09 | Main usage dimensions and admission limits implemented; local single-worker capacity is intentionally tighter than paid-plan concurrency ceilings. No actual autoscaling/replica-runtime accounting is implemented. |
 | ER-F-10–12 | Tenant-safe fallback, lifecycle/credential/platform audits and authorized status views implemented. Authenticated API denials and recorded lifecycle failures appear in the platform security/failure timeline. This does not certify capture of every unauthenticated or unexpected infrastructure failure. |
-| ER-NF-01–07 | Queue durability, bounded stale-job recovery, ownership, integrity checks, failure recording, deterministic invalid-request termination, stable ordering and resource bounds implemented. A simulated stale heartbeat verifies one retry and visible terminal failure after exhaustion. Abrupt process termination during an actual training batch and supported concurrent load are not yet certified. |
+| ER-NF-01–07 | Queue durability, bounded stale-job recovery, ownership, integrity checks, failure recording, deterministic invalid-request termination, stable ordering and resource bounds implemented. A simulated stale heartbeat verifies one retry and visible terminal failure after exhaustion. Abrupt process termination during an actual training batch is now tested with a real SIGKILL (`tests/integration/test_worker_process_failures.py`); supported concurrent load (NR-NF-04) is not yet characterised. |
 | ER-NF-08–09 | Separate worker/API/model/data/monitoring modules implemented. Some operational dashboards remain narrower than the full SRS monitoring design. |
 | XR-F-01, 05, 09 | History + session context, historical rollback and cold-start fallback supported. |
 | XR-F-10 | New real training includes a popularity baseline. Model details compare recorded metrics with the active version; comparisons across different evaluation datasets require care and are not a fresh common-dataset evaluation. |
-| Other exciting requirements | Scheduled/event-triggered retraining, configurable diversity policies, period trends and tenant autoscaling remain unimplemented. These are not represented as completed. |
+| XR-F-02, 03, XR-NF-03 | Scheduled and event-count retraining policies (`/v1/retraining-policy`, scheduler service) obey one-active-training; cooldown and quota on the scheduled path still need dedicated tests. |
+| XR-F-04, XR-NF-02 | Bounded, versioned diversity, category and freshness rules (`/v1/recommendation-policy`); responses report `applied_rules` and `rules_version`. |
+| XR-F-07 | Usage trends by period and type (`GET /v1/usage/trends`). |
+| XR-F-08, XR-NF-01 | Logical per-tenant serving capacity scales with measured demand (`/v1/deployment/scaling`). It adds concurrency slots; it does not start serving instances (deferral D-07 awaits sign-off). |
 
 ## Running the implemented workflow
 
-The final stack runs migration `0019_operational_failures`; API, database, vector store and frontend health checks pass, with the worker running. The integration run temporarily stopped the background worker to exercise queue claims deterministically, then restarted it. The combined backend integration and real-artifact command passed **87 tests**.
+The stack now runs migrations through `0034_audit_reasons`; at the time of this record it ran `0019_operational_failures`; API, database, vector store and frontend health checks pass, with the worker running. The integration run temporarily stopped the background worker to exercise queue claims deterministically, then restarted it. The combined backend integration and real-artifact command passed **87 tests**.
 
 1. `docker compose up -d --build api worker frontend` applies migrations and starts the API, durable training worker and console. The served console is at `http://localhost:5180`; the development console uses `http://127.0.0.1:5173`.
 2. Register a tenant, activate its initial administrator, then invite another administrator or developer from Team members.
@@ -69,8 +78,8 @@ For checkpoint import, the operator places verified files under `MODEL_ARTIFACT_
 ## Known boundaries
 
 - This is the bounded educational deployment described by the SRS, not a production availability guarantee.
-- The SRS acceptance scenario that increases Tenant A's ready capacity while preserving Tenant B's service has not been implemented or verified; the current deployment uses fixed local serving capacity.
-- Self-service email password recovery is not implemented. The recovery page provides an operator-contact next step; invitation setup does not reset an already active account.
+- Capacity changes are logical (per-tenant concurrency slots that every API process enforces); tenant isolation of capacity is tested in `tests/integration/test_xr_features.py`. Real per-tenant serving instances are deferral D-07.
+- Self-service email password recovery is not implemented (decision D-05). Recovery uses an operator-issued, single-use token entered on `/recover`; invitation setup does not reset an already active account.
 - Existing asynchronous SDK callers should poll job status until terminal before activating. An empty training request now requests actual training; synthetic behavior requires `configuration.mode = "placeholder"` explicitly.
 - Optional Kubernetes/replica autoscaling, multi-node failover, scheduling and advanced ranking policies have not been implemented or certified by this work.
 - Original MovieLens datasets/checkpoints are unchanged; copied runtime artifacts and generated test data are separate.

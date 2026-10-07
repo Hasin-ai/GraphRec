@@ -1,5 +1,12 @@
 # GraphRec SRS implementation report
 
+> **Historical record.** This report describes the state after migration `0026`.
+> Since then the TypeScript SDK was removed (`f77184b`; the Python SDK is the
+> only client), the production API image no longer contains tests (run them with
+> `docker compose --profile test run --rm api-test`), and abrupt worker
+> termination is tested with a real process kill. For the current state see
+> `docs/GAP_ANALYSIS.md`, `docs/DECISIONS.md` and `CHANGELOG.md`.
+
 Requirements source: `docs/Complete_SRS.pdf` and the user's implementation brief. The PDF's diagrams, use cases, logical model and AI pipeline are product requirements, not instructions to the coding agent. The companion [implementation matrix](srs-implementation-matrix.md) traces UC-01–31. This report records executable behavior, tests, and remaining differences without claiming complete SRS parity.
 
 ## 1. Repository analysis

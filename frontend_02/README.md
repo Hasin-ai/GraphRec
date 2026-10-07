@@ -89,11 +89,11 @@ list.
 | Prototype route | Console | Backed by |
 |---|---|---|
 | — | `/` (new, signed out) | public landing page in `MarketingLayout`; signed in, redirects to `/home` or `/admin/status` |
-| — | `/pricing` (new) | public plans and limits from `src/marketing/plans.ts` (no API call; there is no public plans endpoint) |
+| — | `/pricing` (new) | live plan limits from public `GET /v1/plans` (seeded defaults, labelled as such, if the read fails) |
 | `/register` | `/register` | `POST /v1/tenants` (business name + admin email; shows the one-time setup link) |
 | `/invite/accept` | `/setup` (alias `/invite/accept`) | `POST /v1/auth/setup-password` |
 | `/login` | `/login` | `POST /v1/auth/login` |
-| `/recover`, `/recover/confirm` | `/recover` (informational) | no recovery endpoint; documents the operator-issued setup token |
+| `/recover`, `/recover/confirm` | `/recover` | `POST /v1/auth/recover-password` with an operator-issued recovery token (self-service email is decision D-05) |
 | `/admin/login` | `/admin/login` | `GET /v1/platform/status` with `PLATFORM_ADMIN_TOKEN` |
 | `/home` | `/home` | onboarding checklist answered by real reads |
 | `/credentials` | `/credentials` | `/v1/api-keys` list, create, rotate (grace + reason), revoke |
@@ -104,26 +104,28 @@ list.
 | `/events/submit` | `/events/submit` | `POST /v1/events`, `POST /v1/events/batches`, recent batches |
 | `/submissions/:id` | `/submissions/:id` | `GET /v1/events/batches/{id}` (event batches only) |
 | — | `/datasets` (new) | `POST /v1/datasets/upload`, snapshots list/create |
-| `/training`, `/training/:id` | same | `GET/POST /v1/training-jobs`; detail found in the list (no single read); no cancel endpoint |
-| `/models`, `/models/:id` | same | `/v1/model-versions` list/get, `:activate`, `:archive`, `/v1/models/{id}:rollback` |
+| `/training`, `/training/:id` | same | `GET/POST /v1/training-jobs`, `GET /v1/training-jobs/{id}`, `POST …:cancel` (with optional reason) |
+| `/models`, `/models/:id` | same | `/v1/model-versions` list/get, `:activate`, `:archive`, `:rollback` (each with an optional audited reason) |
 | `/usage` | `/usage` | `GET /v1/usage` (9 dimensions) + `GET /v1/subscription` |
-| `/service-status` | `/service-status` | `/v1/deployment`, `/replicas`, `/autoscaling`, `/v1/metrics/summary` |
-| `/admin/tenants`, `/admin/tenants/:id` | same | list/get, `POST .../status`, `POST .../quotas` |
-| `/admin/plans`, `/admin/plans/:id` | same | `GET /v1/platform/plans` (read-only) |
+| `/service-status` | `/service-status` | `/v1/deployment`, `/v1/deployment/scaling`, `/v1/metrics/summary` |
+| `/admin/tenants`, `/admin/tenants/:id` | same | list/get, `POST .../status` (reason required), `POST .../quotas`, `POST .../plan`, `POST .../recovery`, tenant usage |
+| `/admin/plans`, `/admin/plans/:id` | same | `GET /v1/platform/plans`, `PUT /v1/platform/plans/{id}` |
 | `/admin/status` | `/admin/status` | `GET /v1/platform/status` |
-| `/admin/audit` | `/admin/audit` | `GET /v1/platform/failures`, `GET /v1/platform/audit` |
+| `/admin/audit` | `/admin/audit` | `GET /v1/platform/failures`, `GET /v1/platform/audit` (tenant/action filters, paging, reasons) |
 | `/403`, `/404`, `/error` | same | rendered inside the active layout |
 
-Not built, because the API has no endpoint for it: tenant users and
-invitations (`/users`), tenant-scoped audit (`/audit`), `/account/tenant-status`,
-cross-tenant usage (`/admin/usage`), plan create/edit/close, plan assignment,
-job cancellation, and named platform permissions (the platform realm is one
-shared token, so every platform route is permitted once signed in).
+Team members and invitations (`/users`), plan editing and assignment, and job
+cancellation are built. Not built yet, because the API has no endpoint for them:
+tenant-scoped audit (`/audit`), `/account/tenant-status` (decision D-13),
+cross-tenant usage (`/admin/usage`), per-user management (`/users/:id`) and
+named platform permissions (decision D-04: the platform realm is still one
+shared token). See `docs/GAP_ANALYSIS.md` and `docs/DECISIONS.md`.
 
 ## Sessions
 
-The access token from `POST /v1/auth/login` lives in `sessionStorage` (tab
-scoped, cleared when the tab closes) with its expiry; there is no refresh
-endpoint, so an expired or rejected token signs the user out and the guards
-route back to sign-in. The platform token is kept the same way and is only ever
+The token pair from `POST /v1/auth/login` lives in `sessionStorage` (tab
+scoped, cleared when the tab closes). The 15-minute access token is renewed
+with the single-use refresh token (`POST /v1/auth/refresh`, rotated on every
+use) shortly before it expires and once on `token_expired`; the session ends
+when refresh fails or the user signs out, and the guards route back to sign-in. The platform token is kept the same way and is only ever
 sent as a bearer header to `/v1/platform/*`.
