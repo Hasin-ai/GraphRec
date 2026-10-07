@@ -111,6 +111,8 @@ rabbitmq_data/
 # ==========================================
 docs/*
 !docs/*.md
+!docs/load/
+!docs/load/*.json
 !docs/srs-implementation-matrix.md
 !docs/srs-implementation-report.md
 diagrams/

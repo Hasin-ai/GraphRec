@@ -44,8 +44,10 @@ def test_uc_27_last_admin_and_self_changes_are_refused(client):
     other, _, _, other_headers = _member(client, admin, role="tenant_administrator")
     # other admin tries to demote the original: allowed while two admins remain active
     assert client.patch(f"/v1/tenant/users/{me['id']}", json={"role": "tenant_developer"}, headers=other_headers).status_code == 200
-    # now 'other' is the only admin and cannot be demoted by anyone
-    assert client.patch(f"/v1/tenant/users/{other}", json={"status": "locked"}, headers=other_headers).status_code == 409
+    # 'other' is now the only administrator; its own change is refused (self-change rule,
+    # which also keeps the last-administrator invariant, re-checked server-side).
+    refused = client.patch(f"/v1/tenant/users/{other}", json={"status": "locked"}, headers=other_headers)
+    assert refused.status_code == 409 and "your own" in refused.json()["error"]["message"]
 
 
 def test_uc_27_resend_invitation_replaces_the_link(client):

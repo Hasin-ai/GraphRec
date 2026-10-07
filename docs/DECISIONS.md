@@ -25,9 +25,9 @@ This completes the existing auth model rather than changing it.
 
 Placeholder training (random embeddings served with a zero query vector) and `POST /v1/model-versions` (tenant-asserted metrics) stay available for local development and tests, but `GRAPHREC_ENV=production` refuses them, refuses to activate or serve non-DGSR versions, and the console hides the placeholder option. Fake `rustfs://` URIs became honest `placeholder://` / `unregistered://` markers.
 
-## D-08 Rename `web/` — Not yet done
+## D-08 Rename `frontend_02/` to `web/` — Done (2026-10-08)
 
-The rename to `web/` touches Compose, both Dockerfiles, Playwright, READMEs and SDK docs. It is mechanical and will be done as one commit in Phase 3 so that it does not mix with behaviour changes. Until then every reference stays `web/`.
+Done as one mechanical commit in Phase 3 (Compose, Dockerfiles, CI, Playwright, READMEs, SDK docs, tests). Historical entries in `CHANGELOG.md` and `docs/GAP_ANALYSIS.md` keep the old path.
 
 ## D-14 XR-F-04 brand and seasonality — Decided (2026-10-07)
 
@@ -86,6 +86,23 @@ The cold-start fallback counts interactions in a window (`FALLBACK_POPULARITY_WI
 - `POST /v1/platform/auth/login` returns a 1-hour bearer token (`OPERATOR_TOKEN_TTL_SECONDS`) for the `graphrec-platform` audience. Roles and status are re-read on every request; a role, status or password change ends the operator's sessions.
 - Every audit row written during an operator request carries the operator id (`app.audit_actor`, migration `0034` trigger). Sign-ins, failures and operator changes are security events.
 - `PLATFORM_ADMIN_TOKEN` is the bootstrap credential. In development it still works everywhere (local tooling, tests). In production it can only create operators, and only while no active operator exists. `scripts/create_operator.py` creates one from the command line.
+
+## Phase 3–4 decisions (2026-10-08)
+
+### D-15 Load testing without a new dependency — Decided
+`scripts/load_test.py` drives closed-loop virtual shoppers with `httpx` (already used by the SDK and tests) instead of adding Locust or k6. It provisions its own tenant, can train a model first, and writes a JSON report. Results and the supported load are in `docs/PERFORMANCE.md`.
+
+### D-17 Tenant audit trail hides operator identity — Decided
+`GET /v1/audit` shows a tenant its own audit rows. Platform operators appear as "GraphRec operator" with the reason they gave; their identity stays in the platform audit view. Members and API keys of the tenant are shown by id. Rationale: non-disclosure towards tenants, while ER-F-11 attribution is kept on the platform side.
+
+### D-18 Past usage periods keep inventory as current values — Decided
+`GET /v1/usage?period=YYYY-MM` (UC-24, up to 24 months back) sums the ledger for that month. Inventory dimensions (stored products, retained versions, storage, replicas) have no history, so they are returned with `scope: "current"` and the console labels them, instead of presenting today's value as historical.
+
+### D-19 Common evaluation set for version comparison — Decided
+XR-F-10: at the end of each training run the candidate, the version active at that moment and a popularity baseline are scored on the candidate's held-out test examples (stored as `common_evaluation.json`, at most 500 examples) through the serving encoder. An example whose target a version does not know counts as a miss for that version, so every column has the same denominator. If the active version cannot be loaded, the comparison says so instead of inventing numbers.
+
+### D-20 Members' changes and the last administrator — Decided
+UC-27: administrators change roles, lock, unlock and disable members (disable is final; pending invitations are resent or revoked, not edited). You cannot change your own account here, and the last active administrator cannot be demoted, locked or disabled. Any change ends the member's sessions.
 
 ## Needs your sign-off (historical: answered above)
 
