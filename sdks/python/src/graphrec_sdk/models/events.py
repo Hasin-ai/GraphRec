@@ -85,6 +85,22 @@ class EventBatchList(ItemList[EventBatch]):
     pass
 
 
+class EventRecord(GraphRecModel):
+    """One stored interaction, as listed by ``GET /v1/events`` (newest first)."""
+
+    event_id: str
+    event_type: str
+    user_id: Optional[str] = None
+    external_product_id: Optional[str] = None
+    context: Dict[str, Any] = Field(default_factory=dict)
+    occurred_at: datetime
+    created_at: datetime
+
+
+class EventRecordList(ItemList[EventRecord]):
+    pass
+
+
 class EventBatchResult(GraphRecModel):
     """Aggregate of one logical batch that the SDK may have split into several requests."""
 

@@ -6,6 +6,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from graphrec_core.schemas.deployment import RateLimiterStatus
+
 
 class PlatformTenantResource(BaseModel):
     id: UUID
@@ -79,19 +81,11 @@ class PlatformRecoveryToken(BaseModel):
     expires_at: datetime
 
 
-class PlatformRateLimiterStatus(BaseModel):
-    backend: str
-    status: str
-    fail_open_total: int
-
-    model_config = {"extra": "allow"}
-
-
 class PlatformStatus(BaseModel):
     status: str
     api_cluster: str
     database: str
     worker_pool: str
     deployments: Any | None = None
-    rate_limiter: PlatformRateLimiterStatus
+    rate_limiter: RateLimiterStatus
     timestamp: datetime

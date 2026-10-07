@@ -106,6 +106,7 @@ ROUTES: Dict[str, Route] = dict(
         # -- customer events ---------------------------------------------------------------
         _r(Route("events.create", "POST", "/v1/events", scope="events:write", scope_enforced=True, idempotent=True, body="json")),
         _r(Route("events.create_batch", "POST", "/v1/events/batches", scope="events:write", scope_enforced=True, idempotent=True, body="json")),
+        _r(Route("events.list", "GET", "/v1/events", scope="events:read", scope_enforced=True, idempotent=True)),
         _r(Route("events.list_batches", "GET", "/v1/events/batches", scope="events:read", scope_enforced=True, idempotent=True)),
         _r(Route("events.get_batch", "GET", "/v1/events/batches/{batch_id}", scope="events:read", scope_enforced=True, idempotent=True)),
         # -- datasets ----------------------------------------------------------------------

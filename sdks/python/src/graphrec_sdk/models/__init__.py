@@ -16,6 +16,8 @@ from .datasets import DatasetSnapshot, DatasetSnapshotList, DatasetUploadResult
 from .events import (
     EventBatch,
     EventBatchList,
+    EventRecord,
+    EventRecordList,
     EventBatchResult,
     EventInput,
     EventItemOutcome,
@@ -70,6 +72,8 @@ __all__ = [
     "DeploymentStatus",
     "EventBatch",
     "EventBatchList",
+    "EventRecord",
+    "EventRecordList",
     "EventBatchResult",
     "EventInput",
     "EventItemOutcome",

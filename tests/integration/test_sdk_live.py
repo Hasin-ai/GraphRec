@@ -169,6 +169,8 @@ def test_events_and_batches(shop: Tenant) -> None:
          for i in range(20)]
     )
     assert batch.accepted_count == 20
+    recent = events.list(limit=5, user_id="u-1")
+    assert recent and all(item.user_id == "u-1" for item in recent)
     listed = events.list_batches()
     assert listed and events.get_batch(listed[0].id).id == listed[0].id
     with pytest.raises(g.RequestValidationError):

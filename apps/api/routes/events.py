@@ -29,7 +29,7 @@ def submit_event(
 def list_events(
     limit: int = Query(default=50, ge=1, le=500),
     user_id: str | None = Query(default=None, max_length=256),
-    event_type: EventType | None = None,
+    event_type: EventType | None = Query(default=None),
     external_product_id: str | None = Query(default=None, max_length=100),
     principal: AuthenticatedPrincipal = Depends(authenticated_principal),
     db: Session = Depends(get_db),

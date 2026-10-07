@@ -275,6 +275,14 @@ CASES: List[Case] = [
         check=lambda r: r.accepted_count == 2 and len(r.batches) == 1,
     ),
     Case(
+        "events.list",
+        "/v1/events",
+        [{"event_id": "e1", "event_type": "view", "user_id": "u1", "external_product_id": "sku-1",
+          "context": {}, "occurred_at": "2026-10-07T00:00:00Z", "created_at": "2026-10-07T00:00:01Z"}],
+        lambda c: c.storefront.events.list(limit=10, user_id="u1"),
+        check=lambda r: len(r) == 1 and r[0].event_id == "e1",
+    ),
+    Case(
         "events.list_batches",
         "/v1/events/batches",
         [fx.event_batch()],
