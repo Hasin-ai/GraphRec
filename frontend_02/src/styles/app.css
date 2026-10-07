@@ -156,6 +156,7 @@ a:hover { color: var(--color-accent); }
 .nav-sep { height: 1px; margin: 6px 10px; background: var(--color-border); }
 
 .sb-foot { flex: none; padding: 8px; border-top: 1px solid var(--color-border); }
+.sb-version { padding: 6px 8px 0; font-size: 11px; color: var(--color-text-3); }
 .um { position: relative; }
 .avatar { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 650; letter-spacing: .02em; color: var(--color-text); background: var(--color-surface-3); border: 0; }
 .role-badge { align-self: flex-start; margin-top: 2px; padding: 0 6px; border-radius: var(--radius-pill); font-size: 11px; line-height: 17px; font-weight: 500; color: var(--color-text-2); background: var(--color-surface-2); border: 1px solid var(--color-border); }

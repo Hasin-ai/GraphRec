@@ -46,9 +46,14 @@ import type {
   TrendGranularity,
   ScalingStatus,
   RecommendationResult,
+  ProductMeta,
 } from "./types";
 
 const enc = encodeURIComponent;
+
+export const meta = {
+  get: () => request<ProductMeta>("/v1/meta", { realm: "public" }),
+};
 
 export const tenantUsers = {
   list: () => request<{ items: TenantUserResource[]; total: number }>("/v1/tenant/users"),

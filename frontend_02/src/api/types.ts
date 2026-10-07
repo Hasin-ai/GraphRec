@@ -526,3 +526,11 @@ export interface RecommendationResult {
   applied_rules: string[];
   rules_version: number | null;
 }
+
+/** `GET /v1/meta`: one product version shared by API, console and SDK. */
+export interface ProductMeta {
+  product: string;
+  version: string;
+  environment: "development" | "production";
+  features: { development_placeholders: boolean };
+}

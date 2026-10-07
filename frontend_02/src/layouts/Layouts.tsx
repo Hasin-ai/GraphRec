@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation } from "react-router-dom";
 import { consumeExplicitSignOut, roleLabel, sessionTenantId } from "../auth/session";
+import { useMeta } from "../hooks/useMeta";
 import { useSession } from "../hooks/useSession";
 import { useTheme, type ThemeMode } from "../hooks/useTheme";
 import { useToast } from "../hooks/useToast";
@@ -178,6 +179,13 @@ function UserMenu({ name, detail, role, collapsed, onSignOut, accountTo, plansTo
   </div>;
 }
 
+/** One product version for API, console and SDK (`GET /v1/meta`); hidden until known. */
+function ProductVersion({ collapsed }: { collapsed: boolean }) {
+  const meta = useMeta();
+  if (!meta || collapsed) return null;
+  return <div className="sb-version" data-testid="product-version">GraphRec v{meta.version}{meta.environment === "development" ? " · development" : ""}</div>;
+}
+
 function Sidebar({ home, groups, can, header, footer, collapsed, onCollapse, onClose }: {
   home: string; groups: NavGroup[]; can: (s: string) => boolean; header: (collapsed: boolean) => ReactNode; footer: (collapsed: boolean) => ReactNode;
   collapsed: boolean; onCollapse: () => void; onClose: () => void;
@@ -192,7 +200,7 @@ function Sidebar({ home, groups, can, header, footer, collapsed, onCollapse, onC
       {header(collapsed)}
     </div>
     <Nav groups={groups} can={can} collapsed={collapsed} />
-    <div className="sb-foot">{footer(collapsed)}</div>
+    <div className="sb-foot">{footer(collapsed)}<ProductVersion collapsed={collapsed} /></div>
   </aside>;
 }
 

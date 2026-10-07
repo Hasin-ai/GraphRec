@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.0 — Unreleased
+
+The SDK now shares one version with the GraphRec API and console.
+
+- `storefront.events.list()` / `AsyncEvents.list()` read recently received events (`GET /v1/events`), with `user_id`, `event_type` and `product_id` filters.
+- `AuthTokenPair.email` carries the signed-in account's email.
+
 ## 1.0.0 — 2026-10-04
 
 The SDK now covers all 68 API routes and groups them by audience. This release is **breaking**: every resource moved.

@@ -18,6 +18,7 @@ from apps.api.routes.api_keys import router as api_keys_router
 from apps.api.routes.datasets import router as datasets_router
 from apps.api.routes.deployment import router as deployment_router
 from apps.api.routes.events import router as events_router
+from apps.api.routes.meta import router as meta_router
 from apps.api.routes.model_versions import router as model_versions_router
 from apps.api.routes.platform import router as platform_router
 from apps.api.routes.products import router as products_router
@@ -31,10 +32,11 @@ from apps.api.routes.usage import router as usage_router
 from graphrec_core.database.session import engine
 from graphrec_core.errors import ApiError
 from graphrec_core.settings import get_settings
+from graphrec_core.version import __version__
 
 app = FastAPI(
     title="GraphRec API",
-    version="0.1.0",
+    version=__version__,
     docs_url="/docs",
     redoc_url=None,
 )
@@ -43,6 +45,7 @@ app.add_exception_handler(ApiError, api_error_handler)
 app.add_exception_handler(RequestValidationError, validation_error_handler)
 app.add_exception_handler(StarletteHTTPException, http_error_handler)
 app.add_exception_handler(Exception, unhandled_error_handler)
+app.include_router(meta_router)
 app.include_router(tenants_router)
 app.include_router(auth_router)
 app.include_router(api_keys_router)
