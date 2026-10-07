@@ -475,4 +475,4 @@ class AsyncPlatformOperations(AsyncResource):
         return cast(
             AuditRecordList,
             await self._client.request("platform.list_audit_logs", query=query, cast_to=AuditRecordList),
-        )
+        )
