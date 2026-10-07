@@ -338,3 +338,48 @@ def get_platform_status(db: Session = Depends(get_db)) -> dict[str, Any]:
         "rate_limiter": limiter,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+
+class PlatformUsageDimension(BaseModel):
+    type: str
+    used: float
+    limit: int | None = None
+    measured: bool = True
+
+
+class PlatformTenantUsage(BaseModel):
+    tenant_id: UUID
+    name: str
+    status: str
+    plan_code: str | None = None
+    period_start: datetime | None = None
+    dimensions: list[PlatformUsageDimension] = []
+    #: True when this tenant's usage could not be read (shown as unavailable, never as zero).
+    unavailable: bool = False
+
+
+class PlatformUsageList(BaseModel):
+    items: list[PlatformTenantUsage]
+
+
+@router.get("/usage", response_model=PlatformUsageList)
+def list_platform_usage(request: Request, db: Session = Depends(get_db)) -> PlatformUsageList:
+    """UC-29: every tenant's usage against its limits for the current period.
+    Aggregates only; no customer or event payloads leave this endpoint."""
+    items: list[PlatformTenantUsage] = []
+    for tenant in db.execute(text("SELECT * FROM public.platform_list_tenants()")).mappings().all():
+        if tenant["status"] == "deleted":
+            continue
+        try:
+            plan = db.scalar(text("SELECT public.platform_tenant_plan(:id)"), {"id": tenant["id"]})
+            summary = UsageService(db).get_for_platform(tenant["id"], correlation_id=request.state.correlation_id)
+            items.append(PlatformTenantUsage(
+                tenant_id=tenant["id"], name=tenant["name"], status=tenant["status"],
+                plan_code=plan["plan_code"] if plan else None, period_start=summary.period_start,
+                dimensions=[PlatformUsageDimension(type=d.type, used=d.used, limit=d.limit, measured=d.measured)
+                            for d in summary.dimensions]))
+        except ApiError:
+            db.rollback()
+            items.append(PlatformTenantUsage(tenant_id=tenant["id"], name=tenant["name"], status=tenant["status"],
+                                             unavailable=True))
+    return PlatformUsageList(items=items)

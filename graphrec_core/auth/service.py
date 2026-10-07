@@ -49,6 +49,8 @@ ROLE_SCOPES: dict[str, list[str]] = {
         "recommendations:read",
         "deployments:read",
         "metrics:read",
+        # UC-31: the tenant's own (redacted) audit trail.
+        "audit:read",
     ],
     "tenant_developer": [
         "keys:write",

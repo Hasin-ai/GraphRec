@@ -2420,6 +2420,116 @@
         "title": "PlatformTenantResource",
         "type": "object"
       },
+      "PlatformTenantUsage": {
+        "properties": {
+          "dimensions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PlatformUsageDimension"
+            },
+            "title": "Dimensions",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "period_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Start"
+          },
+          "plan_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Code"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "unavailable": {
+            "default": false,
+            "title": "Unavailable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "name",
+          "status"
+        ],
+        "title": "PlatformTenantUsage",
+        "type": "object"
+      },
+      "PlatformUsageDimension": {
+        "properties": {
+          "limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit"
+          },
+          "measured": {
+            "default": true,
+            "title": "Measured",
+            "type": "boolean"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "used": {
+            "title": "Used",
+            "type": "number"
+          }
+        },
+        "required": [
+          "type",
+          "used"
+        ],
+        "title": "PlatformUsageDimension",
+        "type": "object"
+      },
+      "PlatformUsageList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PlatformTenantUsage"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "PlatformUsageList",
+        "type": "object"
+      },
       "ProductBulkFailure": {
         "properties": {
           "external_id": {
@@ -3629,6 +3739,121 @@
         "title": "SubscriptionResponse",
         "type": "object"
       },
+      "TenantAuditItem": {
+        "properties": {
+          "action_type": {
+            "title": "Action Type",
+            "type": "string"
+          },
+          "actor_reference": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Reference"
+          },
+          "actor_type": {
+            "title": "Actor Type",
+            "type": "string"
+          },
+          "correlation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correlation Id"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "outcome": {
+            "title": "Outcome",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "resource_reference": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource Reference"
+          },
+          "resource_type": {
+            "title": "Resource Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "occurred_at",
+          "action_type",
+          "resource_type",
+          "outcome",
+          "actor_type"
+        ],
+        "title": "TenantAuditItem",
+        "type": "object"
+      },
+      "TenantAuditList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TenantAuditItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_before": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Before"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "TenantAuditList",
+        "type": "object"
+      },
       "TenantRegistrationRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3958,6 +4183,57 @@
           "created_at"
         ],
         "title": "TenantUserResource",
+        "type": "object"
+      },
+      "TenantUserUpdate": {
+        "additionalProperties": false,
+        "description": "Change a member's role or access. ``locked`` blocks sign-in until unlocked;\n``disabled`` is permanent for that account (invite the person again instead).",
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "enum": [
+                  "tenant_administrator",
+                  "tenant_developer"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "active",
+                  "locked",
+                  "disabled"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "title": "TenantUserUpdate",
         "type": "object"
       },
       "TrainingJobCreate": {
@@ -4584,6 +4860,138 @@
         "summary": "Rotate Api Key",
         "tags": [
           "api-keys"
+        ]
+      }
+    },
+    "/v1/audit": {
+      "get": {
+        "operationId": "list_tenant_audit_v1_audit_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "action",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Action"
+            }
+          },
+          {
+            "in": "query",
+            "name": "outcome",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 20,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Outcome"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          },
+          {
+            "description": "Keyset cursor from next_before.",
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Keyset cursor from next_before.",
+              "title": "Before"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantAuditList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Tenant Audit",
+        "tags": [
+          "audit"
         ]
       }
     },
@@ -6668,6 +7076,28 @@
         ]
       }
     },
+    "/v1/platform/usage": {
+      "get": {
+        "description": "UC-29: every tenant's usage against its limits for the current period.\nAggregates only; no customer or event payloads leave this endpoint.",
+        "operationId": "list_platform_usage_v1_platform_usage_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformUsageList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Platform Usage",
+        "tags": [
+          "platform"
+        ]
+      }
+    },
     "/v1/products": {
       "get": {
         "description": "List products newest first. ``total`` counts every match, not just this page.",
@@ -7275,6 +7705,101 @@
         ]
       }
     },
+    "/v1/tenant/users/{user_id}": {
+      "get": {
+        "operationId": "get_tenant_user_v1_tenant_users__user_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantUserResource"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Tenant User",
+        "tags": [
+          "tenant-users"
+        ]
+      },
+      "patch": {
+        "description": "Change a member's role, or lock, unlock or disable the account. Ends the member's sessions.",
+        "operationId": "update_tenant_user_v1_tenant_users__user_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantUserUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantUserResource"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Tenant User",
+        "tags": [
+          "tenant-users"
+        ]
+      }
+    },
     "/v1/tenant/users/{user_id}/invitation": {
       "delete": {
         "description": "Withdraw a pending invitation; its one-time setup link stops working.",
@@ -7314,6 +7839,50 @@
           }
         },
         "summary": "Revoke Tenant User Invitation",
+        "tags": [
+          "tenant-users"
+        ]
+      }
+    },
+    "/v1/tenant/users/{user_id}/invitation:resend": {
+      "post": {
+        "description": "Issue a new one-time setup link for a pending invitation; earlier links stop working.",
+        "operationId": "resend_tenant_user_invitation_v1_tenant_users__user_id__invitation_resend_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantUserInviteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resend Tenant User Invitation",
         "tags": [
           "tenant-users"
         ]
