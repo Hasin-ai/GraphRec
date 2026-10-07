@@ -31,3 +31,4 @@ All notable changes to GraphRec. Entries reference the anomaly register in
 - A-13: `POST /v1/events` and `POST /v1/auth/recover-password` have response models. Recommendation `context` is typed (`session_id`, `recent_product_ids` up to 200, `surface`; other keys are still accepted). A duplicate event returns its original `received_at`.
 - A-25: public `GET /v1/plans` returns the active plans with their current limits; the pricing page and landing teaser read it (and say so when they fall back to the seeded defaults), so operator plan edits show up on the public site.
 - A-26: the console labels the workspace with the tenant's registered name (new `tenant_name` in token responses) instead of guessing it from the email domain, and no longer shows a "Workspaces" switcher that implied more than one workspace.
+- A-30: `npm audit` reports 0 vulnerabilities (build-time `source-map-js` updated).
