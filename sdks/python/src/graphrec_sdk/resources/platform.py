@@ -16,6 +16,7 @@ from ..enums import TenantStatus
 from ..errors import InputValidationError
 from ..models.billing import UsageSummary
 from ..models.platform import (
+    PlatformUsageList,
     AuditRecordList,
     PlatformFailureList,
     PlatformStatus,
@@ -398,6 +399,11 @@ class PlatformOperations(SyncResource):
 
         return cast(PlatformStatus, self._client.request("platform.status", cast_to=PlatformStatus))
 
+    def list_usage(self) -> PlatformUsageList:
+        """UC-29: every tenant's usage against its limits (``GET /v1/platform/usage``)."""
+
+        return cast(PlatformUsageList, self._client.request("platform.list_usage", cast_to=PlatformUsageList))
+
     def list_failures(self) -> PlatformFailureList:
         """The 50 latest security/failure events (``GET /v1/platform/failures``)."""
 
@@ -442,6 +448,11 @@ class AsyncPlatformOperations(AsyncResource):
         return cast(
             PlatformStatus, await self._client.request("platform.status", cast_to=PlatformStatus)
         )
+
+    async def list_usage(self) -> PlatformUsageList:
+        """UC-29: every tenant's usage against its limits (``GET /v1/platform/usage``)."""
+
+        return cast(PlatformUsageList, await self._client.request("platform.list_usage", cast_to=PlatformUsageList))
 
     async def list_failures(self) -> PlatformFailureList:
         """Async variant of :meth:`PlatformOperations.list_failures`."""

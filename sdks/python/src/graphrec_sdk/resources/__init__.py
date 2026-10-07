@@ -1,7 +1,7 @@
 """Resource classes. Reach them through the audience namespaces on the client
 (``client.storefront``, ``client.tenant``, ``client.platform``)."""
 
-from .account import Account, AsyncAccount
+from .account import Account, AsyncAccount, AsyncTenantAudit, TenantAudit
 from .api_keys import ApiKeys, AsyncApiKeys
 from .billing import AsyncSubscriptions, AsyncUsage, Subscriptions, Usage
 from .datasets import AsyncDatasets, Datasets
@@ -36,6 +36,8 @@ from .tenants import AsyncAuthentication, Authentication
 __all__ = [
     "Account",
     "AsyncAccount",
+    "AsyncTenantAudit",
+    "TenantAudit",
     "AsyncPlatformOperators",
     "PlatformOperators",
     "ApiKeys",

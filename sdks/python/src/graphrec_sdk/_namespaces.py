@@ -43,7 +43,7 @@ from .resources.recommendations import (
 )
 from .resources.serving import AsyncDeployment, AsyncMetrics, Deployment, Metrics
 from .resources.tenant_users import AsyncTenantUsers, TenantUsers
-from .resources.account import Account, AsyncAccount
+from .resources.account import Account, AsyncAccount, AsyncTenantAudit, TenantAudit
 from .resources.operators import AsyncPlatformOperators, PlatformOperators
 from .resources.tenants import AsyncAuthentication, Authentication
 
@@ -103,9 +103,11 @@ class TenantNamespace:
     deployment: Deployment
     metrics: Metrics
     account: Account
+    audit: TenantAudit
 
     def __init__(self, api: SyncAPIClient) -> None:
         self.account = Account(api)
+        self.audit = TenantAudit(api)
         self.auth = Authentication(api)
         self.users = TenantUsers(api)
         self.api_keys = ApiKeys(api)
@@ -137,9 +139,12 @@ class AsyncTenantNamespace:
     recommendation_policy: AsyncRecommendationPolicyResource
     deployment: AsyncDeployment
     metrics: AsyncMetrics
+    account: AsyncAccount
+    audit: AsyncTenantAudit
 
     def __init__(self, api: AsyncAPIClient) -> None:
         self.account = AsyncAccount(api)
+        self.audit = AsyncTenantAudit(api)
         self.auth = AsyncAuthentication(api)
         self.users = AsyncTenantUsers(api)
         self.api_keys = AsyncApiKeys(api)

@@ -93,6 +93,10 @@ ROUTES: Dict[str, Route] = dict(
         # -- tenant users (administrator bearer tokens only) -------------------------------
         _r(Route("tenant_users.list", "GET", "/v1/tenant/users", auth="bearer", scope="users:write", scope_enforced=True, idempotent=True)),
         _r(Route("tenant_users.invite", "POST", "/v1/tenant/users", auth="bearer", scope="users:write", scope_enforced=True, body="json")),
+        _r(Route("tenant_users.get", "GET", "/v1/tenant/users/{user_id}", auth="bearer", scope="users:write", scope_enforced=True, idempotent=True)),
+        _r(Route("tenant_users.update", "PATCH", "/v1/tenant/users/{user_id}", auth="bearer", scope="users:write", scope_enforced=True, body="json")),
+        _r(Route("tenant_users.resend_invitation", "POST", "/v1/tenant/users/{user_id}/invitation:resend", auth="bearer", scope="users:write", scope_enforced=True)),
+        _r(Route("audit.list", "GET", "/v1/audit", auth="bearer", scope="audit:read", scope_enforced=True, idempotent=True)),
         _r(Route("tenant_users.revoke_invitation", "DELETE", "/v1/tenant/users/{user_id}/invitation", auth="bearer", scope="users:write", scope_enforced=True, idempotent=True)),
         # -- billing -----------------------------------------------------------------------
         _r(Route("subscription.get", "GET", "/v1/subscription", scope="billing:read", scope_enforced=True, idempotent=True)),
@@ -162,6 +166,7 @@ ROUTES: Dict[str, Route] = dict(
         _r(Route("platform.set_quota_override", "POST", "/v1/platform/tenants/{tenant_id}/quotas", auth="bearer", scope="platform:admin", idempotent=True, body="json")),
         _r(Route("platform.list_failures", "GET", "/v1/platform/failures", auth="bearer", scope="platform:admin", idempotent=True)),
         _r(Route("platform.list_audit_logs", "GET", "/v1/platform/audit", auth="bearer", scope="platform:admin", idempotent=True)),
+        _r(Route("platform.list_usage", "GET", "/v1/platform/usage", auth="bearer", scope="platform:admin", idempotent=True)),
         _r(Route("platform.status", "GET", "/v1/platform/status", auth="bearer", scope="platform:admin", idempotent=True)),
     ]
 )

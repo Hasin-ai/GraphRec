@@ -130,3 +130,25 @@ class PlatformStatus(GraphRecModel):
     deployments: Optional[Any] = None
     rate_limiter: Optional[Dict[str, Any]] = None
     timestamp: datetime
+
+
+class PlatformUsageDimension(GraphRecModel):
+    type: str
+    used: float
+    limit: Optional[int] = None
+    measured: bool = True
+
+
+class PlatformTenantUsage(GraphRecModel):
+    tenant_id: UUID
+    name: str
+    status: str
+    plan_code: Optional[str] = None
+    period_start: Optional[datetime] = None
+    dimensions: List[PlatformUsageDimension] = []
+    #: True when this tenant's usage could not be read (never reported as zero).
+    unavailable: bool = False
+
+
+class PlatformUsageList(GraphRecModel):
+    items: List[PlatformTenantUsage]
