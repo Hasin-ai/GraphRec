@@ -29,7 +29,6 @@ export const LIMIT_KEYS = [
   "active_model_versions",
   "maximum_inference_replicas",
   "artifact_storage_bytes",
-  "queued_messages",
 ] as const;
 export type LimitKey = (typeof LIMIT_KEYS)[number];
 
@@ -66,7 +65,6 @@ export const PLANS: MarketingPlan[] = [
       active_model_versions: 2,
       maximum_inference_replicas: 1,
       artifact_storage_bytes: 1 * GIB,
-      queued_messages: 500,
     },
   },
   {
@@ -86,7 +84,6 @@ export const PLANS: MarketingPlan[] = [
       active_model_versions: 5,
       maximum_inference_replicas: 2,
       artifact_storage_bytes: 5 * GIB,
-      queued_messages: 5_000,
     },
   },
   {
@@ -101,12 +98,11 @@ export const PLANS: MarketingPlan[] = [
       concurrent_recommendation_requests: 30,
       stored_products: 500_000,
       training_jobs: 12,
-      concurrent_training_jobs: 2,
+      concurrent_training_jobs: 1,
       maximum_training_duration_minutes: 180,
       active_model_versions: 10,
       maximum_inference_replicas: 3,
       artifact_storage_bytes: 20 * GIB,
-      queued_messages: 50_000,
     },
   },
 ];

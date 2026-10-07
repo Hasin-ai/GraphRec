@@ -23,7 +23,7 @@ from graphrec_core.database.tenancy import set_local_tenant
 from graphrec_core.errors import ApiError
 from graphrec_core.schemas.usage import UsageDimension, UsageSummaryResponse
 from graphrec_core.subscription.service import SubscriptionService
-from graphrec_core.usage.limits import artifact_storage_used, unstarted_cancelled_training_jobs
+from graphrec_core.usage.limits import artifact_storage_used, retained_versions, unstarted_cancelled_training_jobs
 
 DIMENSIONS: tuple[tuple[str, str | None, str], ...] = (
     ("accepted_events", "accepted_events", "count"),
@@ -114,7 +114,7 @@ class UsageService:
                 totals["training_jobs"] = max(Decimal(0), totals["training_jobs"] - unstarted_cancelled_training_jobs(self.session, tenant_id, period_start, period_end))
             # Stored inventory does not reset at the monthly metering boundary.
             totals["stored_products"] = Decimal(self.session.scalar(select(func.count(Product.id)).where(Product.tenant_id == tenant_id)) or 0)
-            totals["active_model_versions"] = Decimal(self.session.scalar(select(func.count(ModelVersion.id)).where(ModelVersion.tenant_id == tenant_id, ModelVersion.status == "active")) or 0)
+            totals["active_model_versions"] = Decimal(retained_versions(self.session, tenant_id))
             totals["artifact_storage_bytes"] = Decimal(artifact_storage_used(self.session, tenant_id))
             # Ready serving units right now (XR-F-08 logical capacity), not a ledger sum.
             totals["inference_replicas"] = Decimal(self.session.scalar(select(ModelDeployment.ready_capacity).where(

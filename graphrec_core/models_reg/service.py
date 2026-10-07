@@ -95,6 +95,7 @@ class ModelRegistryService:
                 f"Model version tag '{payload.version_tag}' already exists for this tenant.",
             )
 
+        require_capacity(self.db, tenant_id, "active_model_versions")
         mv = ModelVersion(
             id=uuid4(),
             tenant_id=tenant_id,
@@ -107,17 +108,6 @@ class ModelRegistryService:
             created_at=now,
         )
         self.db.add(mv)
-
-        usage = UsageEvent(
-            id=uuid4(),
-            tenant_id=tenant_id,
-            usage_type="active_model_versions",
-            quantity=Decimal("1"),
-            source_id=f"model-version-{mv.id}",
-            idempotency_key=str(uuid4()),
-            occurred_at=now,
-        )
-        self.db.add(usage)
         self._audit(tenant_id, "model_registered", mv.id)
         self.db.commit()
 
@@ -194,7 +184,6 @@ class ModelRegistryService:
             active.status = "retired"
 
         self.db.flush()
-        require_capacity(self.db, tenant_id, "active_model_versions")
 
         target.status = "active"
         target.activated_at = now
@@ -336,6 +325,9 @@ class ModelRegistryService:
             if snapshot is None:
                 raise ApiError(404, "resource_not_found", "Dataset snapshot not found.")
         require_capacity(self.db, tenant_id, "training_jobs")
+        # D-11: every successful job registers a version; refuse up front when the
+        # tenant already retains its plan's maximum (archive one to make room).
+        require_capacity(self.db, tenant_id, "active_model_versions")
         artifact_name = (payload.configuration or {}).get("pretrained_artifact")
         mode = (payload.configuration or {}).get("mode", "train")
         self._check_training_eligibility(tenant_id, cooldown=artifact_name is not None or mode == "train")

@@ -65,7 +65,21 @@ The cold-start fallback counts interactions in a window (`FALLBACK_POPULARITY_WI
 
 ---
 
-## Needs your sign-off
+## Decided with the owner (2026-10-08)
+
+| # | Decision | Outcome |
+|---|---|---|
+| D-02 | Marketing site spec | The marketing site is already built and synced with the console; the in-progress pages are the spec. No separate prompt file is needed. |
+| D-04 | Operator accounts with roles | **Approved.** Implemented: see "Operator accounts" below. |
+| D-05 | Email delivery | **Not approved.** No email transport is added. Setup and invitation links stay on screen; recovery stays operator-issued. Production readiness §6 "Email" is therefore recorded as not delivered by owner decision. |
+| D-07 | Real per-tenant serving replicas | **Deferral approved.** XR-F-08 is met with logical per-tenant serving capacity (concurrency slots that scale with measured demand, consistent across API processes and bound to the active version); the console says so. |
+| D-09 | Reference storefront | **`apps/reel-storefront`**, after its bugs are fixed. `apps/demo-storefront` (Facet) moves to `archive/`. |
+| D-10 | Production target | **Single-host Compose with Caddy** (automatic TLS). |
+| D-11 | Plan-limit semantics | **Approved.** Migration `0035`: Pro `concurrent_training_jobs` = 1; `queued_messages` removed; `active_model_versions` counts retained (non-archived) versions and is enforced when a version is created; `maximum_training_duration_minutes` is enforced by the worker, capped by its 180-second local budget. |
+| D-12 | Stray material | No answer: files are left where they are. |
+| D-13 | Suspended tenants | **Approved.** A restricted session that can only read the tenant's status. |
+
+## Needs your sign-off (historical: answered above)
 
 | # | Decision | Recommendation | Why it is waiting |
 |---|---|---|---|

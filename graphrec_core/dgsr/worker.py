@@ -45,6 +45,18 @@ class Cancelled(Exception):
     pass
 
 
+#: Local CPU worker cap per job, whatever the plan allows.
+LOCAL_TRAINING_BUDGET_SECONDS = 180
+
+
+def training_budget_seconds(plan_minutes) -> int:  # noqa: ANN001
+    """D-11: the smaller of the plan's ``maximum_training_duration_minutes`` and the
+    local worker cap. A missing plan value falls back to the local cap."""
+    if plan_minutes is None:
+        return LOCAL_TRAINING_BUDGET_SECONDS
+    return max(1, min(LOCAL_TRAINING_BUDGET_SECONDS, int(plan_minutes) * 60))
+
+
 class ShuttingDown(Exception):
     """The worker received SIGTERM/SIGINT: hand the job back to the queue."""
 
@@ -97,6 +109,10 @@ def train_job(tenant_id, job_id):
         content = db.get(DatasetSnapshotContent, job.dataset_snapshot_id).content
         configuration = dict(job.configuration)
         snapshot_checksum = snapshot.checksum
+        from graphrec_core.capacity import effective_limits
+        plan_minutes = effective_limits(db, tenant_id).get('maximum_training_duration_minutes')
+    # D-11: the plan's maximum training duration, capped by this worker's local budget.
+    budget = training_budget_seconds(plan_minutes)
     cfg = Config(embedding_dim=16, layers=1, recent_items=10, sampling_order=1,
                  item_neighbor_limit=10, epochs=configuration['epochs'], batch_size=16,
                  torch_threads=1, device='cpu', seed=42, evaluation='full')
@@ -128,8 +144,9 @@ def train_job(tenant_id, job_id):
     def pulse(stage, percent):
         if STOP.is_set():
             raise ShuttingDown()
-        if time.monotonic() - started > 180:
-            raise ValueError('Local training exceeded its 180-second processing budget; use a smaller snapshot or import a prepared checkpoint.')
+        if time.monotonic() - started > budget:
+            raise ValueError(f'Training exceeded its {budget}-second processing budget (plan limit or local worker cap); '
+                             'use a smaller snapshot or import a prepared checkpoint.')
         progress(tenant_id, job_id, stage, percent)
 
     def evaluate(split, baseline=False):
@@ -211,6 +228,7 @@ def train_job(tenant_id, job_id):
             raise Cancelled()
         now, version_id = datetime.now(timezone.utc), uuid4()
         require_capacity(db, tenant_id, 'artifact_storage_bytes', size)
+        require_capacity(db, tenant_id, 'active_model_versions')
         table = artifact.item_embeddings()
         norms = np.linalg.norm(table, axis=1, keepdims=True)
         if not np.isfinite(table).all() or np.any(norms <= 0):

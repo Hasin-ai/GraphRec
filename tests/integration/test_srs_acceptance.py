@@ -346,3 +346,28 @@ def test_concurrency_and_minute_limits_reject_excess_without_double_metering(cli
     assert rate.status_code == 429
     assert rate.json()['error']['details']['limit_name'] == 'requests_per_minute'
     assert rate.headers['retry-after'] == '60'
+
+
+def test_xr_f_06_retained_versions_limit_counts_every_non_archived_version(client):
+    """D-11: active_model_versions bounds retained versions; archiving frees room."""
+    tenant, headers = provision(client)
+    limits(client, tenant, active_model_versions=2, training_jobs=10)
+    first = client.post('/v1/model-versions', json={'version_tag': 'r1', 'model_type': 'development_placeholder'}, headers=headers)
+    second = client.post('/v1/model-versions', json={'version_tag': 'r2', 'model_type': 'development_placeholder'}, headers=headers)
+    assert first.status_code == second.status_code == 200
+    third = client.post('/v1/model-versions', json={'version_tag': 'r3', 'model_type': 'development_placeholder'}, headers=headers)
+    assert third.status_code == 429
+    assert third.json()['error']['details']['limit_name'] == 'active_model_versions'
+    refused_job = client.post('/v1/training-jobs', json={'configuration': {'mode': 'placeholder'}}, headers=headers)
+    assert refused_job.status_code == 429
+    assert client.post(f"/v1/model-versions/{first.json()['id']}:archive", headers=headers).status_code == 200
+    assert client.post('/v1/model-versions', json={'version_tag': 'r3', 'model_type': 'development_placeholder'}, headers=headers).status_code == 200
+    usage = {d['type']: d for d in client.get('/v1/usage', headers=headers).json()['dimensions']}
+    assert usage['active_model_versions']['used'] == 2
+
+
+def test_xr_f_06_plans_have_no_unenforced_limits(client):
+    """D-11: Pro allows one concurrent training job (BRULE-06) and no plan lists queued_messages."""
+    plans = {p['code']: p['limits'] for p in client.get('/v1/plans').json()['items']}
+    assert all('queued_messages' not in limits for limits in plans.values())
+    assert plans['pro']['concurrent_training_jobs'] == 1
