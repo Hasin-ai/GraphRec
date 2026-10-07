@@ -59,3 +59,39 @@ class PlatformAuditItem(BaseModel):
 
 class PlatformAuditListResponse(BaseModel):
     items: list[PlatformAuditItem]
+
+
+class PlatformTenantQuota(BaseModel):
+    """Effective limits for one tenant: plan base, quota row and overrides combined."""
+    plan_id: UUID
+    plan_code: str
+    overrides: dict[str, Any]
+    limits: dict[str, Any]
+
+
+class PlatformPlanAssignmentResult(PlatformTenantQuota):
+    """Result of a plan assignment. ``warnings`` lists acknowledged inventory conflicts."""
+    warnings: list[dict[str, Any]] = []
+
+
+class PlatformRecoveryToken(BaseModel):
+    recovery_token: str
+    expires_at: datetime
+
+
+class PlatformRateLimiterStatus(BaseModel):
+    backend: str
+    status: str
+    fail_open_total: int
+
+    model_config = {"extra": "allow"}
+
+
+class PlatformStatus(BaseModel):
+    status: str
+    api_cluster: str
+    database: str
+    worker_pool: str
+    deployments: Any | None = None
+    rate_limiter: PlatformRateLimiterStatus
+    timestamp: datetime

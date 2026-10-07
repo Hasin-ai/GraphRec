@@ -27,8 +27,12 @@ from graphrec_core.schemas.platform import (
     PlatformAuditListResponse,
     PlatformFailureItem,
     PlatformFailureListResponse,
+    PlatformPlanAssignmentResult,
     PlatformPlanResource,
     PlatformQuotaOverride,
+    PlatformRecoveryToken,
+    PlatformStatus,
+    PlatformTenantQuota,
     PlatformTenantListResponse,
     PlatformTenantResource,
 )
@@ -82,7 +86,7 @@ class RecoveryIssue(BaseModel):
     email: EmailStr
 
 
-@router.get("/tenants/{tenant_id}/quotas")
+@router.get("/tenants/{tenant_id}/quotas", response_model=PlatformTenantQuota)
 def get_tenant_quota(tenant_id: UUID, db: Session = Depends(get_db)) -> dict[str, Any]:
     config = db.scalar(text("SELECT public.platform_tenant_plan(:tenant_id)"), {"tenant_id": tenant_id})
     if config is None:
@@ -99,7 +103,7 @@ def get_tenant_usage(tenant_id: UUID, request: Request, db: Session = Depends(ge
     return UsageService(db).get_for_platform(tenant_id, correlation_id=request.state.correlation_id)
 
 
-@router.post("/tenants/{tenant_id}/recovery")
+@router.post("/tenants/{tenant_id}/recovery", response_model=PlatformRecoveryToken)
 def issue_account_recovery(tenant_id: UUID, payload: RecoveryIssue, request: Request,
                            db: Session = Depends(get_db),
                            app_settings: Settings = Depends(get_settings)) -> dict[str, Any]:
@@ -112,7 +116,7 @@ def issue_account_recovery(tenant_id: UUID, payload: RecoveryIssue, request: Req
     return {"recovery_token": token, "expires_at": expires_at}
 
 
-@router.post("/tenants/{tenant_id}/plan")
+@router.post("/tenants/{tenant_id}/plan", response_model=PlatformPlanAssignmentResult)
 def assign_tenant_plan(tenant_id: UUID, payload: PlanAssignment, request: Request, db: Session = Depends(get_db)):
     changed = db.scalar(text("SELECT public.platform_assign_plan(:tenant_id, :plan_id, :correlation_id)"),
         {"tenant_id": tenant_id, "plan_id": payload.plan_id, "correlation_id": request.state.correlation_id})
@@ -288,7 +292,7 @@ def list_platform_audit_logs(db: Session = Depends(get_db)) -> PlatformAuditList
     return PlatformAuditListResponse(items=[PlatformAuditItem(**row) for row in rows])
 
 
-@router.get("/status")
+@router.get("/status", response_model=PlatformStatus)
 def get_platform_status(db: Session = Depends(get_db)) -> dict[str, Any]:
     worker = "unavailable"
     deployments = None

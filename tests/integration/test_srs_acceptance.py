@@ -188,7 +188,10 @@ def test_platform_plan_assignment_preserves_overrides_and_usage(client):
     assert response.json()['limits']['stored_products'] == 7
     assert response.json()['limits']['training_jobs'] == pro['limits']['training_jobs']
     current = client.get(f'/v1/platform/tenants/{tenant}/quotas', headers=operator)
-    assert current.json() == response.json()
+    # The assignment result is the stored quota plus the (empty) list of acknowledged conflicts.
+    assigned = response.json()
+    assert assigned.pop('warnings') == []
+    assert current.json() == assigned
     usage = client.get(f'/v1/platform/tenants/{tenant}/usage', headers=operator)
     assert usage.status_code == 200, usage.text
     products = next(item for item in usage.json()['dimensions'] if item['type'] == 'stored_products')
