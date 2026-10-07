@@ -80,6 +80,7 @@ ROUTES: Dict[str, Route] = dict(
         _r(Route("auth.login", "POST", "/v1/auth/login", auth="none", idempotent=True, body="json")),
         _r(Route("auth.setup_password", "POST", "/v1/auth/setup-password", auth="none", idempotent=True, body="json")),
         _r(Route("auth.recover_password", "POST", "/v1/auth/recover-password", auth="none", body="json")),
+        _r(Route("auth.refresh", "POST", "/v1/auth/refresh", auth="none", body="json")),
         _r(Route("auth.logout", "POST", "/v1/auth/logout", auth="bearer", idempotent=True)),
         # -- API keys (bearer tokens only) -------------------------------------------------
         _r(Route("api_keys.list", "GET", "/v1/api-keys", auth="bearer", scope="keys:write", scope_enforced=True, idempotent=True)),

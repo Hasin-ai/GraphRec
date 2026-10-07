@@ -3,8 +3,9 @@ import {
   clearTenantSession,
   getPlatformSession,
   getTenantSession,
+  setTenantSession,
 } from "../auth/session";
-import { GraphRecApiError, type ErrorBody } from "./types";
+import { GraphRecApiError, type AuthTokenPair, type ErrorBody } from "./types";
 
 export type Realm = "public" | "tenant" | "platform";
 export const RESOURCE_CHANGED = "graphrec:resource-changed";
@@ -54,6 +55,54 @@ function authorization(realm: Realm): string | null {
  */
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const realm = options.realm ?? "tenant";
+  if (realm === "tenant" && needsRefresh()) await refreshTenantSession();
+  const sentWith = realm === "tenant" ? getTenantSession()?.accessToken : undefined;
+  try {
+    return await dispatch<T>(path, options, realm);
+  } catch (error) {
+    // The token expired between the check and the call: refresh once and retry,
+    // but only for the session that sent it (a newer sign-in is left alone).
+    const current = getTenantSession();
+    if (realm === "tenant" && error instanceof GraphRecApiError && error.code === "token_expired"
+        && current?.refreshToken && current.accessToken === sentWith) {
+      await refreshTenantSession();
+      return dispatch<T>(path, options, realm);
+    }
+    throw error;
+  }
+}
+
+/** Renew a little before expiry so a request never leaves with a dead token. */
+const REFRESH_MARGIN_MS = 30_000;
+let refreshing: Promise<void> | null = null;
+
+function needsRefresh(): boolean {
+  const session = getTenantSession();
+  return !!session?.refreshToken && session.expiresAt - REFRESH_MARGIN_MS <= Date.now();
+}
+
+/**
+ * Rotate the refresh token (single flight: concurrent requests share one call,
+ * because a refresh token works exactly once and a second use signs the user out).
+ */
+export function refreshTenantSession(): Promise<void> {
+  refreshing ??= (async () => {
+    const session = getTenantSession();
+    try {
+      if (!session?.refreshToken) throw new GraphRecApiError(401, { error: { code: "no_session", message: "Sign in to continue" } });
+      const pair = await performRequest<AuthTokenPair>("/v1/auth/refresh", { method: "POST", json: { refresh_token: session.refreshToken }, realm: "public" }, null);
+      setTenantSession(pair.email ?? session.email, pair, session.signedInAt);
+    } catch (error) {
+      if (!(error instanceof GraphRecApiError) || error.status === 401) clearTenantSession();
+      throw error;
+    } finally {
+      refreshing = null;
+    }
+  })();
+  return refreshing;
+}
+
+async function dispatch<T>(path: string, options: RequestOptions, realm: Realm): Promise<T> {
   const identity = authorization(realm);
   const key = JSON.stringify([realm, identity, path, options.headers]);
   if ((options.method ?? "GET") === "GET") {
@@ -103,7 +152,8 @@ async function performRequest<T>(path: string, options: RequestOptions, auth: st
 
   if (!response.ok) {
     const error = new GraphRecApiError(response.status, parsed as ErrorBody | null, correlationId);
-    if (response.status === 401 && realm === "tenant" && auth === `Bearer ${getTenantSession()?.accessToken}`) clearTenantSession();
+    const refreshable = error.code === "token_expired" && !!getTenantSession()?.refreshToken;
+    if (response.status === 401 && realm === "tenant" && !refreshable && auth === `Bearer ${getTenantSession()?.accessToken}`) clearTenantSession();
     if (response.status === 401 && realm === "platform" && auth === `Bearer ${getPlatformSession()?.token}`) clearPlatformSession();
     throw error;
   }

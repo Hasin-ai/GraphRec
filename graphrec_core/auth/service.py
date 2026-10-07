@@ -106,6 +106,76 @@ class AuthenticationService:
         self.session = session
         self.settings = settings
 
+    def refresh(self, refresh_token: str, *, correlation_id: UUID, source: str) -> AuthTokenPair:
+        """A-05: rotate a refresh token. Each token works once; presenting an
+        already-rotated token is treated as theft and revokes every session of
+        that user (refresh sessions and outstanding access tokens)."""
+        digest = hashlib.sha256(refresh_token.encode()).hexdigest()
+        now = datetime.now(timezone.utc)
+        try:
+            row = self.session.execute(text("SELECT * FROM public.resolve_refresh_session(:digest)"),
+                                       {"digest": digest}).mappings().one_or_none()
+            if row is None:
+                raise self._refresh_failed()
+            tenant_id, user_id = row["tenant_id"], row["user_id"]
+            set_local_tenant(self.session, tenant_id)
+            if row["revoked_at"] is not None and row["rotated"]:
+                self._revoke_family(tenant_id, user_id, now, correlation_id, source, reason="refresh_token_reuse")
+                self.session.commit()
+                raise self._refresh_failed()
+            if (row["revoked_at"] is not None or row["expires_at"] <= now or row["user_status"] != "active"
+                    or row["tenant_status"] != "active" or row["user_role"] not in ROLE_SCOPES):
+                self.session.rollback()
+                raise self._refresh_failed()
+            consumed = self.session.execute(update(RefreshSession).where(
+                RefreshSession.id == row["session_id"], RefreshSession.tenant_id == tenant_id,
+                RefreshSession.revoked_at.is_(None),
+            ).values(revoked_at=now)).rowcount
+            if consumed != 1:
+                # A concurrent request rotated it first: the same token was used twice.
+                self.session.rollback()
+                set_local_tenant(self.session, tenant_id)
+                self._revoke_family(tenant_id, user_id, now, correlation_id, source, reason="refresh_token_reuse")
+                self.session.commit()
+                raise self._refresh_failed()
+            identity = LoginIdentity(user_id=user_id, tenant_id=tenant_id, normalized_email=row["normalized_email"],
+                                     credential_digest=None, user_status=row["user_status"],
+                                     tenant_status=row["tenant_status"], user_role=row["user_role"])
+            return self._issue_session(identity, correlation_id=correlation_id, source=source,
+                                       email=row["normalized_email"], rotated_from_id=row["session_id"],
+                                       refresh_expires_at=row["expires_at"])
+        except ApiError:
+            raise
+        except SQLAlchemyError as exc:
+            self.session.rollback()
+            raise ApiError(503, "authentication_unavailable", "Session refresh is temporarily unavailable",
+                           retryable=True, retry_after_seconds=5) from exc
+
+    def _revoke_family(self, tenant_id: UUID, user_id: UUID, now: datetime, correlation_id: UUID,
+                       source: str, *, reason: str) -> None:
+        self.session.execute(update(TenantUser).where(
+            TenantUser.tenant_id == tenant_id, TenantUser.id == user_id,
+        ).values(auth_epoch=TenantUser.auth_epoch + 1))
+        self.session.execute(update(RefreshSession).where(
+            RefreshSession.tenant_id == tenant_id, RefreshSession.user_id == user_id,
+            RefreshSession.revoked_at.is_(None),
+        ).values(revoked_at=now))
+        self.session.add(SecurityEvent(
+            id=uuid4(), tenant_id=tenant_id, event_type=reason, severity="warning",
+            source_hash=protected_auth_hash(source),
+            sanitized_detail={"correlation_id": str(correlation_id)}, occurred_at=now,
+        ))
+        self.session.add(AuditLog(
+            id=uuid4(), tenant_id=tenant_id, actor_type="system", actor_reference=None,
+            action_type="sessions_revoked", resource_type="tenant_user", resource_reference=user_id,
+            outcome="succeeded", correlation_reference=correlation_id,
+            redacted_details={"reason": reason}, occurred_at=now,
+        ))
+
+    @staticmethod
+    def _refresh_failed() -> ApiError:
+        return ApiError(401, "invalid_refresh_token", "The session can no longer be refreshed. Sign in again.")
+
     def logout(self, *, tenant_id: UUID, user_id: UUID, correlation_id: UUID) -> None:
         now = datetime.now(timezone.utc)
         try:
@@ -555,10 +625,14 @@ class AuthenticationService:
         correlation_id: UUID,
         source: str,
         email: str,
+        rotated_from_id: UUID | None = None,
+        refresh_expires_at: datetime | None = None,
     ) -> AuthTokenPair:
         now = datetime.now(timezone.utc)
         access_expires = now + timedelta(seconds=self.settings.access_token_ttl_seconds)
-        refresh_expires = now + timedelta(seconds=self.settings.refresh_token_ttl_seconds)
+        # A rotated session keeps the family's absolute expiry: refreshing never
+        # extends a sign-in beyond REFRESH_TOKEN_TTL_SECONDS.
+        refresh_expires = refresh_expires_at or now + timedelta(seconds=self.settings.refresh_token_ttl_seconds)
         scopes = list(ROLE_SCOPES[identity.user_role])
         refresh_token = secrets.token_urlsafe(48)
         refresh_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
@@ -601,14 +675,14 @@ class AuthenticationService:
                     created_at=now,
                     expires_at=refresh_expires,
                     revoked_at=None,
-                    rotated_from_id=None,
+                    rotated_from_id=rotated_from_id,
                 ),
                 AuditLog(
                     id=uuid4(),
                     tenant_id=identity.tenant_id,
                     actor_type="tenant_user",
                     actor_reference=identity.user_id,
-                    action_type="authentication",
+                    action_type="session_refreshed" if rotated_from_id else "authentication",
                     resource_type="refresh_session",
                     resource_reference=None,
                     outcome="succeeded",
@@ -619,7 +693,7 @@ class AuthenticationService:
                 SecurityEvent(
                     id=uuid4(),
                     tenant_id=identity.tenant_id,
-                    event_type="login_succeeded",
+                    event_type="session_refreshed" if rotated_from_id else "login_succeeded",
                     severity="info",
                     source_hash=protected_auth_hash(source),
                     sanitized_detail={

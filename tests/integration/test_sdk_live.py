@@ -202,6 +202,7 @@ def test_recommendations_and_feedback(shop: Tenant) -> None:
 
 def test_auth_login_logout_and_recovery(public: g.GraphRec, shop: Tenant, ops: g.GraphRec) -> None:
     tokens = public.tenant.auth.login(email=shop.email, password=PASSWORD)
+    tokens = public.tenant.auth.refresh(refresh_token=tokens.refresh_token)
     session = public.with_credentials(access_token=tokens.access_token)
     assert session.tenant.subscription.get().plan_code
     session.tenant.auth.logout()

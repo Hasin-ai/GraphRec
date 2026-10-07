@@ -6,6 +6,41 @@ import { GraphRecApiError } from "./types";
 
 afterEach(() => vi.unstubAllGlobals());
 
+describe("session refresh (A-05)", () => {
+  it("refreshes an expired access token once and retries the request with the new one", async () => {
+    setTenantSession("a@example.org", tokenPair({ access_token: "old", refresh_token: "r1" }));
+    const calls: { url: string; auth?: string; body?: string }[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => {
+      const headers = init.headers as Record<string, string>;
+      calls.push({ url, auth: headers.Authorization, body: init.body as string | undefined });
+      if (url.endsWith("/v1/auth/refresh")) return new Response(JSON.stringify(tokenPair({ access_token: "new", refresh_token: "r2" })));
+      if (headers.Authorization === "Bearer old") return new Response(JSON.stringify({ error: { code: "token_expired", message: "expired" } }), { status: 401 });
+      return new Response(JSON.stringify({ items: [] }));
+    }));
+    await expect(request("/v1/products")).resolves.toEqual({ items: [] });
+    expect(calls.map(c => c.url.replace(/^.*\/v1/, "/v1"))).toEqual(["/v1/products", "/v1/auth/refresh", "/v1/products"]);
+    expect(JSON.parse(calls[1].body!)).toEqual({ refresh_token: "r1" });
+    expect(calls[2].auth).toBe("Bearer new");
+    expect(getTenantSession()?.refreshToken).toBe("r2");
+  });
+  it("shares one refresh between concurrent requests (refresh tokens are single-use)", async () => {
+    setTenantSession("a@example.org", { ...tokenPair({ access_token: "old", refresh_token: "r1" }), expires_in: 0 });
+    let refreshes = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.endsWith("/v1/auth/refresh")) { refreshes++; return new Response(JSON.stringify(tokenPair({ access_token: "new", refresh_token: "r2" }))); }
+      return new Response(JSON.stringify({ ok: true }));
+    }));
+    await Promise.all([request("/v1/products"), request("/v1/usage"), request("/v1/deployment")]);
+    expect(refreshes).toBe(1);
+  });
+  it("signs out when the refresh token is rejected", async () => {
+    setTenantSession("a@example.org", { ...tokenPair({ access_token: "old", refresh_token: "stolen" }), expires_in: 0 });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: { code: "invalid_refresh_token", message: "x" } }), { status: 401 })));
+    await expect(request("/v1/products")).rejects.toMatchObject({ code: "invalid_refresh_token" });
+    expect(getTenantSession()).toBeNull();
+  });
+});
+
 describe("request", () => {
   it("does not deliver an old account's mutation result into a new session", async () => {
     setTenantSession('a@example.org', tokenPair({ access_token: 'a' }));
@@ -81,7 +116,18 @@ describe("request", () => {
   });
 
   it("ends the tenant session on 401 so the guards route to sign-in", async () => {
+    // A-05: an expired token is refreshed first; the session ends only when that fails.
     signInAsAdmin();
+    mockFetch([
+      { path: "/v1/api-keys", status: 401, body: { error: { code: "token_expired", message: "Access token expired" } } },
+      { method: "POST", path: "/v1/auth/refresh", status: 401, body: { error: { code: "invalid_refresh_token", message: "Sign in again" } } },
+    ]);
+    await expect(request("/v1/api-keys")).rejects.toMatchObject({ code: "invalid_refresh_token" });
+    expect(getTenantSession()).toBeNull();
+  });
+
+  it("ends a session without a refresh token on token_expired", async () => {
+    setTenantSession("a@example.org", tokenPair({ refresh_token: "" }));
     mockFetch([{ path: "/v1/api-keys", status: 401, body: { error: { code: "token_expired", message: "Access token expired" } } }]);
     await expect(request("/v1/api-keys")).rejects.toMatchObject({ code: "token_expired" });
     expect(getTenantSession()).toBeNull();

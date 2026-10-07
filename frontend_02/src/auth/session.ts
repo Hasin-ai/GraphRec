@@ -6,8 +6,9 @@ import type { AuthTokenPair, TenantUserRole } from "../api/types";
  * PLATFORM_ADMIN_TOKEN, validated against GET /v1/platform/status.
  *
  * Sessions live in sessionStorage: they survive a reload, end with the tab, and
- * never reach another origin. The API has no refresh endpoint, so an expired
- * access token (401 token_expired) simply signs the user out.
+ * never reach another origin. The 15-minute access token is renewed with the
+ * single-use refresh token (POST /v1/auth/refresh, rotated on every use); the
+ * session ends only when refresh fails or the user signs out.
  */
 export interface TenantSession {
   kind: "tenant";
@@ -15,6 +16,8 @@ export interface TenantSession {
   role: TenantUserRole;
   scopes: string[];
   accessToken: string;
+  /** Single-use refresh token; replaced on every refresh. */
+  refreshToken?: string;
   expiresAt: number;
   signedInAt: number;
 }
@@ -53,22 +56,24 @@ let platformCache: PlatformSession | null | undefined;
 
 export function getTenantSession(): TenantSession | null {
   if (tenantCache === undefined) tenantCache = read<TenantSession>(TENANT_KEY);
-  if (tenantCache && tenantCache.expiresAt <= Date.now()) {
+  // An expired access token is still a live session while it can be refreshed.
+  if (tenantCache && tenantCache.expiresAt <= Date.now() && !tenantCache.refreshToken) {
     tenantCache = null;
     write(TENANT_KEY, null);
   }
   return tenantCache;
 }
 
-export function setTenantSession(email: string, pair: AuthTokenPair): TenantSession {
+export function setTenantSession(email: string, pair: AuthTokenPair, signedInAt: number = Date.now()): TenantSession {
   const session: TenantSession = {
     kind: "tenant",
     email,
     role: pair.user_role,
     scopes: pair.scopes,
     accessToken: pair.access_token,
+    refreshToken: pair.refresh_token,
     expiresAt: Date.now() + pair.expires_in * 1000,
-    signedInAt: Date.now(),
+    signedInAt,
   };
   tenantCache = session;
   write(TENANT_KEY, session);

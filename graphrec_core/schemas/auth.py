@@ -83,3 +83,9 @@ class RecoverPasswordRequest(BaseModel):
         if len(value) < 8 or len(value) > get_settings().max_password_length:
             raise ValueError("Password length is invalid")
         return value
+
+
+class RefreshRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    refresh_token: str = Field(min_length=16, max_length=256)

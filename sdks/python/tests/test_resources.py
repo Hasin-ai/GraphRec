@@ -58,6 +58,14 @@ CASES: List[Case] = [
         check=lambda r: r == {"status": "ok"},
     ),
     Case(
+        "auth.refresh",
+        "/v1/auth/refresh",
+        fx.tokens(),
+        lambda c: c.tenant.auth.refresh(refresh_token="r1"),
+        body=lambda b: b == {"refresh_token": "r1"},
+        check=lambda r: r.access_token == "access-1",
+    ),
+    Case(
         "meta.get",
         "/v1/meta",
         {"product": "GraphRec", "version": "1.1.0", "environment": "development",
