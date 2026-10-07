@@ -519,7 +519,10 @@ export interface ScalingStatus {
 export interface RecommendationResult {
   request_id: string;
   items: { external_product_id: string; position: number }[];
+  /** Version that produced the ranking; null when a fallback served the request. */
   model_version_id: string | null;
+  /** Active version at serving time, whether or not it served. */
+  active_model_version_id?: string | null;
   strategy: string;
   fallback_used: boolean;
   fallback_tier: string;

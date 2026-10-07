@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
@@ -31,6 +31,7 @@ from sqlalchemy.orm import Session
 
 from graphrec_core.auth.principal import AuthenticatedPrincipal, authenticated_principal
 from graphrec_core.database.models import (
+    Customer,
     CustomerEvent,
     ModelDeployment,
     ModelVersion,
@@ -41,7 +42,6 @@ from graphrec_core.database.models import (
     RecommendationResult,
 )
 from graphrec_core.database.session import get_db
-from graphrec_core.customers import ensure_customers
 from graphrec_core.recommendation_policy_service import load_rules
 from graphrec_core.recommendation_rules import rerank
 from graphrec_core.models_reg.service import artifact_directory
@@ -309,10 +309,13 @@ def _serve_and_record(payload: RecommendationRequest, principal: AuthenticatedPr
         )
         raise
     created_at = datetime.now(timezone.utc)
-    if payload.user_id:
-        ensure_customers(db, principal.tenant_id, {payload.user_id})
+    # A-21b / BRULE-03: customers are created from accepted interactions only. A
+    # recommendation for an id the tenant never sent an event for (cold start, or an
+    # arbitrary string) links to no customer instead of creating one per request.
+    known_customer = payload.user_id if payload.user_id and db.scalar(select(Customer.external_id).where(
+        Customer.tenant_id == principal.tenant_id, Customer.external_id == payload.user_id)) else None
     db.add(RecommendationRecord(tenant_id=principal.tenant_id, request_id=response.request_id,
-        external_customer_id=payload.user_id, payload_hash=fingerprint,
+        external_customer_id=known_customer, payload_hash=fingerprint,
         response=response.model_dump(mode="json"), created_at=created_at))
     for item in response.items:
         db.add(RecommendationResult(
@@ -428,7 +431,13 @@ def _serve(
         fallback_used = True
         fallback_tier = "tenant_popular"
         strategy = "popular_fallback"
-        popularity = select(CustomerEvent.external_product_id.label("product_id"), func.count().label("events")).where(CustomerEvent.tenant_id == tenant_id).group_by(CustomerEvent.external_product_id).subquery()
+        # XR-F-09 / A-19: recent popularity, bounded to a window ending at the
+        # tenant's latest interaction (index ix_customer_events_tenant_time).
+        latest = db.scalar(select(func.max(CustomerEvent.occurred_at)).where(CustomerEvent.tenant_id == tenant_id))
+        recent = [CustomerEvent.tenant_id == tenant_id]
+        if latest is not None:
+            recent.append(CustomerEvent.occurred_at >= latest - timedelta(days=settings.fallback_popularity_window_days))
+        popularity = select(CustomerEvent.external_product_id.label("product_id"), func.count().label("events")).where(*recent).group_by(CustomerEvent.external_product_id).subquery()
         fallback_query = (
             select(Product.external_id, func.coalesce(popularity.c.events, 0))
             .outerjoin(popularity, popularity.c.product_id == Product.external_id)
@@ -457,7 +466,8 @@ def _serve(
     return RecommendationResponse(
         request_id=payload.request_id or f"rec-{uuid4().hex}",
         items=items,
-        model_version_id=active_model.id if active_model else None,
+        model_version_id=active_model.id if active_model and not fallback_used and strategy != "popular_fallback" else None,
+        active_model_version_id=active_model.id if active_model else None,
         strategy=strategy,
         fallback_used=fallback_used,
         fallback_tier=fallback_tier,

@@ -82,6 +82,9 @@ class Settings(BaseSettings):
     qdrant_collection_prefix: str = Field(default="graphrec")
     qdrant_embedding_dim: int = Field(default=128, ge=16, le=4096)
     qdrant_top_k: int = Field(default=100, ge=1, le=1000)
+    # XR-F-09 / A-19: cold-start popularity counts interactions from this many days
+    # before the tenant's most recent interaction (backfilled history stays usable).
+    fallback_popularity_window_days: int = Field(default=30, ge=1, le=3_650)
     # Bound on every Qdrant call; serving falls back to in-process scoring on timeout.
     qdrant_timeout_seconds: float = Field(default=5.0, ge=0.1, le=60)
 

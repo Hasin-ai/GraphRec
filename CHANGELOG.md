@@ -23,3 +23,6 @@ All notable changes to GraphRec. Entries reference the anomaly register in
 - A-14/A-27: nginx sends CSP (`frame-ancestors 'none'`, no inline script), `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options` and `Permissions-Policy`; proxies `/healthz`, `/readyz`, `/docs` and `/openapi.json` to the API instead of answering health with a constant; caches hashed assets. The pre-paint theme script moved to `/theme-init.js`.
 - A-17: `registration_requests` now has forced row-level security (migration `0033`). The runtime role sees only its own tenant's rows; pre-tenant replay checks use two SECURITY DEFINER lookups.
 - A-18: chunked request bodies (no Content-Length) are bounded by the same per-route limits. Identical denial audits (same credential, reason and route) are capped at 5 per minute so rejected floods cannot become database write floods.
+- A-19 / XR-F-09: the cold-start fallback ranks by *recent* popularity (`FALLBACK_POPULARITY_WINDOW_DAYS`, default 30, ending at the tenant's latest interaction) instead of all-time counts.
+- A-20 / ER-F-05: `model_version_id` is the version that produced the ranking and is `null` when a fallback served it; new `active_model_version_id` reports the active version.
+- A-21b / BRULE-03: recommendation requests no longer create customer records; only accepted interactions do.

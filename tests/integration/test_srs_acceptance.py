@@ -38,6 +38,10 @@ def test_feedback_replay_ownership_and_disabled_recommendation(client):
     unavailable = client.post('/v1/recommendations', json={'user_id': 'shopper', 'fallback_allowed': False}, headers=headers)
     assert unavailable.status_code == 503
     assert unavailable.json()['error']['code'] == 'recommendation_unavailable'
+    # BRULE-03 (A-21b): the customer exists because the tenant sent an interaction for it;
+    # recommendation requests alone never create customers.
+    assert client.post('/v1/events', json={'event_id': 'shopper-view', 'event_type': 'view', 'user_id': 'shopper',
+                                           'external_product_id': 'movie'}, headers=headers).status_code == 200
     request = {'request_id': 'same-request', 'user_id': 'shopper', 'top_n': 1}
     result = client.post('/v1/recommendations', json=request, headers=headers)
     assert result.status_code == 200, result.text

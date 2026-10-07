@@ -47,7 +47,11 @@ class RecommendationItem(BaseModel):
 class RecommendationResponse(BaseModel):
     request_id: str
     items: list[RecommendationItem]
+    #: ER-F-05: the model version that produced this ranking; ``None`` when a
+    #: fallback served the request (see ``fallback_tier``).
     model_version_id: UUID | None = None
+    #: The tenant's active version at serving time, whether or not it served.
+    active_model_version_id: UUID | None = None
     strategy: str
     fallback_used: bool
     fallback_tier: str

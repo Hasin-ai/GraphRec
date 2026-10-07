@@ -26,7 +26,10 @@ class Recommendations(GraphRecModel):
 
     request_id: str
     items: List[RecommendationItem] = Field(default_factory=list)
+    #: Version that produced the ranking; ``None`` when a fallback served the request.
     model_version_id: Optional[UUID] = None
+    #: The tenant's active version at serving time, whether or not it served.
+    active_model_version_id: Optional[UUID] = None
     #: ``personalized`` or ``popular_fallback``.
     strategy: str
     fallback_used: bool
