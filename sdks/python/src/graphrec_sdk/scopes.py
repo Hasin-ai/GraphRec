@@ -39,13 +39,15 @@ class Scope(str, Enum):
     KEYS_WRITE = "keys:write"
     #: Bearer-token only, administrators only - inviting and listing tenant users.
     USERS_WRITE = "users:write"
+    #: Bearer-token only, administrators only - the tenant's own audit trail (UC-31).
+    AUDIT_READ = "audit:read"
 
     def __str__(self) -> str:
         return str(self.value)
 
 
 #: Every scope an API key may carry.
-BEARER_ONLY_SCOPES: FrozenSet[Scope] = frozenset({Scope.KEYS_WRITE, Scope.USERS_WRITE})
+BEARER_ONLY_SCOPES: FrozenSet[Scope] = frozenset({Scope.KEYS_WRITE, Scope.USERS_WRITE, Scope.AUDIT_READ})
 API_KEY_SCOPES: FrozenSet[str] = frozenset(s.value for s in Scope if s not in BEARER_ONLY_SCOPES)
 
 #: Scopes a console user's access token carries. Tokens keep the scopes granted

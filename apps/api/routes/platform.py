@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 from pydantic import EmailStr
 from sqlalchemy import select, text
@@ -16,6 +16,7 @@ from graphrec_core.auth.platform import platform_administrator
 from graphrec_core.auth.service import AuthenticationService
 from graphrec_core.database.models import PricingPlan
 from graphrec_core.database.session import get_db
+from graphrec_core.database.tenancy import set_audit_reason
 from graphrec_core.errors import ApiError
 from graphrec_core.subscription.service import SubscriptionService
 from graphrec_core.usage.limits import limits_below_inventory
@@ -27,8 +28,12 @@ from graphrec_core.schemas.platform import (
     PlatformAuditListResponse,
     PlatformFailureItem,
     PlatformFailureListResponse,
+    PlatformPlanAssignmentResult,
     PlatformPlanResource,
     PlatformQuotaOverride,
+    PlatformRecoveryToken,
+    PlatformStatus,
+    PlatformTenantQuota,
     PlatformTenantListResponse,
     PlatformTenantResource,
 )
@@ -43,8 +48,13 @@ TENANT_STATUSES = frozenset({"active", "suspended", "deleting", "deleted"})
 RECENT_LIMIT = 50
 
 
+Reason = Annotated[str, Field(min_length=3, max_length=500)]
+
+
 class TenantStatusUpdate(BaseModel):
     status: str = Field(..., max_length=20)
+    #: UC-27 / ER-F-11: why the operator changed the tenant's status (stored in the audit trail).
+    reason: Reason
 
 
 class QuotaOverrideUpdate(BaseModel):
@@ -52,11 +62,13 @@ class QuotaOverrideUpdate(BaseModel):
     # Lowering an inventory limit below current usage is refused unless the
     # operator confirms it; nothing is deleted, but further growth is blocked.
     acknowledge_below_usage: bool = False
+    reason: Reason | None = None
 
 
 class PlanAssignment(BaseModel):
     plan_id: UUID
     acknowledge_below_usage: bool = False
+    reason: Reason | None = None
 
 
 class PlanUpdate(BaseModel):
@@ -64,6 +76,7 @@ class PlanUpdate(BaseModel):
     limits: dict[str, Annotated[int, Field(strict=True, ge=0, le=9_000_000_000_000_000)]]
     is_active: bool
     acknowledge_below_usage: bool = False
+    reason: Reason | None = None
 
 
 def _guard_below_usage(db: Session, conflicts: list[dict[str, Any]], acknowledged: bool) -> list[dict[str, Any]]:
@@ -80,9 +93,10 @@ def _guard_below_usage(db: Session, conflicts: list[dict[str, Any]], acknowledge
 
 class RecoveryIssue(BaseModel):
     email: EmailStr
+    reason: Reason | None = None
 
 
-@router.get("/tenants/{tenant_id}/quotas")
+@router.get("/tenants/{tenant_id}/quotas", response_model=PlatformTenantQuota)
 def get_tenant_quota(tenant_id: UUID, db: Session = Depends(get_db)) -> dict[str, Any]:
     config = db.scalar(text("SELECT public.platform_tenant_plan(:tenant_id)"), {"tenant_id": tenant_id})
     if config is None:
@@ -99,21 +113,23 @@ def get_tenant_usage(tenant_id: UUID, request: Request, db: Session = Depends(ge
     return UsageService(db).get_for_platform(tenant_id, correlation_id=request.state.correlation_id)
 
 
-@router.post("/tenants/{tenant_id}/recovery")
+@router.post("/tenants/{tenant_id}/recovery", response_model=PlatformRecoveryToken)
 def issue_account_recovery(tenant_id: UUID, payload: RecoveryIssue, request: Request,
                            db: Session = Depends(get_db),
                            app_settings: Settings = Depends(get_settings)) -> dict[str, Any]:
     tenant = get_platform_tenant(tenant_id, db)
     if tenant.status != "active":
         raise ApiError(409, "tenant_inactive", "Tenant is not active.")
+    set_audit_reason(db, payload.reason)
     token, expires_at = AuthenticationService(db, app_settings).issue_recovery_token(
         tenant_id=tenant_id, email=str(payload.email).lower(), correlation_id=request.state.correlation_id,
     )
     return {"recovery_token": token, "expires_at": expires_at}
 
 
-@router.post("/tenants/{tenant_id}/plan")
+@router.post("/tenants/{tenant_id}/plan", response_model=PlatformPlanAssignmentResult)
 def assign_tenant_plan(tenant_id: UUID, payload: PlanAssignment, request: Request, db: Session = Depends(get_db)):
+    set_audit_reason(db, payload.reason)
     changed = db.scalar(text("SELECT public.platform_assign_plan(:tenant_id, :plan_id, :correlation_id)"),
         {"tenant_id": tenant_id, "plan_id": payload.plan_id, "correlation_id": request.state.correlation_id})
     if not changed:
@@ -164,6 +180,7 @@ def update_platform_tenant_status(
             "Unsupported tenant status",
             details={"fields": [{"field": "status", "message": f"Must be one of {sorted(TENANT_STATUSES)}"}]},
         )
+    set_audit_reason(db, payload.reason)
     row = (
         db.execute(
             text(
@@ -203,6 +220,7 @@ def update_platform_plan(plan_id: UUID, payload: PlanUpdate, request: Request,
         raise ApiError(404, "resource_not_found", "Plan not found.")
     if not payload.name.strip() or set(payload.limits) != set(plan.limits):
         raise ApiError(422, "validation_failed", "Provide a name and every supported plan limit exactly once.")
+    set_audit_reason(db, payload.reason)
     row = db.execute(text("SELECT * FROM public.platform_update_plan"
         "(:plan_id, :name, CAST(:limits AS jsonb), :active, :correlation_id)"), {
         "plan_id": plan_id, "name": payload.name.strip(), "limits": json.dumps(payload.limits),
@@ -237,6 +255,7 @@ def set_tenant_quota_override(
     if any(key not in current['limits'] or isinstance(value, bool) or not isinstance(value, int) or value < 0
            for key, value in payload.overrides.items()):
         raise ApiError(422, "validation_failed", "Overrides must name supported limits and contain non-negative integers.")
+    set_audit_reason(db, payload.reason)
     row = (
         db.execute(
             text(
@@ -276,19 +295,27 @@ def list_platform_failures(db: Session = Depends(get_db)) -> PlatformFailureList
 
 
 @router.get("/audit", response_model=PlatformAuditListResponse)
-def list_platform_audit_logs(db: Session = Depends(get_db)) -> PlatformAuditListResponse:
-    rows = (
-        db.execute(
-            text("SELECT * FROM public.platform_recent_audit(:limit)"),
-            {"limit": RECENT_LIMIT},
-        )
-        .mappings()
-        .all()
-    )
-    return PlatformAuditListResponse(items=[PlatformAuditItem(**row) for row in rows])
+def list_platform_audit_logs(
+    tenant_id: UUID | None = Query(default=None),
+    action: str | None = Query(default=None, max_length=100),
+    outcome: str | None = Query(default=None, max_length=20),
+    since: datetime | None = Query(default=None, description="Inclusive ISO-8601 start."),
+    until: datetime | None = Query(default=None, description="Exclusive ISO-8601 end."),
+    before: datetime | None = Query(default=None, description="Keyset cursor from next_before."),
+    limit: int = Query(default=RECENT_LIMIT, ge=1, le=500),
+    db: Session = Depends(get_db),
+) -> PlatformAuditListResponse:
+    """UC-31: the immutable action history, newest first, filtered and paginated."""
+    rows = db.execute(
+        text("SELECT * FROM public.platform_audit_search(:tenant, :action, :outcome, :since, :until, :before, :limit)"),
+        {"tenant": tenant_id, "action": action, "outcome": outcome, "since": since, "until": until,
+         "before": before, "limit": limit + 1},
+    ).mappings().all()
+    items = [PlatformAuditItem(**row) for row in rows[:limit]]
+    return PlatformAuditListResponse(items=items, next_before=items[-1].occurred_at if len(rows) > limit else None)
 
 
-@router.get("/status")
+@router.get("/status", response_model=PlatformStatus)
 def get_platform_status(db: Session = Depends(get_db)) -> dict[str, Any]:
     worker = "unavailable"
     deployments = None
@@ -311,3 +338,48 @@ def get_platform_status(db: Session = Depends(get_db)) -> dict[str, Any]:
         "rate_limiter": limiter,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+
+class PlatformUsageDimension(BaseModel):
+    type: str
+    used: float
+    limit: int | None = None
+    measured: bool = True
+
+
+class PlatformTenantUsage(BaseModel):
+    tenant_id: UUID
+    name: str
+    status: str
+    plan_code: str | None = None
+    period_start: datetime | None = None
+    dimensions: list[PlatformUsageDimension] = []
+    #: True when this tenant's usage could not be read (shown as unavailable, never as zero).
+    unavailable: bool = False
+
+
+class PlatformUsageList(BaseModel):
+    items: list[PlatformTenantUsage]
+
+
+@router.get("/usage", response_model=PlatformUsageList)
+def list_platform_usage(request: Request, db: Session = Depends(get_db)) -> PlatformUsageList:
+    """UC-29: every tenant's usage against its limits for the current period.
+    Aggregates only; no customer or event payloads leave this endpoint."""
+    items: list[PlatformTenantUsage] = []
+    for tenant in db.execute(text("SELECT * FROM public.platform_list_tenants()")).mappings().all():
+        if tenant["status"] == "deleted":
+            continue
+        try:
+            plan = db.scalar(text("SELECT public.platform_tenant_plan(:id)"), {"id": tenant["id"]})
+            summary = UsageService(db).get_for_platform(tenant["id"], correlation_id=request.state.correlation_id)
+            items.append(PlatformTenantUsage(
+                tenant_id=tenant["id"], name=tenant["name"], status=tenant["status"],
+                plan_code=plan["plan_code"] if plan else None, period_start=summary.period_start,
+                dimensions=[PlatformUsageDimension(type=d.type, used=d.used, limit=d.limit, measured=d.measured)
+                            for d in summary.dimensions]))
+        except ApiError:
+            db.rollback()
+            items.append(PlatformTenantUsage(tenant_id=tenant["id"], name=tenant["name"], status=tenant["status"],
+                                             unavailable=True))
+    return PlatformUsageList(items=items)

@@ -1,5 +1,10 @@
 # GraphRec
 
+**Documentation:** [Deploy](docs/DEPLOYMENT.md) · [Operate](docs/OPERATIONS.md) ·
+[Security](docs/SECURITY.md) · [API conventions](docs/API.md) ·
+[Performance](docs/PERFORMANCE.md) · [Decisions](docs/DECISIONS.md) ·
+[Requirement traceability](docs/GAP_ANALYSIS.md) · [Changes](CHANGELOG.md)
+
 GraphRec is a multi-tenant recommendation platform developed as small, working
 vertical slices. The hardened paths are public tenant registration, tenant-user
 sign-in, the protected subscription/quota overview, current usage
@@ -34,11 +39,21 @@ workflows, local capacity limits, and remaining requirements.
   `user_id,item_id,time` interaction log), `/v1/datasets/snapshots`
 - Training and models: `/v1/training-jobs`, `/v1/model-versions`
 - Serving: `/v1/recommendations`, `/v1/feedback/*`, `/v1/deployment*`, `/v1/metrics/summary`
-- Platform administration: `/v1/platform/*`, authenticated with the
-  `PLATFORM_ADMIN_TOKEN` shared secret (leave it empty to disable these routes)
+- Platform administration: `/v1/platform/*`, for operator accounts with roles
+  (`POST /v1/platform/auth/login`); `PLATFORM_ADMIN_TOKEN` only bootstraps the first
+  operator in production
+- Product: public `/v1/meta` (one version for API, console and SDK), `/v1/plans`
+  (live plan limits), `/healthz` (liveness) and `/readyz` (database, Redis and
+  Qdrant, measured live)
+
+Configuration lives in `graphrec_core/settings.py` and is documented, setting by
+setting, in `.env.example`. With `GRAPHREC_ENV=production` the services refuse
+to start on default, placeholder or short secrets. Decisions and their status are
+in `docs/DECISIONS.md`; requirement traceability is in `docs/GAP_ANALYSIS.md`.
 
 Training without an artifact queues real tenant-data training in the Compose
-worker. Synthetic embeddings require explicit `configuration.mode="placeholder"`.
+worker. Synthetic embeddings require explicit `configuration.mode="placeholder"`
+and are refused when `GRAPHREC_ENV=production`.
 Feedback is persisted with tenant ownership and replay validation, and admission
 limits enforce the main plan quotas. Serving status and metrics are
 measured: `/v1/deployment` reports the tenant's active model version and
@@ -83,11 +98,14 @@ activation, rollback, archive, recommendations that match
 `recommendations_user_0.csv`, session and fallback behaviour, P95 latency,
 feedback, tenant isolation, platform operations):
 
+The reference storefront is **Reel** (`apps/reel-storefront`, MovieLens; see its README).
+The earlier Facet storefront is archived in `archive/demo-storefront` (D-09).
+
 ```bash
 mkdir -p model_artifacts/dgsr_beauty_t4_v2   # best.pt, config.json, id_maps.json, interactions.npz, final_metrics.json
 docker compose up -d --build
 python tests/e2e/beauty_e2e.py --platform-token "$PLATFORM_ADMIN_TOKEN" --write-storefront-env
-cd apps/demo-storefront && python scripts/verify_personalization.py   # then run the storefront
+cd archive/demo-storefront && python scripts/verify_personalization.py   # archived Facet storefront (D-09)
 ```
 
 ## Account setup
@@ -138,10 +156,10 @@ one-time token.
 
 ## Operator console
 
-`frontend_02/` is the operator console (React 19, Vite, TypeScript) built from
-the Modernist design prototype kept under `frontend_02/design/`. It talks to
+`web/` is the operator console (React 19, Vite, TypeScript) built from
+the Modernist design prototype kept under `web/design/`. It talks to
 the API through the nginx `/v1/` proxy in Compose, or the Vite dev proxy
-locally. See `frontend_02/README.md` for the route map, which prototype
+locally. See `web/README.md` for the route map, which prototype
 screens are not backed by the API, and how to run it against a bare uvicorn.
 
 - Tenant realm: `/login`, `/register`, `/setup`, then `/home`, `/credentials`,
@@ -270,7 +288,7 @@ configurable in `.env`.
 For frontend development without rebuilding the image:
 
 ```bash
-cd frontend_02
+cd web
 npm install
 npm run dev        # http://localhost:5173, proxies /v1 to http://localhost:8010
 ```
@@ -278,11 +296,12 @@ npm run dev        # http://localhost:5173, proxies /v1 to http://localhost:8010
 ## Verify
 
 ```bash
-docker compose exec -T api pytest -q
-docker compose --profile test run --rm frontend-test
+docker compose --profile test run --rm api-test       # backend unit + integration
+docker compose --profile test run --rm frontend-test  # console unit tests, build, npm audit
+cd web && E2E_BASE_URL=http://localhost:5180 npx playwright test   # browser suite
 ```
 
-Or, for the console alone: `cd frontend_02 && npm test -- --run && npm run build`.
+Or, for the console alone: `cd web && npm test -- --run && npm run build`.
 
 `GraphRec_Complete_SRS.md` is the in-repo specification. Integration tests
 require the Compose PostgreSQL database; the unit tests run without it.

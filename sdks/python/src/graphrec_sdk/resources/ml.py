@@ -7,6 +7,7 @@ from uuid import UUID
 
 from ..errors import InputValidationError, NotFoundError, WaitTimeoutError
 from ..models.ml import ModelVersion, ModelVersionList, TrainingJob, TrainingJobList
+from .._base_client import OMIT
 from ._base import AsyncResource, SyncResource
 
 __all__ = ["AsyncModelVersions", "AsyncTrainingJobs", "ModelVersions", "TrainingJobs"]
@@ -48,6 +49,16 @@ def _job_body(
     if configuration:
         body["configuration"] = dict(configuration)
     return body
+
+
+
+def _reason_body(reason: Optional[str]) -> Dict[str, str]:
+    """ER-F-11: an optional human reason stored with the action's audit record."""
+    if reason is None:
+        return {}
+    if not 3 <= len(reason.strip()) <= 500:
+        raise InputValidationError("reason must be 3-500 characters")
+    return {"reason": reason.strip()}
 
 
 class ModelVersions(SyncResource):
@@ -97,7 +108,7 @@ class ModelVersions(SyncResource):
 
         return self.list().active
 
-    def activate(self, version_id: Union[str, UUID]) -> ModelVersion:
+    def activate(self, version_id: Union[str, UUID], *, reason: Optional[str] = None) -> ModelVersion:
         """Serve this version; the previous active one becomes ``retired``.
 
         ``POST /v1/model-versions/{version_id}:activate``.
@@ -107,12 +118,13 @@ class ModelVersions(SyncResource):
             ModelVersion,
             self._client.request(
                 "model_versions.activate",
+                json=_reason_body(reason) or OMIT,
                 path_params={"version_id": version_id},
                 cast_to=ModelVersion,
             ),
         )
 
-    def archive(self, version_id: Union[str, UUID]) -> ModelVersion:
+    def archive(self, version_id: Union[str, UUID], *, reason: Optional[str] = None) -> ModelVersion:
         """Archive an inactive version and free its vector index.
 
         ``POST /v1/model-versions/{version_id}:archive``. Archiving the active
@@ -123,19 +135,21 @@ class ModelVersions(SyncResource):
             ModelVersion,
             self._client.request(
                 "model_versions.archive",
+                json=_reason_body(reason) or OMIT,
                 path_params={"version_id": version_id},
                 cast_to=ModelVersion,
             ),
         )
 
-    def rollback(self, version_id: Union[str, UUID]) -> ModelVersion:
-        """Re-activate a previously served version (``POST /v1/models/{id}:rollback``)."""
+    def rollback(self, version_id: Union[str, UUID], *, reason: Optional[str] = None) -> ModelVersion:
+        """Re-activate a previously served version (``POST /v1/model-versions/{id}:rollback``)."""
 
         return cast(
             ModelVersion,
             self._client.request(
                 "model_versions.rollback",
-                path_params={"model_id": version_id},
+                json=_reason_body(reason) or OMIT,
+                path_params={"version_id": version_id},
                 cast_to=ModelVersion,
             ),
         )
@@ -184,38 +198,41 @@ class AsyncModelVersions(AsyncResource):
 
         return (await self.list()).active
 
-    async def activate(self, version_id: Union[str, UUID]) -> ModelVersion:
+    async def activate(self, version_id: Union[str, UUID], *, reason: Optional[str] = None) -> ModelVersion:
         """Async variant of :meth:`ModelVersions.activate`."""
 
         return cast(
             ModelVersion,
             await self._client.request(
                 "model_versions.activate",
+                json=_reason_body(reason) or OMIT,
                 path_params={"version_id": version_id},
                 cast_to=ModelVersion,
             ),
         )
 
-    async def archive(self, version_id: Union[str, UUID]) -> ModelVersion:
+    async def archive(self, version_id: Union[str, UUID], *, reason: Optional[str] = None) -> ModelVersion:
         """Async variant of :meth:`ModelVersions.archive`."""
 
         return cast(
             ModelVersion,
             await self._client.request(
                 "model_versions.archive",
+                json=_reason_body(reason) or OMIT,
                 path_params={"version_id": version_id},
                 cast_to=ModelVersion,
             ),
         )
 
-    async def rollback(self, version_id: Union[str, UUID]) -> ModelVersion:
+    async def rollback(self, version_id: Union[str, UUID], *, reason: Optional[str] = None) -> ModelVersion:
         """Async variant of :meth:`ModelVersions.rollback`."""
 
         return cast(
             ModelVersion,
             await self._client.request(
                 "model_versions.rollback",
-                path_params={"model_id": version_id},
+                json=_reason_body(reason) or OMIT,
+                path_params={"version_id": version_id},
                 cast_to=ModelVersion,
             ),
         )
@@ -261,9 +278,10 @@ class TrainingJobs(SyncResource):
             "training_jobs.get", path_params={"job_id": job_id}, cast_to=TrainingJob,
         ))
 
-    def cancel(self, job_id: Union[str, UUID]) -> TrainingJob:
+    def cancel(self, job_id: Union[str, UUID], *, reason: Optional[str] = None) -> TrainingJob:
         return cast(TrainingJob, self._client.request(
-            "training_jobs.cancel", path_params={"job_id": job_id}, cast_to=TrainingJob,
+            "training_jobs.cancel", json=_reason_body(reason) or OMIT,
+                path_params={"job_id": job_id}, cast_to=TrainingJob,
         ))
 
     def find(self, job_id: Union[str, UUID]) -> Optional[TrainingJob]:
@@ -331,9 +349,10 @@ class AsyncTrainingJobs(AsyncResource):
             "training_jobs.get", path_params={"job_id": job_id}, cast_to=TrainingJob,
         ))
 
-    async def cancel(self, job_id: Union[str, UUID]) -> TrainingJob:
+    async def cancel(self, job_id: Union[str, UUID], *, reason: Optional[str] = None) -> TrainingJob:
         return cast(TrainingJob, await self._client.request(
-            "training_jobs.cancel", path_params={"job_id": job_id}, cast_to=TrainingJob,
+            "training_jobs.cancel", json=_reason_body(reason) or OMIT,
+                path_params={"job_id": job_id}, cast_to=TrainingJob,
         ))
 
     async def find(self, job_id: Union[str, UUID]) -> Optional[TrainingJob]:

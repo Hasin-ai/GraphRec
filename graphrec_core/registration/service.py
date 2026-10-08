@@ -41,6 +41,13 @@ class RegistrationResult:
     replayed: bool
 
 
+@dataclass(frozen=True)
+class _StoredRegistration:
+    tenant_id: UUID
+    request_hash: str
+    response_body: dict
+
+
 class RegistrationService:
     def __init__(self, session: Session, settings: Settings) -> None:
         self.session = session
@@ -58,11 +65,7 @@ class RegistrationService:
         request_hash = self._request_hash(request)
 
         try:
-            existing_key = self.session.scalar(
-                select(RegistrationRequest).where(
-                    RegistrationRequest.idempotency_key_hash == key_hash
-                )
-            )
+            existing_key = self._registration_by_key(key_hash)
             if existing_key is not None:
                 if existing_key.request_hash != request_hash:
                     self._add_security_event(
@@ -89,9 +92,7 @@ class RegistrationService:
                 self.session.commit()
                 return RegistrationResult(response=response, replayed=True)
 
-            existing_request = self.session.scalar(
-                select(RegistrationRequest).where(RegistrationRequest.request_hash == request_hash)
-            )
+            existing_request = self._registration_by_request(request_hash)
             if existing_request is not None:
                 self._add_security_event(
                     tenant_id=existing_request.tenant_id,
@@ -309,9 +310,7 @@ class RegistrationService:
     def _resolve_concurrent_result(
         self, *, key_hash: str, request_hash: str
     ) -> RegistrationResult:
-        existing_key = self.session.scalar(
-            select(RegistrationRequest).where(RegistrationRequest.idempotency_key_hash == key_hash)
-        )
+        existing_key = self._registration_by_key(key_hash)
         if existing_key is not None and existing_key.request_hash == request_hash:
             return RegistrationResult(
                 response=TenantRegistrationResponse.model_validate(existing_key.response_body),
@@ -323,9 +322,7 @@ class RegistrationService:
                 "idempotency_conflict",
                 "The idempotency key was already used for a different registration request",
             )
-        existing_request = self.session.scalar(
-            select(RegistrationRequest).where(RegistrationRequest.request_hash == request_hash)
-        )
+        existing_request = self._registration_by_request(request_hash)
         if existing_request is not None:
             raise self._duplicate_error()
         raise ApiError(
@@ -356,6 +353,19 @@ class RegistrationService:
                 occurred_at=datetime.now(timezone.utc),
             )
         )
+
+    # A-17: registration_requests is tenant-scoped (RLS) and the runtime role
+    # cannot read it directly; these SECURITY DEFINER lookups answer only the
+    # hash-keyed questions registration needs, before any tenant is known.
+    def _registration_by_key(self, key_hash: str) -> "_StoredRegistration | None":
+        row = self.session.execute(text("SELECT * FROM public.registration_by_idempotency_key(:h)"),
+                                   {"h": key_hash}).mappings().one_or_none()
+        return _StoredRegistration(**row) if row else None
+
+    def _registration_by_request(self, request_hash: str) -> "_StoredRegistration | None":
+        row = self.session.execute(text("SELECT * FROM public.registration_by_request_hash(:h)"),
+                                   {"h": request_hash}).mappings().one_or_none()
+        return _StoredRegistration(**row) if row else None
 
     def _request_hash(self, request: TenantRegistrationRequest) -> str:
         canonical = json.dumps(

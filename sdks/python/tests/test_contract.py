@@ -221,8 +221,15 @@ def schema_fields(name: str) -> Dict[str, SchemaField]:
 # -- routes -------------------------------------------------------------------------
 
 
+#: Deprecated server aliases kept for older clients; the SDK uses their replacements.
+DEPRECATED_SERVER_ROUTES = {("POST", "/v1/models/{model_id}:rollback")}
+#: Scraped by Prometheus with METRICS_TOKEN (ER-NF-09); not part of the client API.
+OPERATIONAL_ROUTES = {("GET", "/metrics")}
+
+
 def test_sdk_covers_exactly_the_server_routes() -> None:
-    server = set(server_routes())
+    """NR-NF-07: the SDK covers exactly the documented server routes."""
+    server = set(server_routes()) - DEPRECATED_SERVER_ROUTES - OPERATIONAL_ROUTES
     sdk = {(route.method, route.path) for route in g.ROUTES.values()}
     assert sdk - server == set(), "SDK calls routes the server does not define"
     assert server - sdk == set(), "Server routes missing from the SDK"
@@ -260,6 +267,8 @@ RESPONSE_MODELS: List[Tuple[str, Type[BaseModel]]] = [
     ("ProductBulkFailure", m.BulkUpsertFailure),
     ("ProductBulkUpsertResponse", m.ProductBulkUpsertResult),
     ("EventBatchResponse", m.EventBatch),
+    ("EventRecord", m.EventRecord),
+    ("EventSubmitResponse", m.EventReceipt),
     ("DatasetSnapshotResource", m.DatasetSnapshot),
     ("DatasetSnapshotListResponse", m.DatasetSnapshotList),
     ("DatasetUploadResponse", m.DatasetUploadResult),
@@ -277,6 +286,11 @@ RESPONSE_MODELS: List[Tuple[str, Type[BaseModel]]] = [
     ("PlatformTenantListResponse", m.PlatformTenantList),
     ("PlatformPlanResource", m.PricingPlan),
     ("PlatformQuotaOverride", m.QuotaOverride),
+    ("PlatformPlanAssignmentResult", m.TenantQuota),
+    ("PlatformStatus", m.PlatformStatus),
+    ("OperatorSession", m.OperatorSession),
+    ("OperatorResource", m.Operator),
+    ("Me", m.OperatorMe),
     ("PlatformFailureItem", m.PlatformFailure),
     ("PlatformFailureListResponse", m.PlatformFailureList),
     ("PlatformAuditItem", m.AuditRecord),
@@ -300,6 +314,7 @@ SDK_ONLY_FIELDS = {"request_count", "sync_ids"}
 
 @pytest.mark.parametrize(("schema", "model"), RESPONSE_MODELS, ids=[s for s, _ in RESPONSE_MODELS])
 def test_response_models_match_server_schemas(schema: str, model: Type[BaseModel]) -> None:
+    """NR-NF-07: typed response models match the OpenAPI schemas."""
     server = schema_fields(schema)
     sdk = model.model_fields
     missing = set(server) - set(sdk)
@@ -370,7 +385,7 @@ REQUEST_BODIES = [
             "rec-1", None, None, None, external_product_id="a", position=1, value=1
         ),
     ),
-    ("TenantStatusUpdate", lambda: platform_resource._status_body("suspended")),
+    ("TenantStatusUpdate", lambda: {**platform_resource._status_body("suspended"), **platform_resource._reason_body("Abuse report")}),
     ("QuotaOverrideUpdate", lambda: platform_resource._quota_body({"accepted_events": 1})),
     ("QuotaOverrideUpdate", lambda: platform_resource._quota_body({"accepted_events": 1}, True)),
     ("PlanAssignment", lambda: platform_resource._assign_body("3f0e2b8e-9c1d-4c1e-8e2a-000000000001", True)),
@@ -481,5 +496,5 @@ def _namespace_route_keys() -> Set[str]:
 
 
 def test_every_route_is_reachable_from_a_namespace() -> None:
-    reachable = _namespace_route_keys() | {"health.check"}
+    reachable = _namespace_route_keys() | {"health.check", "health.ready", "meta.get", "meta.plans"}
     assert set(g.ROUTES) - reachable == set()

@@ -8,13 +8,15 @@ the routes are disabled when that setting is empty. Exposed on the client as
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Mapping, Union, cast
+from datetime import datetime
+from typing import Any, Dict, List, Mapping, Optional, Union, cast
 from uuid import UUID
 
 from ..enums import TenantStatus
 from ..errors import InputValidationError
 from ..models.billing import UsageSummary
 from ..models.platform import (
+    PlatformUsageList,
     AuditRecordList,
     PlatformFailureList,
     PlatformStatus,
@@ -92,6 +94,16 @@ def _tid(tenant_id: Id) -> Dict[str, Id]:
     return {"tenant_id": tenant_id}
 
 
+
+def _reason_body(reason: Optional[str]) -> Dict[str, str]:
+    """ER-F-11: an optional human reason stored with the action's audit record."""
+    if reason is None:
+        return {}
+    if not 3 <= len(reason.strip()) <= 500:
+        raise InputValidationError("reason must be 3-500 characters")
+    return {"reason": reason.strip()}
+
+
 class PlatformTenants(SyncResource):
     """Tenant lifecycle, quotas and usage across the platform."""
 
@@ -113,7 +125,7 @@ class PlatformTenants(SyncResource):
             ),
         )
 
-    def set_status(self, tenant_id: Id, status: StatusLike) -> PlatformTenant:
+    def set_status(self, tenant_id: Id, status: StatusLike, *, reason: str) -> PlatformTenant:
         """Change a tenant's lifecycle status (see :class:`~graphrec_sdk.TenantStatus`).
 
         ``POST /v1/platform/tenants/{tenant_id}/status``. The change is audited.
@@ -124,7 +136,7 @@ class PlatformTenants(SyncResource):
             self._client.request(
                 "platform.set_tenant_status",
                 path_params=_tid(tenant_id),
-                json=_status_body(status),
+                json={**_status_body(status), **_reason_body(reason)},
                 cast_to=PlatformTenant,
             ),
         )
@@ -140,7 +152,8 @@ class PlatformTenants(SyncResource):
         )
 
     def set_quota_override(
-        self, tenant_id: Id, *, overrides: Mapping[str, int], acknowledge_below_usage: bool = False
+        self, tenant_id: Id, *, overrides: Mapping[str, int], acknowledge_below_usage: bool = False,
+        reason: Optional[str] = None
     ) -> QuotaOverride:
         """Replace a tenant's quota overrides; returns effective limits and stored overrides.
 
@@ -156,13 +169,14 @@ class PlatformTenants(SyncResource):
             self._client.request(
                 "platform.set_quota_override",
                 path_params=_tid(tenant_id),
-                json=_quota_body(overrides, acknowledge_below_usage),
+                json={**_quota_body(overrides, acknowledge_below_usage), **_reason_body(reason)},
                 cast_to=QuotaOverride,
             ),
         )
 
     def assign_plan(
-        self, tenant_id: Id, plan_id: Id, *, acknowledge_below_usage: bool = False
+        self, tenant_id: Id, plan_id: Id, *, acknowledge_below_usage: bool = False,
+        reason: Optional[str] = None
     ) -> TenantQuota:
         """Move a tenant to another active plan. ``POST /v1/platform/tenants/{tenant_id}/plan``.
 
@@ -175,7 +189,7 @@ class PlatformTenants(SyncResource):
             self._client.request(
                 "platform.assign_tenant_plan",
                 path_params=_tid(tenant_id),
-                json=_assign_body(plan_id, acknowledge_below_usage),
+                json={**_assign_body(plan_id, acknowledge_below_usage), **_reason_body(reason)},
                 cast_to=TenantQuota,
             ),
         )
@@ -190,7 +204,7 @@ class PlatformTenants(SyncResource):
             ),
         )
 
-    def issue_recovery(self, tenant_id: Id, *, email: str) -> RecoveryToken:
+    def issue_recovery(self, tenant_id: Id, *, email: str, reason: Optional[str] = None) -> RecoveryToken:
         """Issue a one-time account-recovery token for a user of an active tenant.
 
         ``POST /v1/platform/tenants/{tenant_id}/recovery``. Hand the token to the
@@ -202,7 +216,7 @@ class PlatformTenants(SyncResource):
             self._client.request(
                 "platform.issue_recovery",
                 path_params=_tid(tenant_id),
-                json={"email": email},
+                json={**{"email": email}, **_reason_body(reason)},
                 cast_to=RecoveryToken,
             ),
         )
@@ -229,7 +243,7 @@ class AsyncPlatformTenants(AsyncResource):
             ),
         )
 
-    async def set_status(self, tenant_id: Id, status: StatusLike) -> PlatformTenant:
+    async def set_status(self, tenant_id: Id, status: StatusLike, *, reason: str) -> PlatformTenant:
         """Async variant of :meth:`PlatformTenants.set_status`."""
 
         return cast(
@@ -237,7 +251,7 @@ class AsyncPlatformTenants(AsyncResource):
             await self._client.request(
                 "platform.set_tenant_status",
                 path_params=_tid(tenant_id),
-                json=_status_body(status),
+                json={**_status_body(status), **_reason_body(reason)},
                 cast_to=PlatformTenant,
             ),
         )
@@ -253,7 +267,8 @@ class AsyncPlatformTenants(AsyncResource):
         )
 
     async def set_quota_override(
-        self, tenant_id: Id, *, overrides: Mapping[str, int], acknowledge_below_usage: bool = False
+        self, tenant_id: Id, *, overrides: Mapping[str, int], acknowledge_below_usage: bool = False,
+        reason: Optional[str] = None
     ) -> QuotaOverride:
         """Async variant of :meth:`PlatformTenants.set_quota_override`."""
 
@@ -262,13 +277,14 @@ class AsyncPlatformTenants(AsyncResource):
             await self._client.request(
                 "platform.set_quota_override",
                 path_params=_tid(tenant_id),
-                json=_quota_body(overrides, acknowledge_below_usage),
+                json={**_quota_body(overrides, acknowledge_below_usage), **_reason_body(reason)},
                 cast_to=QuotaOverride,
             ),
         )
 
     async def assign_plan(
-        self, tenant_id: Id, plan_id: Id, *, acknowledge_below_usage: bool = False
+        self, tenant_id: Id, plan_id: Id, *, acknowledge_below_usage: bool = False,
+        reason: Optional[str] = None
     ) -> TenantQuota:
         """Async variant of :meth:`PlatformTenants.assign_plan`."""
 
@@ -277,7 +293,7 @@ class AsyncPlatformTenants(AsyncResource):
             await self._client.request(
                 "platform.assign_tenant_plan",
                 path_params=_tid(tenant_id),
-                json=_assign_body(plan_id, acknowledge_below_usage),
+                json={**_assign_body(plan_id, acknowledge_below_usage), **_reason_body(reason)},
                 cast_to=TenantQuota,
             ),
         )
@@ -292,7 +308,7 @@ class AsyncPlatformTenants(AsyncResource):
             ),
         )
 
-    async def issue_recovery(self, tenant_id: Id, *, email: str) -> RecoveryToken:
+    async def issue_recovery(self, tenant_id: Id, *, email: str, reason: Optional[str] = None) -> RecoveryToken:
         """Async variant of :meth:`PlatformTenants.issue_recovery`."""
 
         return cast(
@@ -300,7 +316,7 @@ class AsyncPlatformTenants(AsyncResource):
             await self._client.request(
                 "platform.issue_recovery",
                 path_params=_tid(tenant_id),
-                json={"email": email},
+                json={**{"email": email}, **_reason_body(reason)},
                 cast_to=RecoveryToken,
             ),
         )
@@ -323,6 +339,7 @@ class PlatformPlans(SyncResource):
         limits: Mapping[str, int],
         is_active: bool,
         acknowledge_below_usage: bool = False,
+        reason: Optional[str] = None
     ) -> PricingPlan:
         """Rename, re-limit or (de)activate a plan. ``PUT /v1/platform/plans/{plan_id}``.
 
@@ -336,7 +353,7 @@ class PlatformPlans(SyncResource):
             self._client.request(
                 "platform.update_plan",
                 path_params={"plan_id": plan_id},
-                json=_plan_body(name, limits, is_active, acknowledge_below_usage),
+                json={**_plan_body(name, limits, is_active, acknowledge_below_usage), **_reason_body(reason)},
                 cast_to=PricingPlan,
             ),
         )
@@ -359,6 +376,7 @@ class AsyncPlatformPlans(AsyncResource):
         limits: Mapping[str, int],
         is_active: bool,
         acknowledge_below_usage: bool = False,
+        reason: Optional[str] = None
     ) -> PricingPlan:
         """Async variant of :meth:`PlatformPlans.update`."""
 
@@ -367,7 +385,7 @@ class AsyncPlatformPlans(AsyncResource):
             await self._client.request(
                 "platform.update_plan",
                 path_params={"plan_id": plan_id},
-                json=_plan_body(name, limits, is_active, acknowledge_below_usage),
+                json={**_plan_body(name, limits, is_active, acknowledge_below_usage), **_reason_body(reason)},
                 cast_to=PricingPlan,
             ),
         )
@@ -381,6 +399,11 @@ class PlatformOperations(SyncResource):
 
         return cast(PlatformStatus, self._client.request("platform.status", cast_to=PlatformStatus))
 
+    def list_usage(self) -> PlatformUsageList:
+        """UC-29: every tenant's usage against its limits (``GET /v1/platform/usage``)."""
+
+        return cast(PlatformUsageList, self._client.request("platform.list_usage", cast_to=PlatformUsageList))
+
     def list_failures(self) -> PlatformFailureList:
         """The 50 latest security/failure events (``GET /v1/platform/failures``)."""
 
@@ -389,12 +412,30 @@ class PlatformOperations(SyncResource):
             self._client.request("platform.list_failures", cast_to=PlatformFailureList),
         )
 
-    def list_audit_logs(self) -> AuditRecordList:
-        """The 50 latest audit records across tenants (``GET /v1/platform/audit``)."""
+    def list_audit_logs(
+        self,
+        *,
+        tenant_id: Optional[Id] = None,
+        action: Optional[str] = None,
+        outcome: Optional[str] = None,
+        since: Optional[datetime] = None,
+        until: Optional[datetime] = None,
+        before: Optional[datetime] = None,
+        limit: int = 50,
+    ) -> AuditRecordList:
+        """Audit records across tenants, newest first (``GET /v1/platform/audit``).
 
+        Filter by tenant, action, outcome or time range; page with ``before=result.next_before``.
+        """
+
+        query: Dict[str, object] = {"limit": limit}
+        for key, value in (("tenant_id", tenant_id), ("action", action), ("outcome", outcome),
+                           ("since", since), ("until", until), ("before", before)):
+            if value is not None:
+                query[key] = value.isoformat() if isinstance(value, datetime) else str(value)
         return cast(
             AuditRecordList,
-            self._client.request("platform.list_audit_logs", cast_to=AuditRecordList),
+            self._client.request("platform.list_audit_logs", query=query, cast_to=AuditRecordList),
         )
 
 
@@ -408,6 +449,11 @@ class AsyncPlatformOperations(AsyncResource):
             PlatformStatus, await self._client.request("platform.status", cast_to=PlatformStatus)
         )
 
+    async def list_usage(self) -> PlatformUsageList:
+        """UC-29: every tenant's usage against its limits (``GET /v1/platform/usage``)."""
+
+        return cast(PlatformUsageList, await self._client.request("platform.list_usage", cast_to=PlatformUsageList))
+
     async def list_failures(self) -> PlatformFailureList:
         """Async variant of :meth:`PlatformOperations.list_failures`."""
 
@@ -416,10 +462,28 @@ class AsyncPlatformOperations(AsyncResource):
             await self._client.request("platform.list_failures", cast_to=PlatformFailureList),
         )
 
-    async def list_audit_logs(self) -> AuditRecordList:
-        """Async variant of :meth:`PlatformOperations.list_audit_logs`."""
+    async def list_audit_logs(
+        self,
+        *,
+        tenant_id: Optional[Id] = None,
+        action: Optional[str] = None,
+        outcome: Optional[str] = None,
+        since: Optional[datetime] = None,
+        until: Optional[datetime] = None,
+        before: Optional[datetime] = None,
+        limit: int = 50,
+    ) -> AuditRecordList:
+        """Audit records across tenants, newest first (``GET /v1/platform/audit``).
 
+        Filter by tenant, action, outcome or time range; page with ``before=result.next_before``.
+        """
+
+        query: Dict[str, object] = {"limit": limit}
+        for key, value in (("tenant_id", tenant_id), ("action", action), ("outcome", outcome),
+                           ("since", since), ("until", until), ("before", before)):
+            if value is not None:
+                query[key] = value.isoformat() if isinstance(value, datetime) else str(value)
         return cast(
             AuditRecordList,
-            await self._client.request("platform.list_audit_logs", cast_to=AuditRecordList),
-        )
+            await self._client.request("platform.list_audit_logs", query=query, cast_to=AuditRecordList),
+        )

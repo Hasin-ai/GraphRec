@@ -96,14 +96,20 @@ class AuditRecord(GraphRecModel):
     id: UUID
     tenant_id: UUID
     actor_type: str
+    actor_reference: Optional[UUID] = None
     action_type: str
     resource_type: str
+    resource_reference: Optional[UUID] = None
     outcome: str
+    correlation_reference: Optional[UUID] = None
+    #: The reason given for the action, if any (ER-F-11).
+    reason: Optional[str] = None
     occurred_at: datetime
 
 
 class AuditRecordList(ItemList[AuditRecord]):
-    pass
+    #: Cursor for the next (older) page; pass to ``list_audit_logs(before=...)``.
+    next_before: Optional[datetime] = None
 
 
 class RecoveryToken(GraphRecModel):
@@ -124,3 +130,25 @@ class PlatformStatus(GraphRecModel):
     deployments: Optional[Any] = None
     rate_limiter: Optional[Dict[str, Any]] = None
     timestamp: datetime
+
+
+class PlatformUsageDimension(GraphRecModel):
+    type: str
+    used: float
+    limit: Optional[int] = None
+    measured: bool = True
+
+
+class PlatformTenantUsage(GraphRecModel):
+    tenant_id: UUID
+    name: str
+    status: str
+    plan_code: Optional[str] = None
+    period_start: Optional[datetime] = None
+    dimensions: List[PlatformUsageDimension] = []
+    #: True when this tenant's usage could not be read (never reported as zero).
+    unavailable: bool = False
+
+
+class PlatformUsageList(GraphRecModel):
+    items: List[PlatformTenantUsage]

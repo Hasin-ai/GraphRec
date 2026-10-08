@@ -110,6 +110,9 @@ rabbitmq_data/
 # Documentation & Diagrams
 # ==========================================
 docs/*
+!docs/*.md
+!docs/load/
+!docs/load/*.json
 !docs/srs-implementation-matrix.md
 !docs/srs-implementation-report.md
 diagrams/
@@ -122,8 +125,8 @@ diagrams/
 .ipynb_checkpoints/
 
 # Playwright
-frontend_02/e2e-results/
-frontend_02/e2e-screens/
+web/e2e-results/
+web/e2e-screens/
 
 # Pretrained model artifacts mounted into the API (MODEL_ARTIFACT_DIR)
 /model_artifacts/
@@ -137,9 +140,9 @@ movielens/
 Claude outputs/
 
 
-# Generated UI-audit screenshots (regenerate with frontend_02/docs/ui-audit/capture.mjs)
-frontend_02/docs/ui-audit/before/
-frontend_02/docs/ui-audit/after/
+# Generated UI-audit screenshots (regenerate with web/docs/ui-audit/capture.mjs)
+web/docs/ui-audit/before/
+web/docs/ui-audit/after/
 
 # Local archives, Redis dumps and ad-hoc QA scratch scripts
 *.tgz

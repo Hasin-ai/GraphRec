@@ -13,7 +13,10 @@ from sqlalchemy.orm import Session
 
 from graphrec_core.api_keys.crypto import api_key_digest, has_valid_secret_shape
 from graphrec_core.api_keys.scopes import API_KEY_COMPATIBLE_SCOPES
-from graphrec_core.auth.service import ROLE_SCOPES
+from graphrec_core.auth.service import RESTRICTED_SCOPE, RESTRICTED_TENANT_STATUSES, ROLE_SCOPES
+
+#: D-13: the only routes a status-only session may call.
+RESTRICTED_PATHS = frozenset({"/v1/tenant/status", "/v1/auth/logout"})
 from graphrec_core.database.models import ApiKey, Tenant, TenantUser
 from graphrec_core.database.session import get_db
 from graphrec_core.database.tenancy import set_local_tenant
@@ -29,6 +32,8 @@ class AuthenticatedPrincipal:
     role: str
     scopes: frozenset[str]
     credential_type: str
+    #: D-13: a status-only session for a member of a suspended tenant.
+    restricted: bool = False
 
     @property
     def actor_type(self) -> str:
@@ -73,6 +78,8 @@ def authenticated_principal(
         principal = _api_key_principal(token.strip(), db, settings)
     else:
         raise _authentication_failed()
+    if principal.restricted and request.url.path not in RESTRICTED_PATHS:
+        raise ApiError(403, "tenant_inactive", "This workspace is not active. Only its status can be viewed.")
     request.state.authenticated_principal = principal
     return principal
 
@@ -122,10 +129,13 @@ def _bearer_principal(token: str, db: Session, settings: Settings) -> Authentica
         db.rollback()
         raise _authorization_unavailable() from exc
 
+    restricted = bool(claims.get("restricted"))
     if (
         identity is None
         or identity.user_status != "active"
-        or identity.tenant_status != "active"
+        or (identity.tenant_status != "active"
+            and not (restricted and identity.tenant_status in RESTRICTED_TENANT_STATUSES))
+        or (restricted and identity.tenant_status == "active")
         or identity.role != claimed_role
         or identity.role not in ROLE_SCOPES
         or claims.get("av", 0) != identity.auth_epoch
@@ -137,8 +147,10 @@ def _bearer_principal(token: str, db: Session, settings: Settings) -> Authentica
         api_key_id=None,
         tenant_id=tenant_id,
         role=identity.role,
-        scopes=frozenset(claimed_scopes).intersection(ROLE_SCOPES[identity.role]),
+        scopes=frozenset({RESTRICTED_SCOPE}) if restricted
+        else frozenset(claimed_scopes).intersection(ROLE_SCOPES[identity.role]),
         credential_type="bearer",
+        restricted=restricted,
     )
 
 

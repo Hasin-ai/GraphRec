@@ -30,6 +30,10 @@ class UsageDimension(GraphRecModel):
     remaining: Optional[Union[int, float]] = None
     #: ``count``, ``seconds``, ``bytes`` or ``minutes``.
     unit: str
+    #: ``False`` when GraphRec does not measure this dimension yet; ``used`` is then not a measurement.
+    measured: bool = True
+    #: ``period`` (ledger sum over the period) or ``current`` (point-in-time inventory).
+    scope: str = "period"
 
     @property
     def utilization(self) -> Optional[float]:
@@ -51,6 +55,8 @@ class UsageSummary(GraphRecModel):
     dimensions: List[UsageDimension]
     last_reconciled_at: datetime
     project_defaults: bool
+    #: False for a past period requested with ``period="YYYY-MM"``.
+    current_period: bool = True
 
     def get(self, usage_type: str) -> Optional[UsageDimension]:
         """Look up one dimension, e.g. ``summary.get("accepted_events")``."""

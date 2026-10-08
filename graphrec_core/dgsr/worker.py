@@ -10,6 +10,9 @@ import csv
 import json
 import logging
 import math
+import shutil
+import signal
+import threading
 import time
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -42,6 +45,52 @@ class Cancelled(Exception):
     pass
 
 
+#: Local CPU worker cap per job, whatever the plan allows.
+LOCAL_TRAINING_BUDGET_SECONDS = 180
+
+
+def training_budget_seconds(plan_minutes) -> int:  # noqa: ANN001
+    """D-11: the smaller of the plan's ``maximum_training_duration_minutes`` and the
+    local worker cap. A missing plan value falls back to the local cap."""
+    if plan_minutes is None:
+        return LOCAL_TRAINING_BUDGET_SECONDS
+    return max(1, min(LOCAL_TRAINING_BUDGET_SECONDS, int(plan_minutes) * 60))
+
+
+class ShuttingDown(Exception):
+    """The worker received SIGTERM/SIGINT: hand the job back to the queue."""
+
+
+#: Set by the signal handler; checked at every progress pulse.
+STOP = threading.Event()
+
+#: ER-NF-05 (A-21): failures worth one more attempt. Everything else (invalid or
+#: insufficient data, non-finite training, exceeded budgets) is deterministic and
+#: fails the job immediately with its reason.
+MAX_ATTEMPTS = 2
+
+
+def is_transient(exc: BaseException) -> bool:
+    from sqlalchemy.exc import DBAPIError, OperationalError
+    if isinstance(exc, (OperationalError, ConnectionError, TimeoutError)):
+        return True
+    if isinstance(exc, DBAPIError) and exc.connection_invalidated:
+        return True
+    try:  # Qdrant over gRPC or HTTP
+        import grpc
+        if isinstance(exc, grpc.RpcError):
+            return True
+    except ImportError:  # pragma: no cover
+        pass
+    try:
+        from qdrant_client.http.exceptions import ResponseHandlingException
+        if isinstance(exc, ResponseHandlingException):
+            return True
+    except ImportError:  # pragma: no cover
+        pass
+    return False
+
+
 def progress(tenant_id, job_id, stage, percent):
     with SessionLocal() as db, db.begin():
         set_local_tenant(db, tenant_id)
@@ -60,6 +109,10 @@ def train_job(tenant_id, job_id):
         content = db.get(DatasetSnapshotContent, job.dataset_snapshot_id).content
         configuration = dict(job.configuration)
         snapshot_checksum = snapshot.checksum
+        from graphrec_core.capacity import effective_limits
+        plan_minutes = effective_limits(db, tenant_id).get('maximum_training_duration_minutes')
+    # D-11: the plan's maximum training duration, capped by this worker's local budget.
+    budget = training_budget_seconds(plan_minutes)
     cfg = Config(embedding_dim=16, layers=1, recent_items=10, sampling_order=1,
                  item_neighbor_limit=10, epochs=configuration['epochs'], batch_size=16,
                  torch_threads=1, device='cpu', seed=42, evaluation='full')
@@ -89,8 +142,11 @@ def train_job(tenant_id, job_id):
                 for split in ('train', 'validation', 'test')}
 
     def pulse(stage, percent):
-        if time.monotonic() - started > 180:
-            raise ValueError('Local training exceeded its 180-second processing budget; use a smaller snapshot or import a prepared checkpoint.')
+        if STOP.is_set():
+            raise ShuttingDown()
+        if time.monotonic() - started > budget:
+            raise ValueError(f'Training exceeded its {budget}-second processing budget (plan limit or local worker cap); '
+                             'use a smaller snapshot or import a prepared checkpoint.')
         progress(tenant_id, job_id, stage, percent)
 
     def evaluate(split, baseline=False):
@@ -164,6 +220,15 @@ def train_job(tenant_id, job_id):
     pulse('validating_artifact', 95)
     artifact = DGSRArtifact(directory)
     artifact.encode_known(0)
+    pulse('comparing_versions', 97)
+    try:
+        metrics['comparison'] = compare_with_active(tenant_id, artifact, data, directory)
+    except (Cancelled, ShuttingDown):
+        raise
+    except Exception as exc:  # the comparison is informative; it never fails a trained model
+        logger.warning('Version comparison failed for job %s: %s', job_id, exc)
+        metrics['comparison'] = {'unavailable_reason': f'{type(exc).__name__}: {str(exc)[:200]}'}
+    (directory / 'final_metrics.json').write_text(json.dumps(metrics, allow_nan=False), encoding='utf-8')
     size = sum(p.stat().st_size for p in directory.iterdir() if p.is_file())
     with SessionLocal() as db, db.begin():
         set_local_tenant(db, tenant_id)
@@ -172,6 +237,7 @@ def train_job(tenant_id, job_id):
             raise Cancelled()
         now, version_id = datetime.now(timezone.utc), uuid4()
         require_capacity(db, tenant_id, 'artifact_storage_bytes', size)
+        require_capacity(db, tenant_id, 'active_model_versions')
         table = artifact.item_embeddings()
         norms = np.linalg.norm(table, axis=1, keepdims=True)
         if not np.isfinite(table).all() or np.any(norms <= 0):
@@ -203,6 +269,49 @@ def train_job(tenant_id, job_id):
         ModelRegistryService(db)._audit(tenant_id, 'training_completed', job_id, details={'model_version_id': str(version_id), 'mode': 'train'})
 
 
+def compare_with_active(tenant_id, candidate: DGSRArtifact, data: InteractionData, directory: Path) -> dict:
+    """XR-F-10: score the candidate, the tenant's active DGSR version and a popularity
+    baseline on the candidate's held-out test examples (``common_evaluation.json``)."""
+    from graphrec_core.dgsr.evaluation import common_set_from_split, compare
+    from graphrec_core.dgsr.serving import load_artifact
+    from graphrec_core.models_reg.service import DGSR_MODEL_TYPE, artifact_directory, validate_artifact_binding
+    examples = common_set_from_split(data, data.examples['test'])
+    (directory / 'common_evaluation.json').write_text(json.dumps({'examples': [e.as_dict() for e in examples]}), encoding='utf-8')
+    train_items = [data.item_ids[int(i)] for i in data.items[data.roles == 0]]
+    with SessionLocal() as db, db.begin():
+        set_local_tenant(db, tenant_id)
+        active = db.scalar(select(ModelVersion).where(ModelVersion.tenant_id == tenant_id, ModelVersion.status == 'active',
+                                                      ModelVersion.model_type == DGSR_MODEL_TYPE))
+        active_id, active_uri = (str(active.id), active.artifact_uri) if active else (None, None)
+    active_artifact, reason = None, None
+    if active_id:
+        try:
+            path = artifact_directory(active_uri)
+            if path is None:
+                raise ValueError('artifact directory not found')
+            validate_artifact_binding(path, tenant_id)
+            active_artifact = load_artifact(path)
+        except Exception as exc:  # the comparison is reported as unavailable, never invented
+            reason = f'{type(exc).__name__}: {str(exc)[:200]}'
+            logger.warning('Active version %s could not be loaded for comparison: %s', active_id, reason)
+    try:
+        result = compare(candidate, examples, train_items, active_artifact, active_id)
+    except Exception as exc:  # e.g. an older artifact that loads but cannot encode: compare without it
+        if active_artifact is None:
+            raise
+        reason = f'{type(exc).__name__}: {str(exc)[:200]}'
+        result = compare(candidate, examples, train_items)
+        active_artifact = None
+    if active_id and active_artifact is None:
+        result['active'] = {'model_version_id': active_id, 'unavailable_reason': reason}
+        result.pop('ndcg10_delta_vs_active', None)
+    # The examples are the candidate's held-out events. An active version trained on a later
+    # snapshot may already contain them, which would flatter it: say so instead of hiding it.
+    result['caveat'] = ('The active version may have been trained on data that includes these examples; '
+                        'a higher active score can reflect that rather than better quality.') if active_id else None
+    return result
+
+
 def run_once():
     with SessionLocal() as db:
         row = db.execute(text('SELECT * FROM public.claim_training_job()')).first()
@@ -213,37 +322,86 @@ def run_once():
     try:
         train_job(tenant_id, job_id)
     except Exception as exc:
-        cancelled = isinstance(exc, Cancelled)
-        if not cancelled:
-            logger.exception('Training job %s failed', job_id)
-        with SessionLocal() as db, db.begin():
-            set_local_tenant(db, tenant_id)
-            job = db.get(TrainingJob, job_id)
-            job.status = job.stage = 'cancelled' if cancelled else 'failed'
-            job.failure_reason = None if cancelled else f'{type(exc).__name__}: {str(exc)[:500]}'
-            job.completed_at = datetime.now(timezone.utc)
-            ModelRegistryService(db)._audit(tenant_id, f'training_{job.status}', job_id,
-                outcome='succeeded' if cancelled else 'failed', details={'reason': type(exc).__name__})
+        finish_failed_job(tenant_id, job_id, exc)
     return True
 
 
+def _job_directory(tenant_id, job_id) -> Path:
+    return Path(get_settings().generated_model_root) / str(tenant_id) / str(job_id)
+
+
+def finish_failed_job(tenant_id, job_id, exc: BaseException) -> str:
+    """Record the outcome of a job that did not succeed; returns its new status.
+
+    * cancelled  - the tenant asked for it.
+    * queued     - the worker is shutting down, or a transient failure with
+                   attempts left: the job is handed back and retried once.
+    * failed     - a deterministic failure, or a transient one with no attempts left.
+    The partial artifact directory is removed in every case.
+    """
+    cancelled = isinstance(exc, Cancelled)
+    shutting_down = isinstance(exc, ShuttingDown)
+    transient = not cancelled and not shutting_down and is_transient(exc)
+    if not (cancelled or shutting_down):
+        logger.error('Training job %s failed (%s)', job_id, 'transient' if transient else 'deterministic',
+                     exc_info=exc)
+    shutil.rmtree(_job_directory(tenant_id, job_id), ignore_errors=True)
+    with SessionLocal() as db, db.begin():
+        set_local_tenant(db, tenant_id)
+        job = db.get(TrainingJob, job_id)
+        if shutting_down:
+            # Not the job's fault: give the attempt back.
+            job.status, job.stage, job.attempts = 'queued', 'requeued_on_shutdown', max(0, job.attempts - 1)
+            job.heartbeat_at = None
+            ModelRegistryService(db)._audit(tenant_id, 'training_requeued', job_id, outcome='succeeded',
+                                            details={'reason': 'worker_shutdown'})
+            return 'queued'
+        if transient and job.attempts < MAX_ATTEMPTS:
+            job.status, job.stage, job.failure_reason, job.heartbeat_at = 'queued', 'retry_scheduled', None, None
+            ModelRegistryService(db)._audit(tenant_id, 'training_retry_scheduled', job_id, outcome='failed',
+                                            details={'reason': type(exc).__name__, 'attempt': job.attempts})
+            return 'queued'
+        job.status = job.stage = 'cancelled' if cancelled else 'failed'
+        if cancelled:
+            job.failure_reason = None
+        else:
+            kind = 'transient failure, retry budget exhausted' if transient else 'deterministic failure'
+            job.failure_reason = f'{type(exc).__name__}: {str(exc)[:450]} ({kind})'
+        job.completed_at = datetime.now(timezone.utc)
+        ModelRegistryService(db)._audit(tenant_id, f'training_{job.status}', job_id,
+            outcome='succeeded' if cancelled else 'failed',
+            details={'reason': type(exc).__name__, 'transient': transient})
+        return job.status
+
+
+def _install_signal_handlers() -> None:
+    def stop(signum, _frame):  # noqa: ANN001
+        logger.warning('Received signal %s: finishing at the next checkpoint and requeueing the job', signum)
+        STOP.set()
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+
+
 def main():
-    logging.basicConfig(level=logging.INFO)
+    from graphrec_core.observability import configure_logging
+    configure_logging(get_settings().effective_log_format, get_settings().log_level)
+    _install_signal_handlers()
     # One local CPU trainer across worker processes; Postgres releases the lock
     # automatically if its process or database connection dies.
     with engine.connect() as guard:
         if not guard.scalar(text('SELECT pg_try_advisory_lock(714629381)')):
             raise RuntimeError('A training worker already owns local CPU capacity.')
         guard.commit()
-        while True:
+        while not STOP.is_set():
             try:
                 guard.execute(text('SELECT 1'))
                 guard.commit()
                 if not run_once():
-                    time.sleep(2)
+                    STOP.wait(2)
             except Exception:
                 logger.exception('Worker polling failed; retrying in five seconds')
-                time.sleep(5)
+                STOP.wait(5)
+        logger.info('Training worker stopped')
 
 
 if __name__ == '__main__':

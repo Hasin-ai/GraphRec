@@ -78,6 +78,19 @@ def test_setup_token_activates_invited_administrator_once(client: TestClient) ->
         assert row is not None and row.used_at is not None
 
 
+def test_setup_without_email_still_returns_the_account_email(client: TestClient) -> None:
+    """The console labels the session from the token pair; the email field is optional."""
+    _tenant_id, email, token = register(client)
+
+    activated = setup(client, setup_token=token, password=PASSWORD)
+
+    assert activated.status_code == 200, activated.text
+    assert activated.json()["email"] == email
+    login = client.post("/v1/auth/login", json={"email": email, "password": PASSWORD}, headers=JSON)
+    assert login.status_code == 200
+    assert login.json()["email"] == email
+
+
 def test_email_alone_can_no_longer_take_over_an_account(client: TestClient) -> None:
     tenant_id, email, token = register(client)
     assert setup(client, setup_token=token, password=PASSWORD).status_code == 200

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, Optional, Union, cast
 
@@ -63,14 +64,24 @@ class AsyncSubscriptions(AsyncResource):
         )
 
 
-class Usage(SyncResource):
-    def get(self) -> UsageSummary:
-        """Month-to-date usage per dimension with remaining allowance.
+def _period_query(period: Optional[str]) -> Optional[Dict[str, object]]:
+    if period is None:
+        return None
+    if not re.fullmatch(r"\d{4}-\d{2}", period):
+        raise InputValidationError("period must be YYYY-MM")
+    return {"period": period}
 
-        ``GET /v1/usage`` - scope ``usage:read``.
+
+class Usage(SyncResource):
+    def get(self, period: Optional[str] = None) -> UsageSummary:
+        """Usage per dimension with remaining allowance.
+
+        ``GET /v1/usage`` - scope ``usage:read``. ``period="YYYY-MM"`` (UC-24) reads a
+        past monthly period (up to 24 months back); inventory dimensions
+        (``scope == "current"``) always reflect now.
         """
 
-        return cast(UsageSummary, self._client.request("usage.get", cast_to=UsageSummary))
+        return cast(UsageSummary, self._client.request("usage.get", query=_period_query(period), cast_to=UsageSummary))
 
     def trends(
         self,
@@ -99,10 +110,10 @@ class Usage(SyncResource):
 
 
 class AsyncUsage(AsyncResource):
-    async def get(self) -> UsageSummary:
+    async def get(self, period: Optional[str] = None) -> UsageSummary:
         """Async variant of :meth:`Usage.get`."""
 
-        return cast(UsageSummary, await self._client.request("usage.get", cast_to=UsageSummary))
+        return cast(UsageSummary, await self._client.request("usage.get", query=_period_query(period), cast_to=UsageSummary))
 
     async def trends(
         self,

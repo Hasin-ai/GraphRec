@@ -64,7 +64,7 @@ def require_capacity(db: Session, tenant_id: UUID, dimension: str, quantity: int
     elif dimension == "artifact_storage_bytes":
         used = artifact_storage_used(db, tenant_id)
     elif dimension == "active_model_versions":
-        used = db.scalar(select(func.count(ModelVersion.id)).where(ModelVersion.tenant_id == tenant_id, ModelVersion.status == 'active')) or 0
+        used = retained_versions(db, tenant_id)
     else:
         used = ledger_usage(db, tenant_id, dimension, start, reset)
         if dimension == "training_jobs":
@@ -97,6 +97,14 @@ def artifact_storage_used(db: Session, tenant_id: UUID) -> int:
 # Limits on stored inventory, as opposed to metered monthly counters. Lowering one
 # of these below what a tenant already holds does not delete anything; it only
 # blocks growth until usage falls back under the limit.
+def retained_versions(db: Session, tenant_id: UUID) -> int:
+    """D-11: the ``active_model_versions`` plan limit bounds the versions a tenant
+    retains (every status except ``archived``), not the single serving version.
+    Archiving a version frees room for a new one."""
+    return int(db.scalar(select(func.count(ModelVersion.id)).where(
+        ModelVersion.tenant_id == tenant_id, ModelVersion.status != "archived")) or 0)
+
+
 INVENTORY_DIMENSIONS = ("stored_products", "active_model_versions", "artifact_storage_bytes")
 
 
@@ -107,8 +115,7 @@ def inventory_usage(db: Session, tenant_id: UUID) -> dict[str, int]:
     set_local_tenant(db, tenant_id)
     return {
         "stored_products": int(db.scalar(select(func.count(Product.id)).where(Product.tenant_id == tenant_id)) or 0),
-        "active_model_versions": int(db.scalar(select(func.count(ModelVersion.id)).where(
-            ModelVersion.tenant_id == tenant_id, ModelVersion.status == "active")) or 0),
+        "active_model_versions": retained_versions(db, tenant_id),
         "artifact_storage_bytes": artifact_storage_used(db, tenant_id),
     }
 

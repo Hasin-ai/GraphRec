@@ -1,0 +1,97 @@
+{
+  "requirement": "NR-NF-04",
+  "measured_at": "2026-10-07T20:43:53+00:00",
+  "graphrec_version": "1.1.0",
+  "environment": "development",
+  "target": "http://localhost:8010",
+  "tenant_id": "dce580e2-1c41-4757-843c-06a54c3f8b18",
+  "load": {
+    "concurrency": 1,
+    "duration_seconds": 60.0,
+    "warmup_seconds": 10,
+    "mix": {
+      "recommend": 70,
+      "event": 20,
+      "product": 10
+    },
+    "products": 1000,
+    "shoppers": 300,
+    "trained_model": true
+  },
+  "host": {
+    "cpus": 2,
+    "platform": "Linux-6.18.44-fc-v77-x86_64-with-glibc2.39",
+    "python": "3.13.16"
+  },
+  "overall": {
+    "requests": 2521,
+    "throughput_rps": 42.0,
+    "ok": 2521,
+    "rate_limited_429": 0,
+    "failed": 0,
+    "unexpected_4xx": 0,
+    "error_rate": 0.0,
+    "latency_ms": {
+      "p50": 25.9,
+      "p95": 35.1,
+      "p99": 41.1,
+      "mean": 23.8,
+      "max": 69.8
+    }
+  },
+  "operations": {
+    "recommend": {
+      "requests": 1757,
+      "throughput_rps": 29.3,
+      "ok": 1757,
+      "rate_limited_429": 0,
+      "failed": 0,
+      "unexpected_4xx": 0,
+      "error_rate": 0.0,
+      "latency_ms": {
+        "p50": 27.9,
+        "p95": 36.2,
+        "p99": 42.0,
+        "mean": 28.6,
+        "max": 69.8
+      },
+      "strategies": {
+        "personalized": 1370,
+        "session": 380,
+        "popular_fallback": 7
+      }
+    },
+    "event": {
+      "requests": 529,
+      "throughput_rps": 8.8,
+      "ok": 529,
+      "rate_limited_429": 0,
+      "failed": 0,
+      "unexpected_4xx": 0,
+      "error_rate": 0.0,
+      "latency_ms": {
+        "p50": 14.1,
+        "p95": 19.0,
+        "p99": 22.6,
+        "mean": 14.7,
+        "max": 28.8
+      }
+    },
+    "product": {
+      "requests": 235,
+      "throughput_rps": 3.9,
+      "ok": 235,
+      "rate_limited_429": 0,
+      "failed": 0,
+      "unexpected_4xx": 0,
+      "error_rate": 0.0,
+      "latency_ms": {
+        "p50": 7.4,
+        "p95": 10.6,
+        "p99": 14.8,
+        "mean": 8.0,
+        "max": 69.6
+      }
+    }
+  }
+}

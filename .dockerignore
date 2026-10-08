@@ -3,9 +3,14 @@
 .venv
 __pycache__
 *.pyc
-frontend_02
+web
 sdks
 Claude outputs
 *.zip
 docs
 diagrams
+# Storefront demos have their own images; their node_modules hold symlinks
+# the API build context cannot read.
+**/node_modules
+archive/
+apps/reel-storefront/frontend

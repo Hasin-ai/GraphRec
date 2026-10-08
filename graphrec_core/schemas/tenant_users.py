@@ -36,6 +36,17 @@ class TenantUserInviteResponse(TenantUserResource):
     next_step: str = "POST /v1/auth/setup-password with this setup_token"
 
 
+class TenantUserUpdate(BaseModel):
+    """Change a member's role or access. ``locked`` blocks sign-in until unlocked;
+    ``disabled`` is permanent for that account (invite the person again instead)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    role: TenantUserRole | None = None
+    status: Literal["active", "locked", "disabled"] | None = None
+    reason: str | None = Field(default=None, max_length=500)
+
+
 class TenantUserListResponse(BaseModel):
     items: list[TenantUserResource]
     total: int

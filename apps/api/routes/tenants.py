@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from graphrec_core.database.session import get_db
 from graphrec_core.errors import ApiError
-from graphrec_core.registration.rate_limit import RegistrationRateLimiter
+from graphrec_core.registration.rate_limit import SharedRateLimiter
 from graphrec_core.registration.service import RegistrationService
 from graphrec_core.schemas.registration import (
     TenantRegistrationRequest,
@@ -17,7 +17,8 @@ from graphrec_core.settings import Settings, get_settings
 
 router = APIRouter(prefix="/v1", tags=["tenants"])
 settings = get_settings()
-registration_limiter = RegistrationRateLimiter(
+registration_limiter = SharedRateLimiter(
+    name="registration",
     limit=settings.registration_rate_limit,
     window_seconds=settings.registration_rate_window_seconds,
 )

@@ -153,19 +153,19 @@ def test_platform_administrator_manages_tenants_across_boundaries(platform_clien
     assert missing.status_code == 404
 
     suspended = platform_client.post(
-        f"/v1/platform/tenants/{tenant_id}/status", json={"status": "suspended"}, headers=admin
+        f"/v1/platform/tenants/{tenant_id}/status", json={"status": "suspended", "reason": "Isolation test"}, headers=admin
     )
     assert suspended.status_code == 200
     assert suspended.json()["status"] == "suspended"
     assert platform_client.get("/v1/products", headers=bearer(token)).status_code == 401
 
     invalid = platform_client.post(
-        f"/v1/platform/tenants/{tenant_id}/status", json={"status": "nonsense"}, headers=admin
+        f"/v1/platform/tenants/{tenant_id}/status", json={"status": "nonsense", "reason": "Isolation test"}, headers=admin
     )
     assert invalid.status_code == 422
 
     restored = platform_client.post(
-        f"/v1/platform/tenants/{tenant_id}/status", json={"status": "active"}, headers=admin
+        f"/v1/platform/tenants/{tenant_id}/status", json={"status": "active", "reason": "Isolation test"}, headers=admin
     )
     assert restored.status_code == 200
     assert platform_client.get("/v1/products", headers=bearer(token)).status_code == 200
@@ -194,3 +194,29 @@ def test_platform_administrator_manages_tenants_across_boundaries(platform_clien
     status = platform_client.get("/v1/platform/status", headers=admin)
     assert status.status_code == 200
     assert status.json()["database"] == "connected"
+
+
+def test_nr_nf_01_runtime_role_cannot_read_other_tenants_registrations(client):
+    """A-17: registration responses (tenant name, administrator email) are not
+    readable by the runtime role; replay still works through the lookup functions."""
+    from uuid import uuid4
+
+    from sqlalchemy import text
+
+    from graphrec_core.database.session import SessionLocal
+    from graphrec_core.database.tenancy import set_local_tenant
+
+    tag = uuid4().hex
+    body = {"name": f"Iso {tag}", "admin_email": f"{tag}@example.org"}
+    headers = {"Accept": "application/json", "Idempotency-Key": tag}
+    assert client.post("/v1/tenants", json=body, headers=headers).status_code == 201
+    replay = client.post("/v1/tenants", json=body, headers=headers)
+    assert replay.status_code == 200 and replay.json()["name"] == body["name"]
+    with SessionLocal() as db:
+        # No tenant context: nothing is visible.
+        assert db.execute(text("SELECT count(*) FROM registration_requests")).scalar() == 0
+    with SessionLocal() as db:
+        # Another tenant's context: still nothing of this tenant.
+        set_local_tenant(db, uuid4())
+        assert db.execute(text("SELECT count(*) FROM registration_requests WHERE response_body->>'name' = :n"),
+                          {"n": body["name"]}).scalar() == 0

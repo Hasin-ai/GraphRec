@@ -16,6 +16,9 @@ from . import conftest as fx
 from .conftest import MockAPI, error, make_async_client
 
 SYNC_TO_ASYNC = {
+    resources.Account: resources.AsyncAccount,
+    resources.TenantAudit: resources.AsyncTenantAudit,
+    resources.PlatformOperators: resources.AsyncPlatformOperators,
     resources.Authentication: resources.AsyncAuthentication,
     resources.ApiKeys: resources.AsyncApiKeys,
     resources.Subscriptions: resources.AsyncSubscriptions,

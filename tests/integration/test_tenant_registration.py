@@ -40,6 +40,7 @@ def post_registration(client: TestClient, body: dict[str, str], key: str):
 
 
 def test_valid_registration_creates_required_records_atomically(client: TestClient) -> None:
+    """NR-F-01 / UC-01."""
     body, key = unique_registration()
     correlation_id = str(uuid4())
     response = client.post(
@@ -227,6 +228,7 @@ def test_rate_limit_returns_retry_guidance(client: TestClient) -> None:
 
 
 def test_forced_rls_blocks_cross_tenant_reads_and_writes(client: TestClient) -> None:
+    """BRULE-02 / ER-NF-02."""
     body_a, key_a = unique_registration()
     body_b, key_b = unique_registration()
     tenant_a = UUID(post_registration(client, body_a, key_a).json()["id"])

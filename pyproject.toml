@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "graphrec"
-version = "0.1.0"
+dynamic = ["version"]
 description = "GraphRec multi-tenant recommendation platform"
 requires-python = ">=3.12"
 dependencies = [
@@ -29,6 +29,9 @@ test = [
   "httpx==0.28.1",
   "pytest==8.4.1",
 ]
+
+[tool.setuptools.dynamic]
+version = { file = "VERSION" }
 
 [tool.setuptools.packages.find]
 include = ["apps*", "graphrec_core*", "scripts*"]
