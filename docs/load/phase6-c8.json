@@ -1,0 +1,101 @@
+{
+  "requirement": "NR-NF-04",
+  "measured_at": "2026-10-08T03:24:37+00:00",
+  "graphrec_version": "1.1.0",
+  "environment": "development",
+  "target": "http://localhost:8010",
+  "tenant_id": "66a19038-2f0d-46bd-868f-e82926f9e2c3",
+  "load": {
+    "concurrency": 8,
+    "duration_seconds": 60.1,
+    "warmup_seconds": 10,
+    "mix": {
+      "recommend": 70,
+      "event": 20,
+      "product": 10
+    },
+    "products": 1000,
+    "shoppers": 300,
+    "trained_model": true
+  },
+  "host": {
+    "cpus": 2,
+    "platform": "Linux-6.18.44-fc-v80-x86_64-with-glibc2.39",
+    "python": "3.13.16"
+  },
+  "overall": {
+    "requests": 4777,
+    "throughput_rps": 79.5,
+    "ok": 4777,
+    "rate_limited_429": 0,
+    "failed": 0,
+    "timeouts": 0,
+    "unexpected_4xx": 0,
+    "error_rate": 0.0,
+    "latency_ms": {
+      "p50": 103.8,
+      "p95": 152.6,
+      "p99": 180.4,
+      "mean": 100.5,
+      "max": 449.7
+    }
+  },
+  "operations": {
+    "recommend": {
+      "requests": 3267,
+      "throughput_rps": 54.4,
+      "ok": 3267,
+      "rate_limited_429": 0,
+      "failed": 0,
+      "timeouts": 0,
+      "unexpected_4xx": 0,
+      "error_rate": 0.0,
+      "latency_ms": {
+        "p50": 115.7,
+        "p95": 158.3,
+        "p99": 185.7,
+        "mean": 117.3,
+        "max": 449.7
+      },
+      "strategies": {
+        "session": 729,
+        "personalized": 2515,
+        "popular_fallback": 23
+      }
+    },
+    "event": {
+      "requests": 1005,
+      "throughput_rps": 16.7,
+      "ok": 1005,
+      "rate_limited_429": 0,
+      "failed": 0,
+      "timeouts": 0,
+      "unexpected_4xx": 0,
+      "error_rate": 0.0,
+      "latency_ms": {
+        "p50": 73.1,
+        "p95": 117.8,
+        "p99": 145.3,
+        "mean": 76.5,
+        "max": 338.9
+      }
+    },
+    "product": {
+      "requests": 505,
+      "throughput_rps": 8.4,
+      "ok": 505,
+      "rate_limited_429": 0,
+      "failed": 0,
+      "timeouts": 0,
+      "unexpected_4xx": 0,
+      "error_rate": 0.0,
+      "latency_ms": {
+        "p50": 37.4,
+        "p95": 60.6,
+        "p99": 73.8,
+        "mean": 39.2,
+        "max": 350.6
+      }
+    }
+  }
+}

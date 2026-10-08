@@ -55,6 +55,10 @@ Recommendation strategies served during the runs: personalized for known shopper
 session-based for anonymous sessions, and popularity fallback for under 1 % of
 requests (shoppers whose history had no item known to the model).
 
+**Phase 6 re-run (fresh clone, final code, fresh database):** 8 concurrent shoppers,
+79.5 requests/s, p50 103.8 ms, p95 152.6 ms, p99 180.4 ms, 0 failures, 0 timeouts
+(`docs/load/phase6-c8.json`). Consistent with the table above.
+
 ### Reading the numbers
 
 - **The CPU is the limit.** The reference host has 2 vCPUs, shared by PostgreSQL,

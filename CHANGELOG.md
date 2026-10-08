@@ -5,6 +5,11 @@ All notable changes to GraphRec. Entries reference the anomaly register in
 
 ## Unreleased
 
+### Added (Phases 4–6)
+- XR-F-10 common-set version comparison; UC-24 usage by period; NR-NF-04 load test and `docs/PERFORMANCE.md`; NR-NF-08 fallback chaos tests; XR-NF-03 scheduled-retraining gate tests; SRS traceability guard and `docs/TRACEABILITY.md` (101/101 cited).
+- ER-NF-09 `/metrics` and JSON logs; isolation sweep over every route; production Compose overlay with Caddy TLS; backup, staged restore and retention scripts; DEPLOYMENT, OPERATIONS, SECURITY and API docs; final report `docs/FINAL_REPORT.md`.
+- Reel is the reference storefront (bugs fixed); Facet archived.
+
 ### Added (Phase 3)
 - The console moved from `frontend_02/` to `web/` (earlier entries keep the old path).
 - UC-27: administrators change a member's role, lock, unlock or disable them, and resend invitations (`GET`/`PATCH /v1/tenant/users/{id}`, `POST …/invitation:resend`, migration `0037`). Every change ends the member's sessions; the last active administrator and your own account are protected.
