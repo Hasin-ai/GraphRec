@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 
 correlation_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar("correlation_id", default=None)
 
+STANDARD_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"})
 BUCKETS = (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0)
 REDIS_KEY = "graphrec:metrics:v1"
 FLUSH_SECONDS = 5.0
@@ -79,6 +80,8 @@ class Metrics:
         self._client = client
 
     def observe(self, method: str, route: str, status: int, seconds: float) -> None:
+        # Arbitrary request methods must not become label values (unbounded series).
+        method = method if method in STANDARD_METHODS else "OTHER"
         klass = f"{status // 100}xx"
         fields = [f"req|{method}|{route}|{klass}", f"sum|{route}", f"count|{route}"]
         with self._lock:
@@ -129,7 +132,7 @@ class Metrics:
         routes = set()
         for field, value in sorted(data.items()):
             parts = field.split("|")
-            if parts[0] == "req":
+            if parts[0] == "req" and len(parts) == 4:
                 _, method, route, klass = parts
                 routes.add(route)
                 lines.append(f'graphrec_http_requests_total{{method="{method}",route="{_escape(route)}",status="{klass}"}} {value}')

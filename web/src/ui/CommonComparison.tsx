@@ -7,6 +7,7 @@ export interface Comparison {
   candidate: Scores;
   popularity_baseline: Scores;
   active: (Scores & { model_version_id: string | null; unavailable_reason?: string }) | null;
+  caveat?: string | null;
 }
 
 const MEASURES = ['Hit@1', 'Hit@10', 'NDCG@10', 'MRR@10', 'catalog_coverage@10'];
@@ -39,5 +40,6 @@ export function CommonComparison({ comparison, activeLabel }: { comparison: Comp
         </tr>;
       }), <tr key="unknown"><Cell>Targets the version does not know</Cell>
         {columns.map(c => <td key={c.key} className="num">{num(c.scores, 'unknown_targets') ?? 0}</td>)}{active ? <td /> : null}</tr>]} />
+    {active && comparison.caveat ? <p className="footnote">{comparison.caveat}</p> : null}
   </>;
 }

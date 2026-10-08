@@ -75,7 +75,7 @@ def seed(client, headers):
 
 
 def test_real_tenant_training_and_cancel(client, tmp_path, monkeypatch):
-    """NR-F-07 / NR-F-10 / ER-F-02 / UC-12 / UC-14 / UC-15."""
+    """NR-F-07 / NR-F-10 / ER-F-02 / ER-NF-03 (a foreign-tenant artifact is refused at activation) / UC-12 / UC-14 / UC-15."""
     monkeypatch.setattr(get_settings(), 'generated_model_root', str(tmp_path))
     tenant, headers = provision(client)
     limits(client, tenant, training_jobs=3)

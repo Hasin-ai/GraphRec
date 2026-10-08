@@ -221,7 +221,13 @@ def train_job(tenant_id, job_id):
     artifact = DGSRArtifact(directory)
     artifact.encode_known(0)
     pulse('comparing_versions', 97)
-    metrics['comparison'] = compare_with_active(tenant_id, artifact, data, directory)
+    try:
+        metrics['comparison'] = compare_with_active(tenant_id, artifact, data, directory)
+    except (Cancelled, ShuttingDown):
+        raise
+    except Exception as exc:  # the comparison is informative; it never fails a trained model
+        logger.warning('Version comparison failed for job %s: %s', job_id, exc)
+        metrics['comparison'] = {'unavailable_reason': f'{type(exc).__name__}: {str(exc)[:200]}'}
     (directory / 'final_metrics.json').write_text(json.dumps(metrics, allow_nan=False), encoding='utf-8')
     size = sum(p.stat().st_size for p in directory.iterdir() if p.is_file())
     with SessionLocal() as db, db.begin():
@@ -288,9 +294,21 @@ def compare_with_active(tenant_id, candidate: DGSRArtifact, data: InteractionDat
         except Exception as exc:  # the comparison is reported as unavailable, never invented
             reason = f'{type(exc).__name__}: {str(exc)[:200]}'
             logger.warning('Active version %s could not be loaded for comparison: %s', active_id, reason)
-    result = compare(candidate, examples, train_items, active_artifact, active_id)
+    try:
+        result = compare(candidate, examples, train_items, active_artifact, active_id)
+    except Exception as exc:  # e.g. an older artifact that loads but cannot encode: compare without it
+        if active_artifact is None:
+            raise
+        reason = f'{type(exc).__name__}: {str(exc)[:200]}'
+        result = compare(candidate, examples, train_items)
+        active_artifact = None
     if active_id and active_artifact is None:
         result['active'] = {'model_version_id': active_id, 'unavailable_reason': reason}
+        result.pop('ndcg10_delta_vs_active', None)
+    # The examples are the candidate's held-out events. An active version trained on a later
+    # snapshot may already contain them, which would flatter it: say so instead of hiding it.
+    result['caveat'] = ('The active version may have been trained on data that includes these examples; '
+                        'a higher active score can reflect that rather than better quality.') if active_id else None
     return result
 
 

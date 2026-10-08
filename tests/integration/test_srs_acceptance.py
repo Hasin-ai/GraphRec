@@ -30,7 +30,7 @@ def limits(client, tenant, **overrides):
 
 
 def test_feedback_replay_ownership_and_disabled_recommendation(client):
-    """NR-F-14 / UC-23 / BRULE-09 / BRULE-11."""
+    """NR-F-14 / UC-23 / BRULE-09 / BRULE-11 / ER-F-04 (feedback replay)."""
     tenant, headers = provision(client)
     provisioned_foreign_tenant, foreign = provision(client)
     assert client.put('/v1/products/movie', json={'external_id': 'movie', 'title': 'Movie'}, headers=headers).status_code == 200
@@ -130,7 +130,7 @@ def test_snapshot_captures_real_immutable_tenant_content(client):
 
 
 def test_training_replays_once_and_failed_activation_is_audited(client):
-    """ER-F-06 / UC-18 / ER-NF-03."""
+    """ER-F-06 / UC-18 / ER-F-04 (training replay)."""
     tenant, headers = provision(client)
     _, foreign = provision(client)
     limits(client, tenant, training_jobs=1)
@@ -164,7 +164,7 @@ def test_training_replays_once_and_failed_activation_is_audited(client):
 
 
 def test_deployment_tracks_last_ready_version_and_protects_rollback_target(client):
-    """NR-F-11 / UC-19 / XR-F-05 / XR-NF-01 / UC-25."""
+    """NR-F-11 / UC-19 / XR-F-05."""
     tenant, headers = provision(client)
     limits(client, tenant, training_jobs=3)
     assert client.put('/v1/products/movie', json={'external_id': 'movie', 'title': 'Movie'}, headers=headers).status_code == 200
@@ -286,7 +286,7 @@ def test_operator_issued_recovery_is_single_use_and_invalidates_old_access(clien
 
 
 def test_catalog_sync_and_event_batch_retain_item_outcomes_and_replay(client):
-    """NR-F-05 / NR-F-06 / NR-NF-05 / BRULE-05 / UC-06 / UC-10 / UC-11."""
+    """NR-F-05 / NR-F-06 / NR-NF-05 / BRULE-05 / ER-F-04 (product and event replay) / UC-06 / UC-10 / UC-11."""
     tenant, headers = provision(client)
     _, foreign = provision(client)
     product = {'external_id': 'movie', 'title': 'Movie'}

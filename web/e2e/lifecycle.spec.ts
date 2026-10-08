@@ -22,7 +22,7 @@ test('model replacement, rollback and archive follow confirmed backend state', a
   const tenant = await api('/tenants', { name: `Lifecycle test ${tag}`, admin_email: email });
   const auth = await api('/auth/setup-password', { setup_token: tenant.setup_token, password, email });
   const token = auth.access_token;
-  await api(`/platform/tenants/${tenant.id}/quotas`, { overrides: { training_jobs: 3 } }, admin);
+  await api(`/platform/tenants/${tenant.id}/quotas`, { overrides: { training_jobs: 3, active_model_versions: 5 } }, admin);  // D-11: retained versions count against the plan
   await api('/products/LIFECYCLE-1', { external_id: 'LIFECYCLE-1', title: 'Lifecycle test product', price: '10.00' }, token, 'PUT');
   await api('/events', { event_id: `event-${tag}`, event_type: 'purchase', user_id: 'test-user', external_product_id: 'LIFECYCLE-1' }, token);
   const first = await api('/training-jobs', { configuration: { mode: 'placeholder' } }, token);

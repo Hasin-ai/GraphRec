@@ -61,7 +61,10 @@ production it can only create the first operator and should then be removed.
 Sign-in, registration, setup, recovery, API-key administration, usage reads and
 recommendation traffic are rate limited per subject and source through Redis, shared
 by all API processes. The client address comes from `X-Forwarded-For` only when the
-direct peer is a trusted proxy (`FORWARDED_ALLOW_IPS`). Request bodies are bounded
+direct peer is a trusted proxy (`FORWARDED_ALLOW_IPS`): in production that is the
+console's nginx at a fixed internal address, behind Caddy, which replaces any
+`X-Forwarded-For` a client sends. Development Compose trusts `*` because the API
+port is bound to localhost. Request bodies are bounded
 before parsing (`MAX_REQUEST_BODY_BYTES`, bulk and upload limits); statements are
 bounded by `DB_STATEMENT_TIMEOUT_MS`. Plan quotas are enforced under a per-tenant
 lock and are never overshot.

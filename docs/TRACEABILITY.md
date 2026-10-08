@@ -23,7 +23,7 @@ rule enforced by `tests/test_srs_traceability.py`. Decisions are in `docs/DECISI
 | ER-F-01 | Done | `tests/integration/test_srs_acceptance.py::test_snapshot_captures_real_immutable_tenant_content` |  |
 | ER-F-02 | Done | `tests/integration/test_training_worker.py::test_real_tenant_training_and_cancel` |  |
 | ER-F-03 | Done | `tests/integration/test_srs_coverage.py::test_er_f_03_offline_metrics_have_the_documented_values` |  |
-| ER-F-04 | Done | `tests/integration/test_tenant_registration.py::test_same_idempotency_key_and_body_replays_without_duplicate_effect` |  |
+| ER-F-04 | Done | `tests/integration/test_srs_acceptance.py::test_catalog_sync_and_event_batch_retain_item_outcomes_and_replay`<br>`tests/integration/test_srs_acceptance.py::test_feedback_replay_ownership_and_disabled_recommendation`<br>`tests/integration/test_srs_acceptance.py::test_training_replays_once_and_failed_activation_is_audited` |  |
 | ER-F-05 | Done | `tests/integration/test_serving_provenance.py::test_er_f_05_fallback_reports_no_serving_model_version` |  |
 | ER-F-06 | Done | `tests/integration/test_srs_acceptance.py::test_training_replays_once_and_failed_activation_is_audited` |  |
 | ER-F-07 | Done | `tests/integration/test_srs_coverage.py::test_er_f_07_rollback_accepts_only_a_retired_version_of_the_same_tenant` |  |
@@ -34,13 +34,13 @@ rule enforced by `tests/test_srs_traceability.py`. Decisions are in `docs/DECISI
 | ER-F-12 | Done | `tests/integration/test_scope_enforcement.py::test_bearer_tokens_only_reach_routes_their_role_grants` |  |
 | ER-NF-01 | Done | `tests/integration/test_worker_process_failures.py::test_er_nf_01_killed_worker_job_is_reclaimed_and_completes`<br>`tests/integration/test_worker_process_failures.py::test_er_nf_01_sigterm_requeues_without_spending_an_attempt` |  |
 | ER-NF-02 | Done | `tests/integration/test_isolation_sweep.py::test_er_nf_02_brule_02_tenant_b_cannot_reach_tenant_a_resources_by_id`<br>`tests/integration/test_tenant_registration.py::test_forced_rls_blocks_cross_tenant_reads_and_writes` |  |
-| ER-NF-03 | Done | `tests/integration/test_srs_acceptance.py::test_training_replays_once_and_failed_activation_is_audited` |  |
+| ER-NF-03 | Done | `tests/integration/test_training_worker.py::test_real_tenant_training_and_cancel` |  |
 | ER-NF-04 | Done | `tests/integration/test_training_worker.py::test_interrupted_job_retries_once_then_fails_visibly` |  |
 | ER-NF-05 | Done | `tests/integration/test_worker_process_failures.py::test_er_nf_05_deterministic_failure_is_terminal_and_visible`<br>`tests/integration/test_worker_process_failures.py::test_er_nf_05_transient_failure_retries_once_then_fails` |  |
 | ER-NF-06 | Done | `tests/integration/test_srs_coverage.py::test_er_nf_06_identical_requests_get_identical_rankings` |  |
 | ER-NF-07 | Done | `tests/integration/test_srs_acceptance.py::test_concurrency_and_minute_limits_reject_excess_without_double_metering` |  |
 | ER-NF-08 | Done | `tests/integration/test_srs_coverage.py::test_er_nf_08_core_library_does_not_depend_on_the_api_layer` |  |
-| ER-NF-09 | Done | `tests/integration/test_observability.py::test_er_nf_09_json_logs_carry_the_correlation_id`<br>`tests/integration/test_observability.py::test_er_nf_09_metrics_are_disabled_in_production_without_a_token`<br>`tests/integration/test_observability.py::test_er_nf_09_metrics_count_requests_by_route_template_without_tenant_data`<br>…and 1 more |  |
+| ER-NF-09 | Done | `tests/integration/test_observability.py::test_er_nf_09_json_logs_carry_the_correlation_id`<br>`tests/integration/test_observability.py::test_er_nf_09_metrics_are_disabled_in_production_without_a_token`<br>`tests/integration/test_observability.py::test_er_nf_09_metrics_count_requests_by_route_template_without_tenant_data`<br>…and 2 more |  |
 | NR-F-01 | Done | `tests/integration/test_tenant_registration.py::test_valid_registration_creates_required_records_atomically` |  |
 | NR-F-02 | Done | `tests/integration/test_refresh_rotation.py::test_nr_f_02_refresh_does_not_cross_tenants`<br>`tests/integration/test_refresh_rotation.py::test_nr_f_02_refresh_rotates_and_new_access_token_works`<br>`tests/integration/test_refresh_rotation.py::test_nr_f_02_reused_refresh_token_revokes_every_session`<br>…and 1 more |  |
 | NR-F-03 | Done | `tests/integration/test_api_keys.py::test_empty_list_and_redacted_create_list_detail_are_exact` |  |
@@ -56,7 +56,7 @@ rule enforced by `tests/test_srs_traceability.py`. Decisions are in `docs/DECISI
 | NR-F-13 | Done | `tests/integration/test_srs_coverage.py::test_nr_f_13_session_recommendations_endpoint` |  |
 | NR-F-14 | Done | `tests/integration/test_srs_acceptance.py::test_feedback_replay_ownership_and_disabled_recommendation` |  |
 | NR-F-15 | Done | `tests/integration/test_usage.py::test_nr_f_15_unmeasured_dimensions_are_flagged_and_replicas_reflect_serving` |  |
-| NR-F-16 | Done | `tests/integration/test_srs_coverage.py::test_uc_26_nr_f_16_service_status_measures_the_tenants_own_traffic` |  |
+| NR-F-16 | Done | `tests/integration/test_srs_coverage.py::test_uc_25_model_status_reports_every_state_and_an_explicit_empty_state`<br>`tests/integration/test_srs_coverage.py::test_uc_26_nr_f_16_service_status_measures_the_tenants_own_traffic` |  |
 | NR-NF-01 | Done | `tests/integration/test_domain_isolation.py::test_nr_nf_01_runtime_role_cannot_read_other_tenants_registrations`<br>`tests/integration/test_isolation_sweep.py::test_nr_nf_01_every_non_public_route_requires_a_credential`<br>`tests/integration/test_isolation_sweep.py::test_nr_nf_01_tenant_b_lists_never_contain_tenant_a_data`<br>…and 2 more |  |
 | NR-NF-02 | Done | `tests/integration/test_subscription.py::test_subscription_rejects_public_tenant_selector` |  |
 | NR-NF-03 | Done | `tests/test_body_limit.py::test_nr_nf_03_chunked_body_over_limit_is_rejected_before_parsing`<br>`tests/test_error_envelope.py::test_nr_nf_03_method_not_allowed_is_not_reported_as_malformed` |  |
@@ -89,7 +89,7 @@ rule enforced by `tests/test_srs_traceability.py`. Decisions are in `docs/DECISI
 | UC-22 | Done | `tests/integration/test_sdk_live.py::test_recommendations_and_feedback` |  |
 | UC-23 | Done | `tests/integration/test_srs_acceptance.py::test_feedback_replay_ownership_and_disabled_recommendation` |  |
 | UC-24 | Done | `sdks/python/tests/test_resources.py::test_uc_24_usage_period_query`<br>`tests/integration/test_usage_periods.py::test_uc_24_future_old_or_malformed_periods_are_refused`<br>`tests/integration/test_usage_periods.py::test_uc_24_other_query_parameters_are_still_refused`<br>…and 2 more |  |
-| UC-25 | Done | `tests/integration/test_srs_acceptance.py::test_deployment_tracks_last_ready_version_and_protects_rollback_target` |  |
+| UC-25 | Done | `tests/integration/test_srs_coverage.py::test_uc_25_model_status_reports_every_state_and_an_explicit_empty_state` |  |
 | UC-26 | Done (D-07) | `tests/integration/test_srs_coverage.py::test_uc_26_nr_f_16_service_status_measures_the_tenants_own_traffic` | Service status reports measured traffic and logical capacity. |
 | UC-27 | Done | `tests/integration/test_operators.py::test_uc_27_operator_actions_are_attributed_to_the_operator`<br>`tests/integration/test_phase3_endpoints.py::test_uc_27_admin_changes_role_locks_unlocks_and_disables_members`<br>`tests/integration/test_phase3_endpoints.py::test_uc_27_last_admin_and_self_changes_are_refused`<br>…and 4 more | Operators manage tenants with reasons recorded; administrators manage members (D-20). |
 | UC-28 | Done | `tests/integration/test_srs_acceptance.py::test_platform_plan_assignment_preserves_overrides_and_usage` |  |
@@ -106,6 +106,6 @@ rule enforced by `tests/test_srs_traceability.py`. Decisions are in `docs/DECISI
 | XR-F-08 | Done (D-07) | `tests/integration/test_xr_features.py::test_capacity_scales_with_load_is_observable_and_isolated` | Per-tenant serving capacity is logical (admission slots that scale with demand), not separate inference servers. |
 | XR-F-09 | Done | `tests/integration/test_serving_provenance.py::test_xr_f_09_fallback_uses_recent_popularity` | The SRS lists sources joined by "or": recent tenant popularity and session context are used; category or content cold start is not. |
 | XR-F-10 | Done | `tests/integration/test_training_worker.py::test_xr_f_10_candidate_and_active_are_compared_on_one_common_set`<br>`tests/test_common_evaluation.py::test_xr_f_10_common_examples_round_trip`<br>`tests/test_common_evaluation.py::test_xr_f_10_popularity_on_common_set_counts_unknown_targets_as_misses`<br>…and 1 more |  |
-| XR-NF-01 | Done (D-07) | `tests/integration/test_srs_acceptance.py::test_deployment_tracks_last_ready_version_and_protects_rollback_target` | Capacity is bound to the active version; see XR-F-08. |
+| XR-NF-01 | Done (D-07) | `tests/integration/test_xr_features.py::test_xr_nf_01_capacity_follows_the_active_version_and_stays_in_its_tenant` | Capacity is bound to the active version; see XR-F-08. |
 | XR-NF-02 | Done | `tests/integration/test_xr_features.py::test_recommendation_rules_change_output_respect_exclusions_and_isolation` |  |
 | XR-NF-03 | Done | `tests/integration/test_xr_features.py::test_xr_nf_03_scheduled_retraining_respects_the_plan_training_quota`<br>`tests/integration/test_xr_features.py::test_xr_nf_03_scheduled_retraining_respects_the_training_cooldown` |  |

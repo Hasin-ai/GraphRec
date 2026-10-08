@@ -14,8 +14,9 @@
 #   certificates are on named volumes covered by scripts/backup.sh.
 x-production-env: &production-env
   GRAPHREC_ENV: production
-  # Only nginx (behind Caddy) reaches the API on the internal network.
-  FORWARDED_ALLOW_IPS: "*"
+  # Trust X-Forwarded-For only from the console's nginx (fixed address below), so no
+  # other container can claim a client address. Caddy replaces any client-sent value.
+  FORWARDED_ALLOW_IPS: 172.31.250.10
 
 services:
   migrate:
@@ -40,6 +41,9 @@ services:
 
   frontend:
     ports: !reset []
+    networks:
+      default:
+        ipv4_address: 172.31.250.10
 
   caddy:
     image: caddy:2.8.4-alpine
@@ -72,6 +76,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.31.250.0/24
 
 volumes:
   caddy_data: {}

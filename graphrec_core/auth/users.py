@@ -156,6 +156,10 @@ class TenantUserService:
         if payload.reason:
             from graphrec_core.database.tenancy import set_audit_reason
             set_audit_reason(self.session, payload.reason)
+        # One member change per tenant at a time: keeps the last-administrator rule
+        # race-free without row-lock ordering (and so without deadlocks).
+        self.session.execute(text("SELECT pg_advisory_xact_lock(hashtext('tenant_members:' || :tenant))"),
+                             {"tenant": str(principal.tenant_id)})
         user = self.session.scalar(select(TenantUser).where(
             TenantUser.tenant_id == principal.tenant_id, TenantUser.id == user_id).with_for_update())
         if user is None:
@@ -174,10 +178,12 @@ class TenantUserService:
         losing_admin = user.role == "tenant_administrator" and user.status == "active" and (
             changes.get("role", user.role) != "tenant_administrator" or changes.get("status", "active") != "active")
         if losing_admin:
-            admins = self.session.scalar(select(func.count(TenantUser.id)).where(
+            # Lock every active administrator row so two concurrent demotions cannot
+            # both see two administrators and leave the tenant with none.
+            admins = len(self.session.scalars(select(TenantUser.id).where(
                 TenantUser.tenant_id == principal.tenant_id, TenantUser.role == "tenant_administrator",
-                TenantUser.status == "active"))
-            if (admins or 0) <= 1:
+                TenantUser.status == "active").order_by(TenantUser.id).with_for_update()).all())
+            if admins <= 1:
                 raise ApiError(409, "invalid_state", "A tenant must keep at least one active administrator.")
         self.session.execute(update(TenantUser).where(
             TenantUser.tenant_id == principal.tenant_id, TenantUser.id == user.id,

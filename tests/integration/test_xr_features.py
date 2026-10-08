@@ -287,3 +287,37 @@ def test_xr_nf_03_scheduled_retraining_respects_the_plan_training_quota(client, 
     assert decision.trigger is None and decision.reason == 'quota_exceeded'
     assert _jobs(tid) == 0
     assert client.get('/v1/retraining-policy', headers=admin).json()['last_outcome'] == 'blocked:quota_exceeded'
+
+
+def test_xr_nf_01_capacity_follows_the_active_version_and_stays_in_its_tenant(client, monkeypatch):
+    """XR-NF-01: scaling is recorded against the active version; switching versions keeps the
+    scaled capacity bound to the new active version; another tenant's capacity is untouched."""
+    tenant, admin = provision(client)
+    other_tenant, other = provision(client)
+    operator(client, tenant, training_jobs=5, maximum_inference_replicas=3, concurrent_recommendation_requests=9)
+    client.put('/v1/products/movie', json={'external_id': 'movie', 'title': 'Movie'}, headers=admin)
+    first = client.post('/v1/training-jobs', json={'request_id': 'cap-1', 'configuration': {'mode': 'placeholder'}}, headers=admin).json()['model_version_id']
+    assert client.post(f'/v1/model-versions/{first}:activate', headers=admin).status_code == 200
+    monkeypatch.setattr(get_settings(), 'capacity_target_rpm_per_replica', 10)
+    monkeypatch.setattr(get_settings(), 'training_cooldown_seconds', 0)
+    tid, now = UUID(tenant), datetime.now(timezone.utc)
+    with SessionLocal() as db, db.begin():
+        set_local_tenant(db, tid)
+        for i in range(25):
+            db.add(ServingRequest(id=uuid4(), tenant_id=tid, model_version_id=UUID(first), strategy='popular_fallback',
+                                  outcome='served', fallback_used=True, item_count=1, latency_ms=5,
+                                  occurred_at=now - timedelta(seconds=i)))
+    with SessionLocal() as db:
+        set_local_tenant(db, tid)
+        assert evaluate_capacity(db, tid).target == 3
+    with SessionLocal() as db, db.begin():
+        set_local_tenant(db, tid)
+        event = db.scalars(select(CapacityEvent).where(CapacityEvent.tenant_id == tid)
+                           .order_by(CapacityEvent.occurred_at.desc())).first()
+        assert str(event.model_version_id) == first and event.to_capacity == 3
+    second = client.post('/v1/training-jobs', json={'request_id': 'cap-2', 'configuration': {'mode': 'placeholder'}}, headers=admin).json()['model_version_id']
+    assert client.post(f'/v1/model-versions/{second}:activate', headers=admin).status_code == 200
+    deployment = client.get('/v1/deployment', headers=admin).json()
+    assert deployment['active_model_version_id'] == second and deployment['ready_capacity'] == 3
+    foreign = client.get('/v1/deployment', headers=other).json()
+    assert foreign['active_model_version_id'] is None and foreign['ready_capacity'] == 0

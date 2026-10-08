@@ -48,3 +48,14 @@ def test_er_nf_09_json_logs_carry_the_correlation_id():
         correlation_id_var.reset(token)
     assert line["message"] == "GET /v1/x" and line["level"] == "info" and line["status"] == 200
     assert line["correlation_id"] == "c0ffee00-0000-4000-8000-000000000001"
+
+
+def test_er_nf_09_unknown_methods_and_malformed_keys_cannot_grow_or_break_metrics():
+    from graphrec_core.observability import Metrics
+    metrics = Metrics()
+    for method in ("FOO", "A|B", "GET"):
+        metrics.observe(method, "/v1/x", 200, 0.01)
+    data, _ = metrics.snapshot()
+    assert {k.split("|")[1] for k in data if k.startswith("req|")} == {"GET", "OTHER"}
+    metrics._local["req|broken"] = 1   # a malformed key from an older process
+    assert "graphrec_http_requests_total" in metrics.render(None, {})

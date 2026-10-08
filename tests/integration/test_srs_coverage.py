@@ -347,3 +347,36 @@ def test_er_nf_08_core_library_does_not_depend_on_the_api_layer():
     assert not offenders, offenders
     domains = {'auth', 'api_keys', 'catalog', 'events', 'models_reg', 'registration', 'usage', 'dgsr', 'database'}
     assert domains <= {p.name for p in (ROOT / 'graphrec_core').iterdir() if p.is_dir() and any(p.glob('*.py'))}
+
+
+def test_uc_25_model_status_reports_every_state_and_an_explicit_empty_state(client, monkeypatch):
+    """UC-25 / NR-F-16: a new tenant has no versions and a stopped deployment; versions move
+    eligible -> active -> retired; a failed activation is reported and the previous version
+    stays active; another tenant sees none of it."""
+    tenant, admin = provision(client)
+    _, other = provision(client)
+    operator(client, tenant, training_jobs=5, active_model_versions=5)
+    assert client.get('/v1/model-versions', headers=admin).json() == {'items': []}
+    empty = client.get('/v1/deployment', headers=admin).json()
+    assert empty['status'] == 'stopped' and empty['active_model_version_id'] is None
+    client.put('/v1/products/m', json={'external_id': 'm', 'title': 'M'}, headers=admin)
+    first = client.post('/v1/training-jobs', json={'request_id': 'uc25-1', 'configuration': {'mode': 'placeholder'}}, headers=admin).json()['model_version_id']
+    assert client.get(f'/v1/model-versions/{first}', headers=admin).json()['status'] == 'eligible'
+    assert client.post(f'/v1/model-versions/{first}:activate', headers=admin).status_code == 200
+    broken = client.post('/v1/model-versions', json={'version_tag': 'broken', 'model_type': 'dgsr',
+                         'artifact_uri': 'file:///nonexistent/artifact'}, headers=admin).json()['id']
+    failed = client.post(f'/v1/model-versions/{broken}:activate', headers=admin)
+    assert failed.status_code >= 400
+    deployment = client.get('/v1/deployment', headers=admin).json()
+    assert deployment['active_model_version_id'] == first           # the old version keeps serving
+    statuses = {v['id']: v['status'] for v in client.get('/v1/model-versions', headers=admin).json()['items']}
+    assert statuses[first] == 'active' and statuses[broken] in {'eligible', 'failed'}
+    monkeypatch.setattr(get_settings(), 'training_cooldown_seconds', 0)
+    second = client.post('/v1/training-jobs', json={'request_id': 'uc25-2', 'configuration': {'mode': 'placeholder'}}, headers=admin)
+    assert second.status_code == 200, second.text
+    second_id = second.json()['model_version_id']
+    assert client.post(f'/v1/model-versions/{second_id}:activate', headers=admin).status_code == 200
+    statuses = {v['id']: v['status'] for v in client.get('/v1/model-versions', headers=admin).json()['items']}
+    assert statuses[first] == 'retired' and statuses[second_id] == 'active'
+    assert client.get('/v1/model-versions', headers=other).json() == {'items': []}
+    assert client.get(f'/v1/model-versions/{first}', headers=other).status_code == 404

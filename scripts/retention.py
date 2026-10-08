@@ -3,9 +3,11 @@
     docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm retention
     python -m scripts.retention --dry-run          # counts only
 
-Runs with the *owner* connection (``RETENTION_DATABASE_URL``, the migration role):
-the runtime role ``graphrec_app`` deliberately has no DELETE on these tables, and
-RLS is forced for it. Deletes run in batches so no long lock is held.
+Runs with the owner connection (``RETENTION_DATABASE_URL``). In the Compose files
+that is ``POSTGRES_OWNER_USER``, which the postgres image creates as a superuser: it
+is the only role that may delete across tenants, because the runtime role
+``graphrec_app`` has no DELETE on these tables and is held to its tenant by forced
+RLS. Deletes run in batches so no long lock is held.
 
 What is never deleted here: tenants' catalogs, interaction histories, dataset
 snapshots, model versions and the append-only audit log. Those belong to the

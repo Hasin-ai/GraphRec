@@ -25,10 +25,18 @@ echo "Stopping application services"
 "${COMPOSE[@]}" stop caddy frontend api scheduler worker
 "${COMPOSE[@]}" up -d postgres qdrant redis
 
-echo "PostgreSQL"
-"${COMPOSE[@]}" exec -T postgres dropdb -U "$POSTGRES_OWNER_USER" --if-exists --force "$POSTGRES_DB"
-"${COMPOSE[@]}" exec -T postgres createdb -U "$POSTGRES_OWNER_USER" "$POSTGRES_DB"
-"${COMPOSE[@]}" exec -T postgres pg_restore -U "$POSTGRES_OWNER_USER" -d "$POSTGRES_DB" --exit-on-error < "$SRC/postgres.dump"
+echo "PostgreSQL (restored into a staging database first; the live one is replaced only if that succeeds)"
+STAGING="${POSTGRES_DB}_restore"
+PG=("${COMPOSE[@]}" exec -T postgres)
+"${PG[@]}" dropdb -U "$POSTGRES_OWNER_USER" --if-exists "$STAGING"
+"${PG[@]}" createdb -U "$POSTGRES_OWNER_USER" "$STAGING"
+if ! "${PG[@]}" pg_restore -U "$POSTGRES_OWNER_USER" -d "$STAGING" --exit-on-error < "$SRC/postgres.dump"; then
+  "${PG[@]}" dropdb -U "$POSTGRES_OWNER_USER" --if-exists "$STAGING"
+  echo "The dump did not restore; the current database is unchanged." >&2
+  exit 1
+fi
+"${PG[@]}" dropdb -U "$POSTGRES_OWNER_USER" --if-exists --force "$POSTGRES_DB"
+"${PG[@]}" psql -U "$POSTGRES_OWNER_USER" -d postgres -v ON_ERROR_STOP=1 -c "ALTER DATABASE \"$STAGING\" RENAME TO \"$POSTGRES_DB\""
 
 echo "Trained models and certificates"
 for volume in trained_models caddy_data; do

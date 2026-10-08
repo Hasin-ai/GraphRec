@@ -99,7 +99,6 @@ def test_valid_registration_creates_required_records_atomically(client: TestClie
 
 
 def test_same_idempotency_key_and_body_replays_without_duplicate_effect(client: TestClient) -> None:
-    """ER-F-04."""
     body, key = unique_registration()
     first = post_registration(client, body, key)
     replay = post_registration(client, body, key)
