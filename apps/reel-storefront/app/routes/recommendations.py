@@ -22,6 +22,7 @@ from graphrec_sdk import APIError
 from ..dependencies import Identity, identity, services
 from ..errors import StoreError, translate_api_error
 from ..graphrec import Services
+from ..observability import METRICS
 from ..schemas import (ClickIn, Diff, Envelope, FeedbackOut, Film, Ranked, RecommendationIn, RecommendationsOut,
                        Trace, TraceRequest, Unavailable)
 from ..store import WINDOW, display_title, history_for
@@ -74,6 +75,7 @@ async def recommend(body: RecommendationIn, ident: Identity = Depends(identity),
     elif user_id is None:
         live = history_for(ident.persona, svc.live.for_shopper(ident.shopper))
         recent = [r["filmId"] for r in live][-WINDOW:]
+    endpoint_name = "recommendations" if user_id is not None else "recommendations/session"
     started = time.perf_counter()
     try:
         if user_id is not None:
@@ -83,10 +85,21 @@ async def recommend(body: RecommendationIn, ident: Identity = Depends(identity),
             recs = await svc.client.storefront.recommendations.for_session(
                 ident.session_id, recent_product_ids=recent or None, top_n=top_n, context=ctx, exclude_product_ids=exclude or None)
             endpoint = "POST /v1/recommendations/session"
+        gr_dur = time.perf_counter() - started
+        METRICS.observe_graphrec(endpoint_name, "success", gr_dur)
     except APIError as error:
+        gr_dur = time.perf_counter() - started
+        METRICS.observe_graphrec(endpoint_name, "error", gr_dur)
         t = translate_api_error(error)
         return Envelope(data=Unavailable(reason=t.message, correlation_id=t.correlation_id), meta={"code": t.code})
+    except Exception:
+        gr_dur = time.perf_counter() - started
+        METRICS.observe_graphrec(endpoint_name, "error", gr_dur)
+        raise
     latency = round((time.perf_counter() - started) * 1000)
+
+    if recs.fallback_used:
+        METRICS.observe_fallback(recs.strategy)
 
     ids = [i.external_product_id for i in recs.items]
     shelf_key = body.shelf if body.shelf == "home" else f"more_like:{body.film_id}"
@@ -116,6 +129,8 @@ async def recommend(body: RecommendationIn, ident: Identity = Depends(identity),
             except Exception:
                 pass
         svc.storage.record_feedback("impression", fb_succeeded)
+        if not fb_succeeded:
+            METRICS.observe_feedback_failure("impression")
 
     if omitted > 0:
         import logging
@@ -155,6 +170,8 @@ async def click(body: ClickIn, ident: Identity = Depends(identity), svc: Service
         except Exception:
             pass
     svc.storage.record_feedback("click", fb_succeeded)
+    if not fb_succeeded:
+        METRICS.observe_feedback_failure("click")
     if fb:
         return Envelope(data=FeedbackOut(event_id=fb.event_id, accepted=fb.accepted, duplicate=fb.duplicate))
     return Envelope(data=FeedbackOut(event_id=f"fbk_click_fallback_{body.request_id[:8]}", accepted=False, duplicate=False))

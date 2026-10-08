@@ -25,6 +25,7 @@ services:
         required: true
     environment:
       GRAPHREC_BASE_URL: http://api:8000
+      REDIS_URL: redis://redis:6379/0
     ports:
       - "${REEL_PORT:-5290}:5290"
     volumes:

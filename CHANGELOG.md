@@ -16,6 +16,13 @@ All notable changes to GraphRec. Entries reference the anomaly register in
 - **Health & Readiness Probes:** Added `/healthz` (liveness) and `/readyz` (deep readiness checking GraphRec API, Redis, catalogue sync, and active model version).
 - **Directory Traversal Protection:** Hardened SPA fallback file serving with strict path containment (`is_relative_to`).
 
+### Added (Phase 2 — Operability & Observability)
+- **Structured JSON Logging:** Implemented `JsonFormatter` (`app/observability.py`) with ISO 8601 timestamps, request durations, and request correlation IDs propagated through `contextvars`.
+- **Prometheus Metrics Exposition:** Added `/metrics` endpoint with token protection (`REEL_METRICS_TOKEN`), reporting HTTP traffic, GraphRec call latencies, fallback frequencies, feedback delivery failures, rate limit hits, and multi-worker Redis aggregation state.
+- **Idempotent Tenant Bootstrapping:** Enhanced `scripts/bootstrap_reel.py` to reuse existing active tenants automatically, mask secrets in console logs, and support `--teardown` to suspend tenants and clean local state.
+- **Production Hardened Container:** Pinned container dependencies (`requirements.txt`), configured unprivileged non-root user execution (`reel:reel`), and integrated deep readiness health check probes.
+- **Operations & Deployment Manuals:** Authored comprehensive deployment guide (`docs/REEL_DEPLOYMENT.md`) and operational runbook (`docs/REEL_OPERATIONS.md`).
+
 ## [1.2.0] - 2026-10-08
 
 ### Added (SaaS Elevation & Production-Grade UX)

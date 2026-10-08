@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends
 from ..dependencies import Identity, identity, services
 from ..errors import StoreError
 from ..graphrec import Services
+from ..observability import METRICS
 from ..schemas import Envelope, Receipt, WatchIn
 from ..store import now_seconds
 
@@ -53,14 +54,21 @@ async def record(
         dt_occurred = datetime.fromtimestamp(occurred_at_sec, timezone.utc)
 
     # Call GraphRec storefront events API
-    receipt = await svc.client.storefront.events.create(
-        event_type,
-        user_id=ident.user_id,
-        product_id=film_id,
-        context=context,
-        event_id=event_id,
-        occurred_at=dt_occurred,
-    )
+    try:
+        receipt = await svc.client.storefront.events.create(
+            event_type,
+            user_id=ident.user_id,
+            product_id=film_id,
+            context=context,
+            event_id=event_id,
+            occurred_at=dt_occurred,
+        )
+        gr_dur = time.perf_counter() - started
+        METRICS.observe_graphrec("events/create", "success", gr_dur)
+    except Exception:
+        gr_dur = time.perf_counter() - started
+        METRICS.observe_graphrec("events/create", "error", gr_dur)
+        raise
     latency = round((time.perf_counter() - started) * 1000)
 
     event_row = {
@@ -117,6 +125,8 @@ async def watch(body: WatchIn, ident: Identity = Depends(identity), svc: Service
                     logger.warning("Conversion feedback failed after retry for req %s: %s", body.request_id, exc)
 
         svc.storage.record_feedback("conversion", fb_succeeded)
+        if not fb_succeeded:
+            METRICS.observe_feedback_failure("conversion")
         if fb_succeeded and fb_result:
             out.feedback = "conversion " + ("duplicate" if fb_result.duplicate else "accepted")
         else:

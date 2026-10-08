@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     redis_url: Optional[str] = None
     reel_secret_key: str = "reel-dev-secret-key-please-change-in-production-min32"
     reel_env: str = "development"
+    reel_log_format: str = "json"
+    reel_metrics_token: Optional[str] = None
     reel_rate_limit_per_minute: int = 120
     reel_body_limit_bytes: int = 65536
     reel_allowed_origins: list[str] = [

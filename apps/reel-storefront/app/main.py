@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import secrets
+import time
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Optional
 
@@ -22,6 +23,7 @@ from .dependencies import (
 )
 from .errors import error_response, install_error_handlers
 from .graphrec import Services, build_services
+from .observability import METRICS, configure_logging, correlation_id_var
 from .routes import events, films, insight, recommendations, session
 
 logger = logging.getLogger("reel")
@@ -29,14 +31,15 @@ API_PREFIX = "/api/reel"
 
 
 def create_app(settings: Optional[Settings] = None, svc: Optional[Services] = None) -> FastAPI:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-
     cfg = settings or get_settings()
     cfg.check_production_safety()
+    configure_logging(cfg.reel_log_format)
     built = svc or build_services(cfg)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        if built.storage.is_redis and built.storage._redis is not None:
+            METRICS.bind_redis(built.storage._redis)
         app.state.services = built
         app.state.settings = cfg
         try:
@@ -62,8 +65,35 @@ def create_app(settings: Optional[Settings] = None, svc: Optional[Services] = No
     async def correlation_id_middleware(request: Request, call_next):
         cid = request.headers.get("X-Correlation-ID") or f"reel-{secrets.token_hex(8)}"
         request.state.correlation_id = cid
-        response: Response = await call_next(request)
+        token = correlation_id_var.set(cid)
+        start_time = time.monotonic()
+        try:
+            response: Response = await call_next(request)
+        finally:
+            duration = time.monotonic() - start_time
         response.headers["X-Correlation-ID"] = cid
+        route = request.scope.get("route")
+        if route and hasattr(route, "path"):
+            route_path = route.path
+            if request.url.path.startswith(API_PREFIX) and not route_path.startswith(API_PREFIX):
+                route_path = f"{API_PREFIX}{route_path}"
+        else:
+            route_path = request.url.path
+        METRICS.observe_http(request.method, route_path, response.status_code, duration)
+        logger.info(
+            "%s %s %d (%.2fms)",
+            request.method,
+            route_path,
+            response.status_code,
+            duration * 1000,
+            extra={
+                "method": request.method,
+                "route": route_path,
+                "status": response.status_code,
+                "duration_ms": round(duration * 1000, 2),
+            },
+        )
+        correlation_id_var.reset(token)
         return response
 
     @app.middleware("http")
@@ -107,6 +137,7 @@ def create_app(settings: Optional[Settings] = None, svc: Optional[Services] = No
             client_ip = request.client.host if request.client else "unknown"
             allowed, retry_after = built.storage.check_rate_limit(f"ip:{client_ip}", limit=cfg.reel_rate_limit_per_minute)
             if not allowed:
+                METRICS.observe_rate_limit_hit()
                 resp = error_response(429, "rate_limited", f"Rate limit exceeded. Try again in {retry_after} seconds.")
                 resp.headers["Retry-After"] = str(retry_after)
                 return resp
@@ -171,6 +202,21 @@ def create_app(settings: Optional[Settings] = None, svc: Optional[Services] = No
         return JSONResponse(
             status_code=status_code,
             content={"status": "ready" if all_ready else "not_ready", "checks": checks},
+        )
+
+    @app.get("/metrics", include_in_schema=False)
+    async def metrics(request: Request):
+        if cfg.reel_metrics_token:
+            auth_header = request.headers.get("Authorization") or ""
+            expected = f"Bearer {cfg.reel_metrics_token}"
+            if auth_header != expected:
+                return error_response(401, "unauthorized", "Invalid or missing metrics token.")
+        elif cfg.reel_env == "production":
+            return error_response(403, "forbidden", "Metrics endpoint requires REEL_METRICS_TOKEN in production.")
+
+        return Response(
+            content=METRICS.render(),
+            media_type="text/plain; version=0.0.4; charset=utf-8",
         )
 
     api = APIRouter(prefix=API_PREFIX)

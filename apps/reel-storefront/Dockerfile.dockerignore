@@ -5,6 +5,7 @@
 !apps/reel-storefront/app/**
 !apps/reel-storefront/scripts/**
 !apps/reel-storefront/data/**
+!apps/reel-storefront/requirements.txt
 !apps/reel-storefront/frontend/**
 apps/reel-storefront/frontend/node_modules
 apps/reel-storefront/frontend/dist
