@@ -120,3 +120,78 @@ export function Card({ title, description, actions, children, flush, className }
 export function SectionHeader({ title, description, aside, id }: { title: string; description?: ReactNode; aside?: ReactNode; id?: string }) {
   return <div className="section-head"><div><h2 id={id}>{title}</h2>{description ? <p>{description}</p> : null}</div>{aside ? <div className="section-aside">{aside}</div> : null}</div>;
 }
+
+/* ───────────────────────── CopyField ───────────────────────── */
+/** An accessible, one-click copy input field for API keys, tokens and URLs */
+export function CopyField({ value, label = "Copy", mask, mono = true }: { value: string; label?: string; mask?: boolean; mono?: boolean }) {
+  const [copied, setCopied] = useState(false);
+  const onCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* ignore */
+    }
+  };
+  return (
+    <div className="copy-field" style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", maxWidth: "100%" }}>
+      <input
+        type={mask ? "password" : "text"}
+        readOnly
+        value={value}
+        className={`input${mono ? " mono" : ""}`}
+        style={{ flex: 1, minWidth: 0, background: "var(--color-surface-2)", cursor: "text" }}
+        onFocus={(e) => e.target.select()}
+        aria-label={label}
+      />
+      <Button variant="secondary" size="sm" icon={copied ? "check" : "copy"} onClick={onCopy} title={copied ? "Copied!" : label}>
+        {copied ? "Copied" : label}
+      </Button>
+    </div>
+  );
+}
+
+/* ───────────────────────── CodeBlock ───────────────────────── */
+/** Preformatted code block with syntax language header and one-click copy */
+export function CodeBlock({ code, language, filename, title }: { code: string; language?: string; filename?: string; title?: string }) {
+  const [copied, setCopied] = useState(false);
+  const onCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* ignore */
+    }
+  };
+  return (
+    <div className="snippet code-block" style={{ width: "100%" }}>
+      <div className="s-head" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span className="s-label mono">{title ?? filename ?? language ?? "code"}</span>
+        <Button variant="ghost" size="sm" icon={copied ? "check" : "copy"} onClick={onCopy}>
+          {copied ? "Copied" : "Copy"}
+        </Button>
+      </div>
+      <pre tabIndex={0} aria-label={`${filename ?? language ?? "code"} sample`}>
+        <code>{code}</code>
+      </pre>
+    </div>
+  );
+}
+
+/* ───────────────────────── StatTile ───────────────────────── */
+/** High-emphasis KPI tile with change note and optional help tooltip */
+export function StatTile({ label, value, note, help, tone = "neutral" }: { label: string; value: ReactNode; note?: ReactNode; help?: string; tone?: StatusTone }) {
+  return (
+    <div className={`metric-tile tone-${tone}`} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <div className="mt-label" style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        <span>{label}</span>
+        {help ? <HelpTip label={label}>{help}</HelpTip> : null}
+      </div>
+      <div className="mt-value">{value}</div>
+      {note ? <div className="mt-note" style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)" }}>{note}</div> : null}
+    </div>
+  );
+}
+

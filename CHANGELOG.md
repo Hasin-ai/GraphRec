@@ -3,6 +3,20 @@
 All notable changes to GraphRec. Entries reference the anomaly register in
 `docs/GAP_ANALYSIS.md` (A-xx) and the decisions in `docs/DECISIONS.md` (D-xx).
 
+## [1.2.0] - 2026-10-08
+
+### Added (SaaS Elevation & Production-Grade UX)
+- **App Shell & Information Architecture:** Re-architected console navigation into 5 core developer SaaS job groups (`Overview`, `Catalog`, `Models`, `Integrate`, `Workspace`).
+- **Global Command Palette:** Added accessible `⌘K` / `Ctrl+K` command palette over all console and platform routes with fuzzy search, autocomplete, and keyboard arrow navigation.
+- **Platform Operator Mode Indicator:** Added unmistakable prominent operator mode banner and topbar status badge to prevent operator/tenant confusion.
+- **Tenant Onboarding Checklist:** First-run experience on Overview guided by real backend state (API credentials, interaction events, catalog sync, model training, playground testing, live activation).
+- **Returning Tenant Dashboard:** Added KPI strip (24h requests, p95 latency, model freshness, quota capacity), recent training runs table, and system health status.
+- **Interactive Playground:** Ranked item cards with copyable IDs, score indicators, storefront surface context selector, and live cURL & Python SDK code snippet generator.
+- **SDK Developer Guide:** Upgraded `/integration` with language switcher tabs (Python SDK and HTTP/cURL) and comprehensive quickstart snippets.
+- **Interactive Rule Simulation:** Added live preview on Recommendation Rules to simulate category diversity caps and freshness score boosts before saving.
+- **Bundle Optimization:** Implemented `manualChunks` code splitting separating vendor, auth, marketing (<120 KB gzip), platform, and tenant console chunks (<250 KB gzip).
+- **Component Documentation:** Published comprehensive UI system documentation in `web/src/ui/README.md`.
+
 ## Unreleased
 
 ### Added (Phases 4–6)

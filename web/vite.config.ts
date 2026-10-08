@@ -16,6 +16,29 @@ export default defineConfig({
       "/healthz": { target: apiProxy, changeOrigin: true },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules")) {
+            return "vendor";
+          }
+          if (id.includes("/pages/marketing/") || id.includes("/marketing/")) {
+            return "marketing";
+          }
+          if (id.includes("/pages/platform/")) {
+            return "platform";
+          }
+          if (id.includes("/pages/tenant/")) {
+            return "tenant";
+          }
+          if (id.includes("/pages/public/")) {
+            return "auth";
+          }
+        },
+      },
+    },
+  },
   test: {
     environment: "jsdom",
     environmentOptions: { jsdom: { url: "http://localhost/" } },

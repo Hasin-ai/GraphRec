@@ -114,6 +114,45 @@ export function CheckGroup({ options, value, onChange }: { options: { value: str
   );
 }
 
+export function Checkbox({ id, label, checked, onChange, disabled, hint }: { id: string; label: ReactNode; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; hint?: ReactNode }) {
+  return (
+    <label htmlFor={id} className="check-item" style={{ display: "inline-flex", alignItems: "flex-start", gap: 10, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.6 : 1 }}>
+      <input id={id} type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} style={{ marginTop: 3 }} />
+      <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <span style={{ fontSize: "var(--text-sm)", fontWeight: 500 }}>{label}</span>
+        {hint ? <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)" }}>{hint}</span> : null}
+      </span>
+    </label>
+  );
+}
+
+export function Switch({ id, label, checked, onChange, disabled }: { id: string; label: string; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+  return (
+    <label htmlFor={id} className="switch" style={{ cursor: disabled ? "not-allowed" : "pointer" }}>
+      <input id={id} type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+      <span className="track" aria-hidden="true" />
+      <span>{label}</span>
+    </label>
+  );
+}
+
+export function RadioGroup<T extends string>({ name, options, value, onChange, disabled }: { name: string; options: { value: T; label: string; hint?: string }[]; value: T; onChange: (v: T) => void; disabled?: boolean }) {
+  return (
+    <div className="radio-group" role="radiogroup" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {options.map((opt) => (
+        <label key={opt.value} className="radio-item" style={{ display: "inline-flex", alignItems: "flex-start", gap: 10, cursor: disabled ? "not-allowed" : "pointer" }}>
+          <input type="radio" name={name} value={opt.value} checked={value === opt.value} disabled={disabled} onChange={() => onChange(opt.value)} style={{ marginTop: 3 }} />
+          <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontSize: "var(--text-sm)", fontWeight: 500 }}>{opt.label}</span>
+            {opt.hint ? <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)" }}>{opt.hint}</span> : null}
+          </span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+
 /**
  * A form with the prototype's shape: an inline error banner above the fields, a
  * responsive field grid, and a submit row with an optional secondary link.

@@ -87,6 +87,77 @@ export function RecommendationRulesPage() {
             </Field>
           </div>
         </section>
+
+        <section className="rule-card">
+          <div className="rule-head">
+            <div>
+              <h2>Live Rule Simulation</h2>
+              <p>Preview how your configured rules adjust ranking on a sample candidate list before saving.</p>
+            </div>
+            <span className="pill tone-info">Interactive simulation</span>
+          </div>
+          <div className="rule-body" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
+              <div style={{ padding: 12, borderRadius: "var(--radius-md)", background: "var(--color-surface-2)", border: "1px solid var(--color-border)" }}>
+                <strong style={{ fontSize: 13, display: "block", marginBottom: 8, color: "var(--color-text-2)" }}>Original Model Rank (Pure Relevance)</strong>
+                <ol style={{ margin: 0, paddingLeft: 20, fontSize: 13, display: "flex", flexDirection: "column", gap: 6 }}>
+                  <li>Classic Sneaker <span className="muted">(Footwear · 2d old)</span></li>
+                  <li>Running Shoe <span className="muted">(Footwear · 14d old)</span></li>
+                  <li>Trail Boot <span className="muted">(Footwear · 40d old)</span></li>
+                  <li>Leather Belt <span className="muted">(Accessories · 5d old)</span></li>
+                  <li>Wool Sweater <span className="muted">(Apparel · 1d old)</span></li>
+                </ol>
+              </div>
+
+              <div style={{ padding: 12, borderRadius: "var(--radius-md)", background: "var(--color-surface-2)", border: "1px solid var(--color-border)" }}>
+                <strong style={{ fontSize: 13, display: "block", marginBottom: 8, color: "var(--color-accent-text)" }}>
+                  Post-Rule Serving Rank {draft.diversity || draft.freshness ? "(Modified)" : "(Unchanged)"}
+                </strong>
+                <ol style={{ margin: 0, paddingLeft: 20, fontSize: 13, display: "flex", flexDirection: "column", gap: 6 }}>
+                  {(() => {
+                    const maxP = Math.max(1, Number(draft.maxPer) || 2);
+                    const weightN = Math.max(0, Math.min(0.3, Number(draft.weight) || 0));
+                    // Base candidate items
+                    let items = [
+                      { title: "Classic Sneaker", cat: "Footwear", age: 2, score: 0.95 },
+                      { title: "Running Shoe", cat: "Footwear", age: 14, score: 0.91 },
+                      { title: "Trail Boot", cat: "Footwear", age: 40, score: 0.88 },
+                      { title: "Leather Belt", cat: "Accessories", age: 5, score: 0.82 },
+                      { title: "Wool Sweater", cat: "Apparel", age: 1, score: 0.80 },
+                    ];
+                    // Apply freshness score adjustment
+                    if (draft.freshness && weightN > 0) {
+                      items = items.map(it => ({
+                        ...it,
+                        score: it.score + (1 / Math.max(1, it.age)) * weightN,
+                      })).sort((a, b) => b.score - a.score);
+                    }
+                    // Apply category diversity cap
+                    if (draft.diversity) {
+                      const counts: Record<string, number> = {};
+                      const accepted: typeof items = [];
+                      const overflow: typeof items = [];
+                      for (const it of items) {
+                        counts[it.cat] = (counts[it.cat] || 0) + 1;
+                        if (counts[it.cat] <= maxP) accepted.push(it);
+                        else overflow.push(it);
+                      }
+                      items = [...accepted, ...overflow];
+                    }
+                    return items.map((it, idx) => (
+                      <li key={it.title} style={{ fontWeight: idx === 0 ? 600 : 400 }}>
+                        {it.title} <span className="muted">({it.cat} · {it.age}d old)</span>
+                      </li>
+                    ));
+                  })()}
+                </ol>
+              </div>
+            </div>
+            <span className="footnote">
+              Simulation applies decay half-life and category diversity re-ordering according to your input rules above.
+            </span>
+          </div>
+        </section>
       </fieldset>
       {writable ? <div className="save-bar">{dirty ? <span className="dirty">Unsaved changes</span> : <span className="clean">All changes saved</span>}
         <button type="button" className="btn btn-secondary" onClick={discard} disabled={!dirty || busy}>Discard</button>

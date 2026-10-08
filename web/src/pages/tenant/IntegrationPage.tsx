@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { Link } from "react-router-dom";
 import { apiKeys } from "../../api";
 import { apiUrl } from "../../api/client";
 import { useResource } from "../../hooks/useResource";
@@ -5,155 +7,262 @@ import { useSession } from "../../hooks/useSession";
 import { fmtDateTime } from "../../lib/format";
 import { SCOPE_SHORT } from "../../lib/scopes";
 import { Page } from "../../ui/Page";
-import { Cell, DefinitionList, Panel, PanelTable, Snippet, ErrorBanner, Skeleton } from "../../ui/primitives";
+import { Cell, DefinitionList, Panel, PanelTable, ErrorBanner, Skeleton } from "../../ui/primitives";
+import { CodeBlock } from "../../ui/kit";
 
 const SNIPPETS = {
-  bulk: `POST /v1/products:bulk-upsert
-Authorization: ApiKey <credential secret>
-{
-  "request_id": "sync-2026-09-25-1",
-  "products": [
+  pythonInstall: `pip install graphrec-sdk`,
+  pythonQuickstart: `from graphrec_sdk import GraphRec
+from graphrec_sdk.ecommerce import CatalogSync, EventTracker
+
+# Initialize client with your storefront API key
+client = GraphRec(base_url="https://api.graphrec.io", api_key="<YOUR_STOREFRONT_API_KEY>")
+
+# 1. Synchronize product catalog
+CatalogSync(client).run([
     {
-      "external_id": "SKU-4471",
-      "title": "Brass hinge, 75mm",
-      "category": "Hardware",
-      "price": "8.40",
-      "is_active": true,
-      "availability_status": "available",
-      "metadata": { "brand": "Northgate" }
+        "external_id": "SKU-4471",
+        "title": "Brass hinge, 75mm",
+        "price": "8.40",
+        "category": "Hardware",
+        "metadata": {"brand": "Northgate"}
     }
-  ]
-}`,
+])
+
+# 2. Track customer interaction events (buffered and batch-uploaded)
+with EventTracker(client, batch_size=100, flush_interval=5) as tracker:
+    tracker.view("cus-9931", "SKU-4471")
+    tracker.add_to_cart("cus-9931", "SKU-4471", quantity=1)
+    tracker.purchase("cus-9931", "SKU-4471", order_id="ORD-1001")
+
+# 3. Retrieve ranked recommendations
+recs = client.storefront.recommendations.get(
+    user_id="cus-9931",
+    top_n=10,
+    context={"surface": "cart"}
+)
+for item in recs.items:
+    print(f"Rank #{item.position}: {item.external_product_id}")`,
+
+  bulkCurl: `curl -X POST "https://api.graphrec.io/v1/products:bulk-upsert" \\
+  -H "Authorization: ApiKey <credential_secret>" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "request_id": "sync-2026-10-08-01",
+    "products": [
+      {
+        "external_id": "SKU-4471",
+        "title": "Brass hinge, 75mm",
+        "category": "Hardware",
+        "price": "8.40",
+        "is_active": true,
+        "availability_status": "available",
+        "metadata": { "brand": "Northgate" }
+      }
+    ]
+  }'`,
+
   bulkResponse: `200 OK
 {
-  "sync_id": "...", "status": "completed", "request_id": "sync-2026-09-25-1",
-  "accepted_count": 1, "created_count": 1, "updated_count": 0,
-  "skipped_count": 0, "rejected_count": 0, "failures": [],
+  "sync_id": "sync_89b21a",
+  "status": "completed",
+  "request_id": "sync-2026-10-08-01",
+  "accepted_count": 1,
+  "created_count": 1,
+  "updated_count": 0,
+  "skipped_count": 0,
+  "rejected_count": 0,
+  "failures": [],
   "outcomes": [{ "external_id": "SKU-4471", "status": "created" }]
 }`,
-  event: `POST /v1/events
+
+  eventCurl: `curl -X POST "https://api.graphrec.io/v1/events" \\
+  -H "Authorization: ApiKey <credential_secret>" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "event_id": "ev-33810",
+    "event_type": "purchase",
+    "user_id": "cus-9931",
+    "external_product_id": "SKU-4471",
+    "occurred_at": "2026-10-08T12:00:00Z",
+    "context": { "surface": "pdp" }
+  }'`,
+
+  batchCurl: `curl -X POST "https://api.graphrec.io/v1/events/batches" \\
+  -H "Authorization: ApiKey <credential_secret>" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "request_id": "batch-1001",
+    "events": [
+      {
+        "event_id": "ev-1",
+        "event_type": "view",
+        "user_id": "cus-9931",
+        "external_product_id": "SKU-4471"
+      }
+    ]
+  }'`,
+
+  recommendCurl: `curl -X POST "https://api.graphrec.io/v1/recommendations" \\
+  -H "Authorization: ApiKey <credential_secret>" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "user_id": "cus-9931",
+    "top_n": 10,
+    "fallback_allowed": true,
+    "context": { "surface": "cart" }
+  }'`,
+
+  errorResponse: `409 Conflict
 {
-  "event_id": "ev-33810",
-  "event_type": "purchase",
-  "user_id": "cus-9931",
-  "external_product_id": "SKU-6002",
-  "occurred_at": "2026-08-14T09:41:02Z",
-  "context": { "surface": "product_page" }
-}`,
-  batch: `POST /v1/events/batches
-{ "request_id": "events-1", "events": [ /* at most 1,000 items */ ] }`,
-  duplicate: `200 OK · duplicate confirmed
-{ "event_id": "ev-33810", "accepted": true, "duplicate": true, "received_at": "..." }`,
-  batchResult: `GET /v1/events/batches/{batch_id}
-{
-  "id": "…", "status": "completed", "request_id": "events-1",
-  "accepted_count": 870, "duplicate_count": 118, "rejected_count": 12,
-  "outcomes": [ { "event_id": "ev-1", "status": "accepted" } ],
-  "created_at": "..."
-}`,
-  recommend: `POST /v1/recommendations
-{
-  "user_id": "cus-9931",
-  "top_n": 10,
-  "fallback_allowed": true,
-  "exclude_product_ids": ["SKU-1000"],
-  "context": { "surface": "cart" }
-}`,
-  feedback: `POST /v1/feedback/impressions
-{
-  "event_id": "imp-1",
-  "request_id": "<request_id from the recommendation response>",
-  "items": [ { "external_product_id": "SKU-6002", "position": 1 } ]
-}`,
-  error: `{
   "error": {
     "code": "duplicate_resource",
     "message": "Model version tag 'v1' already exists for this tenant.",
-    "correlation_id": "2f0b…",
+    "correlation_id": "2f0b991a-8e2b-4e6f-9981-d4cb123e4567",
     "retryable": false
   }
 }`,
 };
 
 const ERRORS: [string, string, string, string][] = [
-  ["validation_failed", "422", "Supplied information cannot be accepted", "details.fields names each field"],
+  ["validation_failed", "422", "Supplied information cannot be accepted", "details.fields names each invalid field"],
   ["malformed_request", "400", "Headers or body violate the contract", "Content-Type must be application/json"],
-  ["authentication_failed", "401", "Credential missing, invalid, revoked or expired", "same message for every cause"],
-  ["insufficient_scope", "403", "The credential lacks the required scope", "keys:write, catalog:write, …"],
-  ["resource_not_found", "404", "No such resource in this tenant", "another tenant's resource looks identical"],
-  ["duplicate_resource / conflict", "409", "State or uniqueness prevents the operation", "model version tag already exists"],
-  ["payload_too_large", "413", "Body exceeds the configured limit", "JSON bodies and dataset uploads have separate limits"],
-  ["rate_limit_exceeded", "429", "A per-source or per-principal limit is exhausted", "Retry-After header is set"],
-  ["service_unavailable", "503", "A dependency is unavailable; retry later", "retryable: true"],
-  ["recommendation_unavailable", "503", "No personalized result and fallback was disallowed", "Allow fallback or provide usable history"],
+  ["authentication_failed", "401", "Credential missing, invalid, revoked or expired", "Uniform security message across causes"],
+  ["insufficient_scope", "403", "The credential lacks the required scope", "keys:write, catalog:write, events:write, …"],
+  ["resource_not_found", "404", "No such resource in this tenant", "Multi-tenant isolated; foreign IDs return 404"],
+  ["duplicate_resource / conflict", "409", "State or uniqueness prevents the operation", "Version tag or resource already exists"],
+  ["payload_too_large", "413", "Body exceeds the configured limit", "JSON bodies and dataset uploads have distinct limits"],
+  ["rate_limit_exceeded", "429", "Per-minute rate limit is exhausted", "Retry-After response header is provided"],
+  ["service_unavailable", "503", "A backend dependency is unavailable; retry later", "retryable: true flag included"],
+  ["recommendation_unavailable", "503", "No personalized result and fallback disallowed", "Allow fallback or provide user history"],
 ];
 
 export function IntegrationPage() {
   const { can } = useSession();
+  const [activeLang, setActiveLang] = useState<"python" | "curl">("python");
   const keys = useResource(() => (can("keys:write") ? apiKeys.list() : Promise.resolve({ items: [] })), [can("keys:write")]);
   const usable = keys.data?.items.filter((k) => k.status === "active") ?? [];
-  // The origin this console actually calls: VITE_API_BASE_URL when set, otherwise this origin.
   const base = new URL(apiUrl("/v1"), window.location.origin).toString();
 
   return (
     <Page
       crumbs={[{ label: "Home", to: "/home" }, { label: "Integration" }]}
-      kicker="Reference"
+      kicker="Developer Guide"
       title="Integration"
-      subtitle="Connect your application to the GraphRec API."
+      subtitle="Step-by-step developer guide and SDK reference for connecting your storefront to GraphRec."
     >
+      <div className="tabs" style={{ marginBottom: 16 }}>
+        <button
+          type="button"
+          className={activeLang === "python" ? "active" : ""}
+          onClick={() => setActiveLang("python")}
+        >
+          Python SDK (Recommended)
+        </button>
+        <button
+          type="button"
+          className={activeLang === "curl" ? "active" : ""}
+          onClick={() => setActiveLang("curl")}
+        >
+          Direct HTTP / cURL
+        </button>
+      </div>
+
       <DefinitionList
         items={[
-          { label: "Base URL", value: base, mono: true, copy: base },
-          { label: "Integration authentication", value: "Authorization: ApiKey <credential secret>", mono: true, copy: "Authorization: ApiKey " },
-          { label: "Console authentication", value: "Authorization: Bearer <access token>", mono: true },
-          { label: "Content type", value: "application/json (multipart/form-data for dataset upload)", mono: true },
-          { label: "Idempotency", value: "External identifiers are the idempotency key for products and events; registration takes an Idempotency-Key header." },
-          { label: "Correlation", value: "Every response carries X-Correlation-ID; send one to trace a call end to end.", mono: false },
+          { label: "API Base URL", value: base, mono: true, copy: base },
+          { label: "SDK Authentication", value: "client = GraphRec(api_key='<KEY>')", mono: true },
+          { label: "HTTP Header Authentication", value: "Authorization: ApiKey <credential secret>", mono: true, copy: "Authorization: ApiKey " },
+          { label: "Idempotency", value: "External product IDs and event IDs serve as natural idempotency keys; duplicate events are acknowledged safely." },
+          { label: "Tracing & Correlation", value: "Every response carries X-Correlation-ID for end-to-end telemetry and debugging." },
         ]}
       />
+
       <div className="panels">
-        {can("keys:write") ? <Panel title="Your active credentials" note={keys.data ? `${usable.length} usable` : undefined} body="Each credential can only do what it was granted. Anything else is refused with a 403 error.">
-          {keys.error ? <ErrorBanner error={keys.error} onRetry={keys.reload} /> : null}
-          {!keys.data ? keys.loading ? <Skeleton rows={2} /> : null : usable.length ? (
-            <PanelTable
-              columns={["Prefix", "Granted operations", "Expires"]}
-              rows={usable.map((k) => (
-                <tr key={k.id}>
-                  <Cell mono>{k.prefix}…</Cell>
-                  <Cell muted>{k.scopes.map((s) => SCOPE_SHORT[s] ?? s).join(" · ")}</Cell>
-                  <Cell mono>{fmtDateTime(k.expires_at)}</Cell>
-                </tr>
-              ))}
-            />
-          ) : (
-            <p className="p-body">No usable credential yet. Create one under API Credentials.</p>
-          )}
-        </Panel> : null}
-        <p className="footnote">The examples below use illustrative identifiers and values. Replace them with your own data and keep credential secrets on your server.</p>
-        <Panel title="Catalog synchronization" body="Bulk upsert accepts at most 1,000 items and is bounded by the request body limit. Results remain available under GET /v1/catalog-syncs/{sync_id}. A repeated request_id returns the original result.">
-          <div className="snippets">
-            <Snippet label="POST /v1/products:bulk-upsert" code={SNIPPETS.bulk} />
-            <Snippet label="Response" code={SNIPPETS.bulkResponse} />
-          </div>
-        </Panel>
-        <Panel title="Event submission" body="Single and batch share one event shape. A repeated event identifier is confirmed as a duplicate. Batch item outcomes and safe rejection reasons are retained.">
-          <div className="snippets">
-            <Snippet label="POST /v1/events" code={SNIPPETS.event} />
-            <Snippet label="POST /v1/events/batches" code={SNIPPETS.batch} />
-            <Snippet label="Duplicate confirmed" code={SNIPPETS.duplicate} />
-            <Snippet label="Batch result" code={SNIPPETS.batchResult} />
-          </div>
-        </Panel>
-        <Panel title="Recommendation request and feedback" body="Server-to-server only. These operations have no screen in this console; the fallback rate and serving metrics on Service Status are their only trace here. Responses name the serving model version and strategy (personalized, session or popular_fallback).">
-          <div className="snippets">
-            <Snippet label="POST /v1/recommendations" code={SNIPPETS.recommend} />
-            <Snippet label="POST /v1/feedback/impressions | clicks | conversions" code={SNIPPETS.feedback} />
-          </div>
-        </Panel>
-        <Panel title="Error vocabulary" body="Every failure carries a correlation identifier. Payloads and credentials never appear in an error body.">
+        {can("keys:write") ? (
+          <Panel
+            title="Your active API credentials"
+            note={keys.data ? `${usable.length} usable` : undefined}
+            body="Storefront credentials must hold appropriate scopes (e.g. catalog:write, events:write, recommendations:read)."
+          >
+            {keys.error ? <ErrorBanner error={keys.error} onRetry={keys.reload} /> : null}
+            {!keys.data ? (
+              keys.loading ? <Skeleton rows={2} /> : null
+            ) : usable.length ? (
+              <PanelTable
+                columns={["Prefix", "Granted permissions", "Expires"]}
+                rows={usable.map((k) => (
+                  <tr key={k.id}>
+                    <Cell mono>{k.prefix}…</Cell>
+                    <Cell muted>{k.scopes.map((s) => SCOPE_SHORT[s] ?? s).join(" · ")}</Cell>
+                    <Cell mono>{k.expires_at ? fmtDateTime(k.expires_at) : "No expiry"}</Cell>
+                  </tr>
+                ))}
+              />
+            ) : (
+              <div style={{ padding: "12px 0" }}>
+                <p className="p-body">No usable credentials created yet.</p>
+                <Link to="/credentials" className="btn btn-primary btn-sm" style={{ display: "inline-flex", marginTop: 8 }}>
+                  Create API credential
+                </Link>
+              </div>
+            )}
+          </Panel>
+        ) : null}
+
+        {activeLang === "python" ? (
+          <>
+            <Panel
+              title="1. Install the Python SDK"
+              body="GraphRec provides an asynchronous and synchronous typed Python client with built-in retries, Pydantic v2 schemas, and e-commerce helpers."
+            >
+              <CodeBlock code={SNIPPETS.pythonInstall} language="bash" title="Installation" />
+            </Panel>
+
+            <Panel
+              title="2. Full E-Commerce Quickstart"
+              body="Sync your product catalog, buffer interaction events, and retrieve personalized recommendations in under 30 lines of code."
+            >
+              <CodeBlock code={SNIPPETS.pythonQuickstart} language="python" title="storefront_integration.py" />
+            </Panel>
+          </>
+        ) : (
+          <>
+            <Panel
+              title="1. Catalog Synchronization"
+              body="Bulk upsert accepts up to 1,000 items per batch. Results are retained and idempotently queried by request_id."
+            >
+              <div className="snippets">
+                <CodeBlock code={SNIPPETS.bulkCurl} language="bash" title="POST /v1/products:bulk-upsert" />
+                <CodeBlock code={SNIPPETS.bulkResponse} language="json" title="Response (200 OK)" />
+              </div>
+            </Panel>
+
+            <Panel
+              title="2. Event Submission"
+              body="Stream real-time interaction events (view, add_to_cart, purchase). Repeated event_id values are safely deduplicated."
+            >
+              <div className="snippets">
+                <CodeBlock code={SNIPPETS.eventCurl} language="bash" title="POST /v1/events" />
+                <CodeBlock code={SNIPPETS.batchCurl} language="bash" title="POST /v1/events/batches" />
+              </div>
+            </Panel>
+
+            <Panel
+              title="3. Recommendation Inference"
+              body="Request ranked recommendations by user ID and storefront surface. Responses name the serving model and fallback state."
+            >
+              <CodeBlock code={SNIPPETS.recommendCurl} language="bash" title="POST /v1/recommendations" />
+            </Panel>
+          </>
+        )}
+
+        <Panel
+          title="Error vocabulary & Status codes"
+          body="Every failure carries an error code and correlation ID. Secrets and sensitive customer payloads are never reflected in error messages."
+        >
           <PanelTable
-            columns={["Code", "HTTP", "Meaning", "Note"]}
+            columns={["Code", "HTTP", "Meaning", "Detail"]}
             rows={ERRORS.map((r) => (
               <tr key={r[0]}>
                 <Cell mono>{r[0]}</Cell>
@@ -163,7 +272,9 @@ export function IntegrationPage() {
               </tr>
             ))}
           />
-          <Snippet label="Error body" code={SNIPPETS.error} />
+          <div style={{ marginTop: 12 }}>
+            <CodeBlock code={SNIPPETS.errorResponse} language="json" title="Example error payload" />
+          </div>
         </Panel>
       </div>
     </Page>

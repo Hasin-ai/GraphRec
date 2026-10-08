@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation } from "react-router-dom";
+import { billing } from "../api";
 import { consumeExplicitSignOut, hasOperatorRole, roleLabel, sessionTenantId, type OperatorRole } from "../auth/session";
 import { useMeta } from "../hooks/useMeta";
+import { useResource } from "../hooks/useResource";
 import { useSession } from "../hooks/useSession";
 import { useTheme, type ThemeMode } from "../hooks/useTheme";
 import { useToast } from "../hooks/useToast";
 import { BrandMark, GraphIllustration } from "../brand/BrandMark";
 import { ThemeButton } from "../brand/ThemeButton";
 import { BRAND } from "../marketing/copy";
+import { quotaState } from "../lib/quota";
+import { CommandPalette } from "../ui/CommandPalette";
 import { Icon, type IconName } from "../ui/icons";
 import { menuKeys, usePopover } from "../ui/kit";
 
@@ -15,8 +19,8 @@ interface NavItem { label: string; to: string; icon: IconName; scope?: string; e
 interface NavGroup { id: string; label: string; items: NavItem[] }
 /** Information architecture. Every route predates this pass except /playground. */
 const TENANT_NAV: NavGroup[] = [
-  { id: "top", label: "", items: [{ label: "Overview", to: "/home", icon: "home" }] },
-  { id: "data", label: "Data", items: [
+  { id: "overview", label: "", items: [{ label: "Overview", to: "/home", icon: "home" }] },
+  { id: "catalog", label: "Catalog", items: [
     { label: "Products", to: "/products", icon: "box", scope: "catalog:read", end: true },
     { label: "Catalog sync", to: "/products/sync", icon: "refresh-cw", scope: "catalog:write" },
     { label: "Events", to: "/events/submit", icon: "activity", scope: "events:write" },
@@ -25,22 +29,19 @@ const TENANT_NAV: NavGroup[] = [
   { id: "models", label: "Models", items: [
     { label: "Training", to: "/training", icon: "cpu", scope: "training:read" },
     { label: "Model Versions", to: "/models", icon: "layers", scope: "models:read" },
-  ] },
-  { id: "recs", label: "Recommendations", items: [
     { label: "Rules", to: "/recommendation-rules", icon: "sliders", scope: "models:read" },
     { label: "Playground", to: "/playground", icon: "play", scope: "recommendations:read" },
   ] },
-  { id: "monitoring", label: "Monitoring", items: [
-    { label: "Service Status", to: "/service-status", icon: "server", scope: "deployments:read" },
-    { label: "Usage & Quotas", to: "/usage", icon: "gauge", scope: "usage:read" },
-  ] },
-  { id: "developer", label: "Developer", items: [
-    { label: "API Credentials", to: "/credentials", icon: "key", scope: "keys:write" },
+  { id: "integrate", label: "Integrate", items: [
     { label: "Integration", to: "/integration", icon: "plug" },
+    { label: "API Credentials", to: "/credentials", icon: "key", scope: "keys:write" },
   ] },
-  { id: "admin", label: "Admin", items: [
+  { id: "workspace", label: "Workspace", items: [
     { label: "Team members", to: "/users", icon: "users", scope: "users:write" },
+    { label: "Usage & Quotas", to: "/usage", icon: "gauge", scope: "usage:read" },
     { label: "Audit trail", to: "/audit", icon: "activity", scope: "audit:read" },
+    { label: "Service Status", to: "/service-status", icon: "server", scope: "deployments:read" },
+    { label: "Account", to: "/account", icon: "user" },
   ] },
 ];
 /** D-04: platform items name the operator roles that may open them ("a|b" = any of). */
@@ -187,9 +188,36 @@ function ProductVersion({ collapsed }: { collapsed: boolean }) {
   return <div className="sb-version" data-testid="product-version">GraphRec v{meta.version}{meta.environment === "development" ? " · development" : ""}</div>;
 }
 
-function Sidebar({ home, groups, can, header, footer, collapsed, onCollapse, onClose }: {
+function SidebarQuota() {
+  const { can } = useSession();
+  if (!can("usage:read")) return null;
+  return <SidebarQuotaWidget />;
+}
+
+function SidebarQuotaWidget() {
+  const usage = useResource(() => billing.usage(), []);
+  const dims = usage.data?.dimensions ?? [];
+  if (!dims.length) return null;
+  const exhausted = dims.filter(d => quotaState(d.used, d.limit).status === "exhausted");
+  const approaching = dims.filter(d => quotaState(d.used, d.limit).status === "approaching");
+  const tone = exhausted.length ? "is-danger" : approaching.length ? "is-warn" : "";
+  const label = exhausted.length ? `${exhausted.length} limit reached` : approaching.length ? `${approaching.length} limit near cap` : "Quotas within limits";
+  return (
+    <Link to="/usage" className="sb-quota" title="View usage & limits">
+      <div className="sb-quota-head">
+        <span>Plan quotas</span>
+        <span className={exhausted.length ? "danger" : approaching.length ? "warn" : "ok"}>{label}</span>
+      </div>
+      <div className="sb-quota-bar">
+        <div className={`sb-quota-fill ${tone}`} style={{ width: exhausted.length ? "100%" : approaching.length ? "85%" : "30%" }} />
+      </div>
+    </Link>
+  );
+}
+
+function Sidebar({ home, groups, can, header, footer, collapsed, onCollapse, onClose, onOpenSearch }: {
   home: string; groups: NavGroup[]; can: (s: string) => boolean; header: (collapsed: boolean) => ReactNode; footer: (collapsed: boolean) => ReactNode;
-  collapsed: boolean; onCollapse: () => void; onClose: () => void;
+  collapsed: boolean; onCollapse: () => void; onClose: () => void; onOpenSearch?: () => void;
 }) {
   return <aside id="console-navigation" className="sidebar" aria-label="Sidebar">
     <div className="sb-head">
@@ -199,14 +227,25 @@ function Sidebar({ home, groups, can, header, footer, collapsed, onCollapse, onC
         <button type="button" className="icon-button sb-close" onClick={onClose} aria-label="Close navigation"><Icon name="x" /></button>
       </div>
       {header(collapsed)}
+      {onOpenSearch ? (
+        <button type="button" className="cmd-trigger" onClick={onOpenSearch} aria-label={collapsed ? "Search or jump to (⌘K)" : undefined} data-tip={collapsed ? "Search (⌘K)" : undefined}>
+          <Icon name="search" size={14} /><span className="cmd-trigger-text">Search…</span><kbd className="cmd-kbd">⌘K</kbd>
+        </button>
+      ) : null}
     </div>
     <Nav groups={groups} can={can} collapsed={collapsed} />
     <div className="sb-foot">{footer(collapsed)}<ProductVersion collapsed={collapsed} /></div>
   </aside>;
 }
 
-function Shell({ home, sidebar, children }: { home: string; sidebar: (state: { collapsed: boolean; toggleCollapsed: () => void; closeDrawer: () => void }) => ReactNode; children: ReactNode }) {
+function Shell({ home, isPlatform = false, sidebar, children }: {
+  home: string; isPlatform?: boolean;
+  sidebar: (state: { collapsed: boolean; toggleCollapsed: () => void; closeDrawer: () => void; openSearch: () => void }) => ReactNode;
+  children: ReactNode;
+}) {
   const [open, setOpen] = useState(false);
+  const [cmdOpen, setCmdOpen] = useState(false);
+  const { can } = useSession();
   const midWidth = typeof window !== "undefined" && window.matchMedia?.("(max-width: 1279px)").matches;
   const [collapsed, setCollapsed] = usePref<boolean>("graphrec.sidebar.collapsed", !!midWidth);
   const [drawer, setDrawer] = useState(() => typeof window !== "undefined" && !!window.matchMedia?.("(max-width: 1023px)").matches);
@@ -229,15 +268,33 @@ function Shell({ home, sidebar, children }: { home: string; sidebar: (state: { c
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [open]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setCmdOpen(prev => !prev);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return <div className={`app-shell${open ? ' nav-open' : ''}${railCollapsed ? ' sb-collapsed' : ''}`}>
     <a className="skip-link" href="#main-content">Skip to content</a>
     <header className="topbar">
       <button type="button" className="icon-button" aria-label={open ? 'Close navigation' : 'Open navigation'} aria-expanded={open} aria-controls="console-navigation" onClick={() => setOpen(!open)}><Icon name={open ? "x" : "menu"} size={18} /></button>
       <Link to={home} className="sb-logo"><BrandMark />GraphRec</Link>
+      <button type="button" className="cmd-trigger" style={{ maxWidth: 160, marginLeft: 8 }} onClick={() => setCmdOpen(true)} aria-label="Search routes (⌘K)">
+        <Icon name="search" size={14} /><span className="cmd-trigger-text">Search…</span><kbd className="cmd-kbd">⌘K</kbd>
+      </button>
+      {isPlatform ? <span className="operator-topbar-pill"><Icon name="shield" size={13} /> Operator</span> : null}
+      <div style={{ marginLeft: "auto" }}><ThemeButton /></div>
     </header>
-    {sidebar({ collapsed: railCollapsed, toggleCollapsed: () => setCollapsed(!collapsed), closeDrawer: () => setOpen(false) })}
+    {sidebar({ collapsed: railCollapsed, toggleCollapsed: () => setCollapsed(!collapsed), closeDrawer: () => setOpen(false), openSearch: () => setCmdOpen(true) })}
     {open ? <div className="nav-scrim" aria-hidden="true" onClick={() => setOpen(false)} /> : null}
     <main id="main-content" tabIndex={-1} className="main"><div className="content">{children}</div></main>
+    <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} isPlatform={isPlatform} can={can} />
   </div>;
 }
 export function PublicLayout() {
@@ -299,10 +356,13 @@ export function TenantLayout() {
   const tenantId = sessionTenantId(tenant);
   const name = displayName(tenant.email, tenant.role);
   const role = roleLabel(tenant.role).replace(/^tenant /, "");
-  return <Shell key={tenant.accessToken} home="/home" sidebar={({ collapsed, toggleCollapsed, closeDrawer }) => <Sidebar home="/home" groups={TENANT_NAV} can={can}
-    collapsed={collapsed} onCollapse={toggleCollapsed} onClose={closeDrawer}
+  return <Shell key={tenant.accessToken} home="/home" sidebar={({ collapsed, toggleCollapsed, closeDrawer, openSearch }) => <Sidebar home="/home" groups={TENANT_NAV} can={can}
+    collapsed={collapsed} onCollapse={toggleCollapsed} onClose={closeDrawer} onOpenSearch={openSearch}
     header={c => <WorkspaceSwitcher name={tenant.tenantName ?? "Your workspace"} tenantId={tenantId} home="/home" collapsed={c} caption="Tenant workspace" />}
-    footer={c => <UserMenu name={name} detail={tenant.email} role={role[0].toUpperCase() + role.slice(1)} collapsed={c} onSignOut={signOutTenant} accountTo="/account" plansTo="/pricing" />} />}>
+    footer={c => <>
+      {!c ? <SidebarQuota /> : null}
+      <UserMenu name={name} detail={tenant.email} role={role[0].toUpperCase() + role.slice(1)} collapsed={c} onSignOut={signOutTenant} accountTo="/account" plansTo="/pricing" />
+    </>} />}>
     <Outlet />
   </Shell>;
 }
@@ -315,12 +375,20 @@ export function RequirePlatform() {
 export function PlatformLayout() {
   const { platform, signOutPlatform } = useSession();
   if (!platform) return <Navigate to="/admin/login" replace />;
-  return <Shell key={platform.token} home="/admin/status" sidebar={({ collapsed, toggleCollapsed, closeDrawer }) => <Sidebar home="/admin/status" groups={PLATFORM_NAV} can={scope => hasOperatorRole(platform, ...(scope.split("|") as OperatorRole[]))}
-    collapsed={collapsed} onCollapse={toggleCollapsed} onClose={closeDrawer}
-    header={c => <WorkspaceSwitcher name="Platform" tenantId={null} home="/admin/status" collapsed={c} caption="Operator console" />}
-    footer={c => <UserMenu name={platform.displayName ?? "Platform operator"} detail={platform.email ?? "Development bootstrap token"} role={platform.credential === "operator" ? "Operator" : "Bootstrap"} collapsed={c} onSignOut={signOutPlatform} />} />}>
-    <Outlet />
-  </Shell>;
+  return (
+    <>
+      <div className="operator-banner">
+        <span className="operator-badge"><Icon name="shield" size={13} /> Operator Console</span>
+        <span className="operator-banner-note">Platform Operator Mode — managing system infrastructure and tenant accounts</span>
+      </div>
+      <Shell key={platform.token} home="/admin/status" isPlatform sidebar={({ collapsed, toggleCollapsed, closeDrawer, openSearch }) => <Sidebar home="/admin/status" groups={PLATFORM_NAV} can={scope => hasOperatorRole(platform, ...(scope.split("|") as OperatorRole[]))}
+        collapsed={collapsed} onCollapse={toggleCollapsed} onClose={closeDrawer} onOpenSearch={openSearch}
+        header={c => <WorkspaceSwitcher name="Platform" tenantId={null} home="/admin/status" collapsed={c} caption="Operator console" />}
+        footer={c => <UserMenu name={platform.displayName ?? "Platform operator"} detail={platform.email ?? "Development bootstrap token"} role={platform.credential === "operator" ? "Operator" : "Bootstrap"} collapsed={c} onSignOut={signOutPlatform} />} />}>
+        <Outlet />
+      </Shell>
+    </>
+  );
 }
 export function ErrorLayout() {
   const { tenant, platform } = useSession();

@@ -55,8 +55,63 @@ const timeFmt = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-d
  * top-level pages rely on the sidebar for location. A refresh action shows a
  * spinner while loading and the time of the last successful load.
  */
+export function PageHeader({
+  crumbs,
+  title,
+  badge,
+  actions,
+  subtitle,
+  updated,
+}: {
+  crumbs?: Crumb[];
+  kicker?: string;
+  title: string;
+  badge?: ReactNode;
+  actions?: HeaderAction[];
+  subtitle?: ReactNode;
+  updated?: ReactNode;
+}) {
+  const nested = crumbs && crumbs.length > 2 ? crumbs.slice(1) : null;
+  const refresh = actions?.find(a => a.icon === "refresh" || /^refresh/i.test(a.label));
+  const stamp = useLoadedStamp(refresh ? !!refresh.disabled : undefined);
+  return (
+    <header className="page-header">
+      {nested ? <Breadcrumbs items={nested} /> : null}
+      <div className="title-row">
+        <div className="title-block">
+          <div className="title-line"><h1>{title}</h1>{badge}</div>
+          {subtitle ? <p className="subtitle">{subtitle}</p> : null}
+        </div>
+        {actions && actions.length ? (
+          <div className="actions">
+            {refresh ? <span className="updated-stamp" aria-live="polite">{refresh.disabled ? "Refreshing…" : updated ?? (stamp ? `Updated ${timeFmt.format(stamp)}` : null)}</span> : null}
+            {actions.map((a) => {
+              const isRefresh = a === refresh;
+              return <span className="action" key={a.label}>
+                <button
+                  type="button"
+                  className={`btn ${a.variant === "primary" ? "btn-primary" : a.variant === "danger" ? "btn-danger" : "btn-secondary"}`}
+                  disabled={a.disabled}
+                  title={a.reason}
+                  aria-busy={isRefresh && a.disabled ? true : undefined}
+                  onClick={a.onClick}
+                >
+                  {isRefresh ? <Icon name="refresh-cw" size={15} className={a.disabled ? "spin" : undefined} /> : /^\+\s*/.test(a.label) ? <Icon name="plus" size={15} /> : null}
+                  {a.label === "Refresh" ? "Refresh" : a.label.replace(/^\+\s*/, "")}
+                </button>
+                {a.reason && !isRefresh ? <span className="reason">{a.reason}</span> : null}
+              </span>;
+            })}
+          </div>
+        ) : updated ? <div className="actions"><span className="updated-stamp">{updated}</span></div> : null}
+      </div>
+    </header>
+  );
+}
+
 export function Page({
   crumbs,
+  kicker,
   title,
   badge,
   actions,
@@ -74,43 +129,19 @@ export function Page({
   children?: ReactNode;
 }) {
   useEffect(() => { document.title = `${title} · GraphRec`; }, [title]);
-  const nested = crumbs && crumbs.length > 2 ? crumbs.slice(1) : null;
-  const refresh = actions?.find(a => a.icon === "refresh" || /^refresh/i.test(a.label));
-  const stamp = useLoadedStamp(refresh ? !!refresh.disabled : undefined);
   return (
     <>
-      <header className="page-header">
-        {nested ? <Breadcrumbs items={nested} /> : null}
-        <div className="title-row">
-          <div className="title-block">
-            <div className="title-line"><h1>{title}</h1>{badge}</div>
-            {subtitle ? <p className="subtitle">{subtitle}</p> : null}
-          </div>
-          {actions && actions.length ? (
-            <div className="actions">
-              {refresh ? <span className="updated-stamp" aria-live="polite">{refresh.disabled ? "Refreshing…" : updated ?? (stamp ? `Updated ${timeFmt.format(stamp)}` : null)}</span> : null}
-              {actions.map((a) => {
-                const isRefresh = a === refresh;
-                return <span className="action" key={a.label}>
-                  <button
-                    type="button"
-                    className={`btn ${a.variant === "primary" ? "btn-primary" : a.variant === "danger" ? "btn-danger" : "btn-secondary"}`}
-                    disabled={a.disabled}
-                    title={a.reason}
-                    aria-busy={isRefresh && a.disabled ? true : undefined}
-                    onClick={a.onClick}
-                  >
-                    {isRefresh ? <Icon name="refresh-cw" size={15} className={a.disabled ? "spin" : undefined} /> : /^\+\s*/.test(a.label) ? <Icon name="plus" size={15} /> : null}
-                    {a.label === "Refresh" ? "Refresh" : a.label.replace(/^\+\s*/, "")}
-                  </button>
-                  {a.reason && !isRefresh ? <span className="reason">{a.reason}</span> : null}
-                </span>;
-              })}
-            </div>
-          ) : updated ? <div className="actions"><span className="updated-stamp">{updated}</span></div> : null}
-        </div>
-      </header>
+      <PageHeader
+        crumbs={crumbs}
+        kicker={kicker}
+        title={title}
+        badge={badge}
+        actions={actions}
+        subtitle={subtitle}
+        updated={updated}
+      />
       <div className="page-body">{children}</div>
     </>
   );
 }
+

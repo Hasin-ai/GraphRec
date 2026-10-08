@@ -10,13 +10,173 @@
  *  Content width      1200px pages, 70ch prose
  * ═══════════════════════════════════════════════════════════════════════ */
 :root {
-  --space-0: 0; --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 24px; --space-6: 32px; --space-7: 48px;
-  --text-xs: 12px; --text-sm: 13px; --text-md: 14px; --text-lg: 16px; --text-xl: 18px; --text-2xl: 22px; --text-3xl: 28px;
-  --content-max: 1200px; --prose-max: 70ch;
-  --radius-card: 12px;
-  --color-link: var(--info);
-  --color-success: var(--ok); --color-warning: var(--warn); --color-danger: var(--danger); --color-neutral: var(--neu);
-  --row-h: 48px;
+  color-scheme: light;
+
+  /* Spacing: 4px base scale */
+  --space-0: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 48px;
+
+  /* Typography scale */
+  --font-heading: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-heading-weight: 650;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 18px;
+  --text-2xl: 22px;
+  --text-3xl: 28px;
+  --text-title: 24px;
+
+  /* Radii */
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-card: 10px;
+  --radius-pill: 999px;
+
+  /* Layout */
+  --content-max: 1240px;
+  --prose-max: 72ch;
+  --sidebar-w: 256px;
+  --sidebar-w-collapsed: 64px;
+  --row-h: 44px;
+
+  /* Semantic Color Foundation: Light */
+  --bg: #f8f9fb;
+  --color-canvas: var(--bg);
+  --color-bg: #ffffff;
+  --surface: #ffffff;
+  --color-surface: var(--surface);
+  --surface-raised: #f3f4f7;
+  --color-surface-2: var(--surface-raised);
+  --color-surface-3: #eaecee;
+  --border: #e2e5eb;
+  --color-border: var(--border);
+  --border-strong: #cfd4dc;
+  --color-border-strong: var(--border-strong);
+  --color-divider: var(--border);
+
+  --text: #13161c;
+  --color-text: var(--text);
+  --text-muted: #535a68;
+  --color-text-2: var(--text-muted);
+  --color-text-3: #6c7482;
+  --color-neutral-600: var(--text-muted);
+  --color-neutral-500: var(--color-text-3);
+
+  /* Primary Brand & Interactive */
+  --accent: #5542f6;
+  --color-accent: var(--accent);
+  --accent-soft: #f0eeff;
+  --color-accent-soft: var(--accent-soft);
+  --accent-text: #4132c8;
+  --color-accent-text: var(--accent-text);
+  --color-link: var(--accent-text);
+  --ring: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+
+  /* Status Colors */
+  --ok: #10794e;     --ok-solid: #169360;  --ok-bg: #eaf6f0;  --ok-line: #b2dfca;
+  --warn: #965a00;   --warn-solid: #f59e0b; --warn-bg: #fff8eb; --warn-line: #f6d89e;
+  --danger: #c2272d; --danger-solid: #e5484d; --danger-bg: #fdeeee; --danger-line: #f4c0c2;
+  --info: #1b5cb8;   --info-solid: #3b82f6; --info-bg: #edf4fe; --info-line: #bad4f8;
+  --neu: #535a68;    --neu-solid: #9aa1ad;  --neu-bg: #f0f2f5;  --neu-line: #d3d7de;
+
+  --color-success: var(--ok);
+  --color-warning: var(--warn);
+  --color-danger: var(--danger);
+  --color-neutral: var(--neu);
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px rgb(16 22 36 / 5%);
+  --shadow-md: 0 1px 3px rgb(16 22 36 / 6%), 0 6px 16px -4px rgb(16 22 36 / 10%);
+  --shadow-lg: 0 3px 6px -2px rgb(16 22 36 / 8%), 0 18px 42px -8px rgb(16 22 36 / 18%);
+  --shadow-pop: 0 1px 3px rgb(16 22 36 / 6%), 0 12px 32px -6px rgb(16 22 36 / 18%);
+
+  /* Ink */
+  --color-ink: #13161c;
+  --color-ink-hover: #222630;
+  --color-on-ink: #ffffff;
+
+  /* Auth / Showcase Dark Panels */
+  --auth-panel: #11141a;
+  --auth-panel-2: #181d26;
+  --auth-text-strong: #ffffff;
+  --auth-text: #e9ebf0;
+  --auth-text-2: #c9cfd9;
+  --auth-text-3: #a8b0bd;
+  --auth-text-4: #6d7583;
+  --brand-hot: #ff6d50;
+  --brand-hot-soft: #ffa891;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0b0d11;
+  --color-canvas: var(--bg);
+  --color-bg: #12151c;
+  --surface: #13161d;
+  --color-surface: var(--surface);
+  --surface-raised: #1a1e27;
+  --color-surface-2: var(--surface-raised);
+  --color-surface-3: #222733;
+  --border: #242934;
+  --color-border: var(--border);
+  --border-strong: #343a49;
+  --color-border-strong: var(--border-strong);
+  --color-divider: var(--border);
+
+  --text: #edf0f5;
+  --color-text: var(--text);
+  --text-muted: #abb1be;
+  --color-text-2: var(--text-muted);
+  --color-text-3: #8c93a2;
+  --color-neutral-600: var(--text-muted);
+  --color-neutral-500: var(--color-text-3);
+
+  --accent: #8b80f9;
+  --color-accent: var(--accent);
+  --accent-soft: #252147;
+  --color-accent-soft: var(--accent-soft);
+  --accent-text: #b6b0ff;
+  --color-accent-text: var(--accent-text);
+  --color-link: var(--accent-text);
+  --ring: 0 0 0 3px color-mix(in srgb, var(--accent) 34%, transparent);
+
+  --ok: #4cc38a;     --ok-solid: #3dbb7d;   --ok-bg: #11261c;   --ok-line: #21543b;
+  --warn: #f5b84a;   --warn-solid: #f5a524; --warn-bg: #292010; --warn-line: #5b4418;
+  --danger: #ff8589; --danger-solid: #e5484d; --danger-bg: #2d1417; --danger-line: #6b282e;
+  --info: #7cb0ff;   --info-solid: #4f8ff7; --info-bg: #101e33; --info-line: #27446d;
+  --neu: #abb1be;    --neu-solid: #6b7280;  --neu-bg: #1c2027;  --neu-line: #373d4a;
+
+  --color-success: var(--ok);
+  --color-warning: var(--warn);
+  --color-danger: var(--danger);
+  --color-neutral: var(--neu);
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 40%);
+  --shadow-md: 0 1px 3px rgb(0 0 0 / 45%), 0 8px 20px -6px rgb(0 0 0 / 60%);
+  --shadow-lg: 0 4px 8px -2px rgb(0 0 0 / 40%), 0 24px 52px -12px rgb(0 0 0 / 70%);
+  --shadow-pop: 0 1px 3px rgb(0 0 0 / 40%), 0 16px 36px -8px rgb(0 0 0 / 65%);
+
+  --color-ink: #edf0f5;
+  --color-ink-hover: #ffffff;
+  --color-on-ink: #0b0d11;
+
+  --auth-panel: #0a0c10;
+  --auth-panel-2: #131720;
 }
 
 /* ── page frame ─────────────────────────────────────────────────────────── */
@@ -311,3 +471,25 @@
   .try-result ol { columns: 1; }
 }
 .rollback-pill { align-self: flex-start; } .legend-badge { text-transform: none; }
+
+/* ── skeleton shimmer (Facet.dc.html specification) ────────────────────────── */
+@keyframes fct-shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton > div {
+  background: linear-gradient(90deg, var(--color-surface-2) 0%, var(--color-surface-3) 50%, var(--color-surface-2) 100%) !important;
+  background-size: 800px 100% !important;
+  animation: fct-shimmer 1.5s ease-in-out infinite !important;
+}
+
+/* ── global reduced motion respect ───────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+

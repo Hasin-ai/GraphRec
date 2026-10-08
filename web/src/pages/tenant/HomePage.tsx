@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { billing, datasets, events, models, products, recommendations, serving, training } from "../../api";
+import { apiKeys, billing, datasets, events, models, products, recommendations, serving, training } from "../../api";
 import type { RecommendationResult } from "../../api/types";
 import { describeError } from "../../api/client";
 import { useResource } from "../../hooks/useResource";
@@ -86,11 +86,12 @@ export function HomePage() {
   const usage = useResource(() => can('usage:read') ? billing.usage() : Promise.resolve(null), [can('usage:read')], { watch: ['/training-jobs', '/products', '/events', '/datasets', '/model-versions', '/models/'] });
   const snapshots = useResource(() => can('training:read') ? datasets.listSnapshots().catch(() => null) : Promise.resolve(null), [can('training:read')]);
   const batches = useResource(() => can('events:read') ? events.listBatches().catch(() => null) : Promise.resolve(null), [can('events:read')]);
+  const keys = useResource(() => can('keys:write') ? apiKeys.list().catch(() => null) : Promise.resolve(null), [can('keys:write')]);
   // Roles without usage:read (developers) still need to know whether events arrive.
   const latestEvents = useResource(() => can('events:read') && !can('usage:read') ? events.list({ limit: 1 }).catch(() => null) : Promise.resolve(null), [can('events:read'), can('usage:read')], { watch: ['/events'] });
   const [trying, setTrying] = useState(false);
 
-  const all = [catalog, jobs, versions, deployment, metrics, usage, snapshots, batches];
+  const all = [catalog, jobs, versions, deployment, metrics, usage, snapshots, batches, keys];
   const loading = all.some(r => r.loading);
   const reloadAll = () => { all.forEach(r => void r.reload()); };
 
@@ -103,12 +104,17 @@ export function HomePage() {
   const validation = (active?.metrics as { validation?: Record<string, unknown> } | undefined)?.validation ?? {};
   const score = (k: string) => typeof validation[k] === 'number' ? (validation[k] as number) : null;
   const latestJob = jobs.data?.items?.slice().sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
+  const recentJobs = (jobs.data?.items ?? []).slice().sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)).slice(0, 3);
   const latestSnapshot = snapshots.data?.items?.slice().sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
   const latestBatch = (Array.isArray(batches.data) ? batches.data : []).slice().sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
   const latestEvent = latestEvents.data?.[0];
   const dims = usage.data?.dimensions ?? [];
   const accepted = dims.find(x => x.type === 'accepted_events');
   const stored = dims.find(x => x.type === 'stored_products');
+  const limitedDims = dims.filter(d => d.limit !== null && d.limit > 0);
+  const topQuota = limitedDims.slice().sort((a, b) => (b.used / (b.limit || 1)) - (a.used / (a.limit || 1)))[0];
+  const topQuotaPct = topQuota ? `${Math.round((topQuota.used / topQuota.limit!) * 100)}%` : '0%';
+  const topQuotaNote = topQuota ? `${fmtNumber(topQuota.used)} of ${fmtNumber(topQuota.limit!)} ${topQuota.type.replace(/_/g, ' ')}` : 'Within limits';
   const d = deployment.data;
   const m = metrics.data;
   const servingUp = d?.status === 'available' && !!d.active_model_version_id;
@@ -119,6 +125,7 @@ export function HomePage() {
   const isNew = productCount === 0 && !!versions.data && allVersions.length === 0;
   const anyError = [catalog, jobs, versions, deployment, usage].some(r => r.error);
   const modelAge = active ? daysSince(active.created_at) ?? 0 : 0;
+  const hasKeys = !!keys.data?.items?.some(k => k.status === 'active');
 
   // ── issues: counted by severity, worded by consequence ────────────────────
   const issues: Issue[] = [];
@@ -160,14 +167,24 @@ export function HomePage() {
   const steps: Step[] = rawSteps.map(({ scope, ...step }) => scope ? step : { ...step, state: 'locked', detail: LOCKED_DETAIL });
 
   // The getting-started checklist counts exactly the steps it shows.
+  const hasProducts = (productCount ?? 0) > 0;
+  const hasEvents = (accepted?.used ?? 0) > 0 || (!accepted && !!(latestEvent || latestBatch));
+  const hasTrained = allVersions.length > 0 || !!latestJob;
+  const hasTested = allVersions.length > 0;
+  const isLive = servingUp && requests > 0;
+
   const checklist: { title: string; detail: string; done: boolean; action: ReactNode }[] = [
-    { title: 'Add your catalog', detail: 'Products the recommender can choose from.', done: !!productCount,
-      action: can('catalog:write') ? <Link className="btn btn-primary btn-sm" to="/products/sync">Import catalog</Link> : null },
-    { title: 'Send interaction events', detail: 'Views, carts and purchases the model learns from.', done: !!accepted?.used,
-      action: can('events:write') ? <Link className="btn btn-secondary btn-sm" to="/events/submit">Send events</Link> : null },
-    { title: 'Train a model', detail: 'Creates a model version from your data.', done: allVersions.length > 0,
+    { title: 'Create API credentials', detail: 'Generate an API key to authenticate requests from your storefront or backend.', done: hasKeys,
+      action: can('keys:write') ? <Link className="btn btn-primary btn-sm" to="/credentials">Create API key</Link> : null },
+    { title: 'Sync product catalog', detail: 'Import products and attributes so the model knows what to recommend.', done: hasProducts,
+      action: can('catalog:write') ? <Link className="btn btn-secondary btn-sm" to="/products/sync">Import catalog</Link> : null },
+    { title: 'Send interaction events', detail: 'Stream views, cart additions, and purchases the sequential model learns from.', done: hasEvents,
+      action: can('events:write') ? <Link className="btn btn-secondary btn-sm" to="/events/submit">Send events</Link> : <Link className="btn btn-secondary btn-sm" to="/integration">Integration guide</Link> },
+    { title: 'Train a model', detail: 'Train a graph/sequential DGSR recommender from your catalog and interactions.', done: hasTrained,
       action: can('training:read') ? <Link className="btn btn-secondary btn-sm" to="/training">Train a model</Link> : null },
-    { title: 'Activate it and request recommendations', detail: 'Start serving your storefront.', done: !!servingUp,
+    { title: 'Test in Playground', detail: 'Inspect recommendations, scores, and fallback rules interactively.', done: hasTested,
+      action: can('recommendations:read') ? <Link className="btn btn-secondary btn-sm" to="/playground">Open Playground</Link> : null },
+    { title: 'Activate model & go live', detail: 'Promote your trained model to active serving and connect live storefront traffic.', done: isLive,
       action: can('models:read') ? <Link className="btn btn-secondary btn-sm" to="/models">Model versions</Link> : null },
   ];
 
@@ -191,7 +208,31 @@ export function HomePage() {
       <ol className="checklist">
         {checklist.map(item => <li key={item.title} className={item.done ? 'done' : ''}><div><strong>{item.title}</strong><span>{item.detail}</span></div>{item.action}</li>)}
       </ol>
-    </section> : null}
+    </section> : (
+      /* Top KPI tiles for returning tenants */
+      <div className="kpi-strip" aria-label="Key performance indicators">
+        <Link to="/service-status" className="kpi-cell">
+          <span className="kpi-label">Requests (24 h)</span>
+          <span className="kpi-num">{m ? fmtNumber(requests) : '—'}</span>
+          <span className="kpi-note">{requests ? `${(m?.request_rate ?? 0).toFixed(2)} / min` : 'No traffic in 24 h'}</span>
+        </Link>
+        <Link to="/service-status" className="kpi-cell">
+          <span className="kpi-label">p95 Latency</span>
+          <span className="kpi-num">{m?.p95_latency_ms != null ? `${Math.round(m.p95_latency_ms)} ms` : '—'}</span>
+          <span className="kpi-note">{requests ? 'Serving response time' : 'No traffic'}</span>
+        </Link>
+        <Link to={active ? `/models/${active.id}` : '/models'} className="kpi-cell">
+          <span className="kpi-label">Model freshness</span>
+          <span className="kpi-num">{active ? daysAgoLabel(active.created_at) : 'None'}</span>
+          <span className="kpi-note">{active ? `${modelTypeLabel(active.model_type)} v${activeN}` : 'No active model'}</span>
+        </Link>
+        <Link to="/usage" className="kpi-cell">
+          <span className="kpi-label">Quota capacity used</span>
+          <span className="kpi-num">{topQuotaPct}</span>
+          <span className="kpi-note">{topQuotaNote}</span>
+        </Link>
+      </div>
+    )}
 
     {/* 2 — performance: what the API actually measures */}
     {isNew || !can('deployments:read') ? null : <section className="ov-section" aria-labelledby="perf-title">
@@ -262,6 +303,37 @@ export function HomePage() {
         <div className="pc-foot"><Link to={active ? `/models/${active.id}` : '/models'}>{active ? 'View model' : 'Model versions'} →</Link></div>
       </section> : null}
     </div>}
+
+    {/* Recent training runs (returning tenant) */}
+    {isNew || !recentJobs.length || !can('training:read') ? null : (
+      <section className="ov-section" aria-labelledby="recent-jobs-title">
+        <SectionHeader id="recent-jobs-title" title="Recent training runs" aside={<Link to="/training">All training jobs →</Link>} />
+        <div className="table-wrap">
+          <table className="table" style={{ width: "100%" }}>
+            <thead>
+              <tr>
+                <th>Job</th>
+                <th>Status</th>
+                <th>Model type</th>
+                <th>Created</th>
+                <th className="right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recentJobs.map(job => (
+                <tr key={job.id}>
+                  <td><IdChip value={job.id} length={16} label="Job ID" /></td>
+                  <td><StatusPill tone={job.status === "succeeded" ? "success" : job.status === "failed" ? "danger" : "warning"}>{job.status}</StatusPill></td>
+                  <td>{modelTypeLabel(job.model_type)}</td>
+                  <td className="td-muted"><RelativeTime value={job.created_at} /></td>
+                  <td className="right"><Link className="btn btn-secondary btn-xs" to={`/training/${job.id}`}>Details</Link></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )}
 
     {/* 4 — the pipeline the product is built around */}
     {isNew ? null : <section className="ov-section" aria-labelledby="pipe-title">

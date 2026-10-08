@@ -9,7 +9,7 @@ export type IconName =
   | "server" | "gauge" | "key" | "plug" | "users" | "chevron-down" | "chevron-right" | "chevrons-up-down"
   | "panel-left" | "menu" | "x" | "copy" | "check" | "log-out" | "user" | "sun" | "moon" | "monitor"
   | "alert-octagon" | "alert-triangle" | "info" | "check-circle" | "more-horizontal" | "rotate-ccw"
-  | "external-link" | "plus" | "arrow-right" | "clock" | "help-circle";
+  | "external-link" | "plus" | "arrow-right" | "clock" | "help-circle" | "search" | "shield";
 
 const PATHS: Record<IconName, ReactElement> = {
   home: <><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V21h14V9.5" /><path d="M10 21v-6h4v6" /></>,
@@ -50,6 +50,8 @@ const PATHS: Record<IconName, ReactElement> = {
   "arrow-right": <path d="M5 12h14M13 6l6 6-6 6" />,
   clock: <><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></>,
   "help-circle": <><circle cx="12" cy="12" r="10" /><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3" /><path d="M12 17h.01" /></>,
+  search: <><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></>,
+  shield: <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />,
 };
 
 export function Icon({ name, size = 16, className, ...rest }: { name: IconName; size?: number } & Omit<SVGProps<SVGSVGElement>, "name">) {
