@@ -223,11 +223,13 @@ def schema_fields(name: str) -> Dict[str, SchemaField]:
 
 #: Deprecated server aliases kept for older clients; the SDK uses their replacements.
 DEPRECATED_SERVER_ROUTES = {("POST", "/v1/models/{model_id}:rollback")}
+#: Scraped by Prometheus with METRICS_TOKEN (ER-NF-09); not part of the client API.
+OPERATIONAL_ROUTES = {("GET", "/metrics")}
 
 
 def test_sdk_covers_exactly_the_server_routes() -> None:
     """NR-NF-07: the SDK covers exactly the documented server routes."""
-    server = set(server_routes()) - DEPRECATED_SERVER_ROUTES
+    server = set(server_routes()) - DEPRECATED_SERVER_ROUTES - OPERATIONAL_ROUTES
     sdk = {(route.method, route.path) for route in g.ROUTES.values()}
     assert sdk - server == set(), "SDK calls routes the server does not define"
     assert server - sdk == set(), "Server routes missing from the SDK"
