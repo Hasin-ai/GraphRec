@@ -98,11 +98,14 @@ activation, rollback, archive, recommendations that match
 `recommendations_user_0.csv`, session and fallback behaviour, P95 latency,
 feedback, tenant isolation, platform operations):
 
+The reference storefront is **Reel** (`apps/reel-storefront`, MovieLens; see its README).
+The earlier Facet storefront is archived in `archive/demo-storefront` (D-09).
+
 ```bash
 mkdir -p model_artifacts/dgsr_beauty_t4_v2   # best.pt, config.json, id_maps.json, interactions.npz, final_metrics.json
 docker compose up -d --build
 python tests/e2e/beauty_e2e.py --platform-token "$PLATFORM_ADMIN_TOKEN" --write-storefront-env
-cd apps/demo-storefront && python scripts/verify_personalization.py   # then run the storefront
+cd archive/demo-storefront && python scripts/verify_personalization.py   # archived Facet storefront (D-09)
 ```
 
 ## Account setup

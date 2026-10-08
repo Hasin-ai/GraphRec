@@ -12,5 +12,5 @@ diagrams
 # Storefront demos have their own images; their node_modules hold symlinks
 # the API build context cannot read.
 **/node_modules
-apps/demo-storefront/.venv
+archive/
 apps/reel-storefront/frontend
