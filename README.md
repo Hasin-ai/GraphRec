@@ -1,5 +1,10 @@
 # GraphRec
 
+**Documentation:** [Deploy](docs/DEPLOYMENT.md) · [Operate](docs/OPERATIONS.md) ·
+[Security](docs/SECURITY.md) · [API conventions](docs/API.md) ·
+[Performance](docs/PERFORMANCE.md) · [Decisions](docs/DECISIONS.md) ·
+[Requirement traceability](docs/GAP_ANALYSIS.md) · [Changes](CHANGELOG.md)
+
 GraphRec is a multi-tenant recommendation platform developed as small, working
 vertical slices. The hardened paths are public tenant registration, tenant-user
 sign-in, the protected subscription/quota overview, current usage
@@ -34,8 +39,9 @@ workflows, local capacity limits, and remaining requirements.
   `user_id,item_id,time` interaction log), `/v1/datasets/snapshots`
 - Training and models: `/v1/training-jobs`, `/v1/model-versions`
 - Serving: `/v1/recommendations`, `/v1/feedback/*`, `/v1/deployment*`, `/v1/metrics/summary`
-- Platform administration: `/v1/platform/*`, authenticated with the
-  `PLATFORM_ADMIN_TOKEN` shared secret (leave it empty to disable these routes)
+- Platform administration: `/v1/platform/*`, for operator accounts with roles
+  (`POST /v1/platform/auth/login`); `PLATFORM_ADMIN_TOKEN` only bootstraps the first
+  operator in production
 - Product: public `/v1/meta` (one version for API, console and SDK), `/v1/plans`
   (live plan limits), `/healthz` (liveness) and `/readyz` (database, Redis and
   Qdrant, measured live)
