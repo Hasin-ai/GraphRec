@@ -6,11 +6,12 @@ import { setTenantSession } from "../../auth/session";
 import { useSession } from "../../hooks/useSession";
 import { useToast } from "../../hooks/useToast";
 import { Field, Form, TextInput, type FormError } from "../../ui/Form";
+import { AuthTabs } from "../../ui/AuthTabs";
 import { Page } from "../../ui/Page";
 
 const GENERIC: FormError = {
   title: "Sign-in failed",
-  body: "The credentials supplied are not valid, or the account cannot sign in. If the problem continues, contact your tenant administrator.",
+  body: "The credentials supplied are not valid, or the account cannot sign in. If the problem continues, contact your workspace administrator.",
 };
 
 function safeReturn(value: unknown): string {
@@ -58,7 +59,8 @@ export function LoginPage() {
   }
 
   return (
-    <Page kicker="GraphRec" title="Sign in" subtitle="Use your tenant account credentials to access the GraphRec console.">
+    <Page kicker="GraphRec" title="Sign in" subtitle="Choose your account type. Administrators and developers share one sign-in; your role decides what you can do.">
+      <AuthTabs />
       <Form onSubmit={submit} error={error} submitLabel="Sign in" busy={busy} width={460} secondary={{ label: "Forgot password?", to: "/recover", variant: "link" }}>
         <Field id="email" label="Email" wide>
           <TextInput id="email" type="email" value={email} onChange={setEmail} placeholder="you@company.example" autoComplete="username" required />
@@ -67,8 +69,8 @@ export function LoginPage() {
           <TextInput id="password" type="password" value={password} onChange={setPassword} autoComplete="current-password" required />
         </Field>
       </Form>
-      <p className="auth-alt">New to GraphRec? <Link to="/register">Create a tenant</Link></p>
-      <div className="auth-meta"><Link to="/setup">Finish account setup</Link><Link to="/admin/login">Operator sign-in</Link></div>
+      <p className="auth-alt">New to GraphRec? <Link to="/register">Create account</Link></p>
+      <div className="auth-meta"><Link to="/setup">Have an invitation link? Finish account setup</Link></div>
     </Page>
   );
 }

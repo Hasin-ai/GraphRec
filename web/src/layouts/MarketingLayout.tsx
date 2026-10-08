@@ -21,7 +21,7 @@ function HeaderCta({ onNavigate }: { onNavigate?: () => void }) {
   if (platform) return <Link className="btn btn-primary" to="/admin/status" onClick={onNavigate}>Open platform console</Link>;
   return <>
     <Link className="btn btn-ghost" to="/login" onClick={onNavigate}>Sign in</Link>
-    <Link className="btn btn-primary" to="/register" onClick={onNavigate}>Create a tenant</Link>
+    <Link className="btn btn-primary" to="/register" onClick={onNavigate}>Create account</Link>
   </>;
 }
 
@@ -117,7 +117,7 @@ export function MarketingLayout({ children }: { children?: ReactNode }) {
             <h2>Console</h2>
             <ul>
               <li><Link to="/login">Sign in</Link></li>
-              <li><Link to="/register">Create a tenant</Link></li>
+              <li><Link to="/register">Create account</Link></li>
               <li><Link to="/setup">Finish account setup</Link></li>
               <li><Link to="/recover">Reset password</Link></li>
             </ul>

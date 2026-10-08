@@ -18,7 +18,7 @@ describe("public marketing site", () => {
     renderAt("/");
     expect(await screen.findByRole("heading", { level: 1, name: BRAND.tagline })).toBeInTheDocument();
     const main = screen.getByRole("main");
-    expect(within(main).getAllByRole("link", { name: "Create a tenant" })[0]).toHaveAttribute("href", "/register");
+    expect(within(main).getAllByRole("link", { name: "Create account" })[0]).toHaveAttribute("href", "/register");
     expect(document.title).toBe("GraphRec: Recommendations that follow every interaction");
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     for (const id of ["features", "how-it-works", "developers", "security"]) expect(document.getElementById(id)).not.toBeNull();
@@ -104,7 +104,7 @@ describe("/pricing", () => {
     expect(within(table).getAllByRole("rowheader")).toHaveLength(LIMIT_KEYS.length);
     expect(within(table).getAllByText("50,000").length).toBeGreaterThan(0);
     expect(within(table).getAllByText("2,000,000").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Assigned by your platform operator")).toHaveLength(2);
+    expect(screen.getAllByText("Upgrade on request")).toHaveLength(2);
     expect(screen.queryByText(/most popular/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/\$\d/)).not.toBeInTheDocument();
     expect(document.title).toBe("Pricing · GraphRec");
@@ -117,7 +117,7 @@ describe("/pricing", () => {
     const links = await screen.findAllByRole("link", { name: "View your usage" });
     expect(links).toHaveLength(PLANS.length);
     expect(links[0]).toHaveAttribute("href", "/usage");
-    expect(screen.queryByRole("link", { name: "Start on Free" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Start free, upgrade later" })).not.toBeInTheDocument();
   });
 
   it("every plan limit key has a label in lib/labels.ts", () => {
@@ -145,7 +145,7 @@ describe("brand and cross-links", () => {
   it("registration points new tenants to the plans", async () => {
     mockFetch([]);
     renderAt("/register");
-    expect(await screen.findByText(/New tenants start on the Free plan/)).toBeInTheDocument();
+    expect(await screen.findByText(/New accounts start on the Free plan/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Compare plans" })).toHaveAttribute("href", "/pricing");
   });
 

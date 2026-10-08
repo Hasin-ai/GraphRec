@@ -56,41 +56,52 @@ async function signIn(page: Page) {
   await expect(page.getByRole("navigation", { name: "Primary" })).toBeVisible();
 }
 
-test("public: the landing page leads to registration, which creates a tenant with a one-time setup link", async () => {
+test("public: the landing page leads to sign-up, which creates the account and signs the administrator in", async () => {
   await page.goto("/");
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("heading", { level: 1, name: "Recommendations that follow every interaction." })).toBeVisible();
   await shot(page, "landing");
 
-  await page.getByRole("main").getByRole("link", { name: "Create a tenant" }).first().click();
+  await page.getByRole("main").getByRole("link", { name: "Create account" }).first().click();
   await expect(page).toHaveURL(/\/register$/);
   await page.getByLabel("Business name").fill(tenantName);
-  await page.getByLabel("Administrator email").fill(adminEmail);
+  await page.getByLabel("Work email").fill(adminEmail);
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page.getByLabel("Confirm password").fill(password);
   await shot(page, "register");
-  await page.getByRole("button", { name: "Create tenant" }).click();
+  await page.getByRole("button", { name: "Create account" }).click();
 
-  await expect(page.getByRole("heading", { name: "Tenant created" })).toBeVisible();
-  setupLink = (await page.getByTestId("setup-link").textContent()) ?? "";
-  expect(setupLink).toMatch(/\/setup#token=/);
-  await expect(page.getByText(adminEmail)).toBeVisible();
-  await shot(page, "register-created");
+  // One step: the account is activated with the chosen password and the administrator lands on Home.
+  await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
+  await expect(page.getByText("Administrator", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: `Workspace: ${tenantName}` })).toBeVisible();
+  await expect(page.getByText("Add your catalog", { exact: true })).toBeVisible();
+  await expect(page.getByText("0 of 4 steps done")).toBeVisible();
+  await shot(page, "home-fresh");
 
-  // "Open setup now" carries the administrator email into the setup form.
-  await page.getByRole("link", { name: "Open setup now" }).click();
-  await expect(page.getByLabel("Email (optional cross-check)")).toHaveValue(adminEmail);
-  await expect(page.getByLabel("Setup token")).not.toHaveValue("");
+  // An invitation for a developer gives the setup link that the next test redeems.
+  const token = await page.evaluate(() => JSON.parse(sessionStorage.getItem("graphrec.session.tenant")!).accessToken);
+  const invited = await page.request.post("/v1/tenant/users", {
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+    data: { email: `dev-${adminEmail}`, role: "tenant_developer" },
+  });
+  expect(invited.status()).toBe(201);
+  setupLink = `${new URL(page.url()).origin}/setup#token=${encodeURIComponent((await invited.json()).setup_token)}`;
 
-  // Registering the same business + administrator email again (new idempotency key) is a conflict, form still filled.
+  // Registering the same business and email again (new idempotency key) is a conflict; the form stays filled.
+  await page.evaluate(() => window.sessionStorage.clear());
   await page.goto("/register");
   await page.getByLabel("Business name").fill(tenantName);
-  await page.getByLabel("Administrator email").fill(adminEmail);
-  await page.getByRole("button", { name: "Create tenant" }).click();
+  await page.getByLabel("Work email").fill(adminEmail);
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page.getByLabel("Confirm password").fill(password);
+  await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByText("This registration already exists")).toBeVisible();
   await expect(page.getByLabel("Business name")).toHaveValue(tenantName);
   await shot(page, "register-conflict");
 });
 
-test("setup: the token activates the administrator and signs them in", async () => {
+test("setup: an invitation link activates the account once and signs the member in", async () => {
   await page.goto(setupLink);
   await expect(page.getByLabel("Setup token")).not.toHaveValue("");
   // The one-time token is scrubbed from the URL once read.
@@ -99,13 +110,8 @@ test("setup: the token activates the administrator and signs them in", async () 
   await page.getByLabel("Confirm").fill(password);
   await shot(page, "setup");
   await page.getByRole("button", { name: "Activate account" }).click();
-
   await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
-  await expect(page.getByText("Administrator", { exact: true }).first()).toBeVisible();
-  await expect(page.getByRole("button", { name: `Workspace: ${tenantName}` })).toBeVisible();
-  await expect(page.getByText("Add your catalog", { exact: true })).toBeVisible();
-  await expect(page.getByText("0 of 4 steps done")).toBeVisible();
-  await shot(page, "home-fresh");
+  await expect(page.getByText("Developer", { exact: true }).first()).toBeVisible();
 
   // A used token is rejected without disclosure.
   await page.goto("/login");
@@ -116,6 +122,7 @@ test("setup: the token activates the administrator and signs them in", async () 
   await page.getByRole("button", { name: "Activate account" }).click();
   await expect(page.getByText("This link cannot be used")).toBeVisible();
   await shot(page, "setup-reused");
+  await page.evaluate(() => window.sessionStorage.clear());
 });
 
 test("sign-in: wrong password is non-disclosing, right password lands on Home", async () => {
@@ -432,7 +439,7 @@ test("platform realm: operator sign-in, tenant detail, quota override, suspensio
   expect(created.status()).toBe(201);
 
   await page.goto("/admin/tenants");
-  await expect(page.getByRole("heading", { name: "Platform sign-in" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Platform operator/ })).toHaveClass(/is-active/);
   await page.getByLabel("Operator email").fill(operatorEmail);
   await page.getByLabel("Password", { exact: true }).fill("not-the-password");
   await page.getByRole("button", { name: "Sign in" }).click();

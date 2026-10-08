@@ -238,3 +238,8 @@
 .mkt-footer-base { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--color-border); font-size: var(--text-sm); color: var(--color-text-2); }
 @media (max-width: 800px) { .mkt-footer-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .mkt-footer-brand { grid-column: 1 / -1; } }
 @media (max-width: 400px) { .mkt-footer-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* How it works: one endpoint per line, never split mid-word */
+.mkt-endpoints { list-style: none; margin: auto 0 0; padding: 10px 0 0; display: grid; gap: 2px; }
+.mkt-endpoints .mkt-endpoint { margin-top: 0; padding-top: 0; overflow-wrap: normal; word-break: keep-all; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 1100px) { .mkt-endpoints .mkt-endpoint { white-space: normal; overflow-wrap: anywhere; } }

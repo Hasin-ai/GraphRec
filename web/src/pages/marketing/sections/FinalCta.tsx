@@ -5,9 +5,9 @@ export function FinalCta() {
     <div className="mkt-container">
       <div className="mkt-final-card">
         <h2 id="final-title">Start on the Free plan.</h2>
-        <p>Register a tenant, activate your administrator account with the one-time setup link, and send your first events.</p>
+        <p>Create your account in one step, sync your catalog and send your first events. No card, no checkout.</p>
         <div className="mkt-final-ctas">
-          <Link className="btn btn-primary" to="/register">Create a tenant</Link>
+          <Link className="btn btn-primary" to="/register">Create account</Link>
           <Link to="/login">Sign in</Link>
         </div>
       </div>

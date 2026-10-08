@@ -1,8 +1,11 @@
 import { useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { auth } from "../../api";
 import { isApiError } from "../../api/client";
 import type { TenantRegistrationResult } from "../../api/types";
+import { setTenantSession } from "../../auth/session";
+import { useSession } from "../../hooks/useSession";
+import { useToast } from "../../hooks/useToast";
 import { fmtDateTime, newIdempotencyKey } from "../../lib/format";
 import { Field, Form, TextInput, type FormError } from "../../ui/Form";
 import { Page } from "../../ui/Page";
@@ -16,6 +19,11 @@ export function setupLink(token: string): string {
 export function RegisterPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const navigate = useNavigate();
+  const { refresh } = useSession();
+  const { flash } = useToast();
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<FormError | null>(null);
   const [busy, setBusy] = useState(false);
@@ -27,6 +35,8 @@ export function RegisterPage() {
     const errors: Record<string, string> = {};
     if (!name.trim()) errors.name = "Enter the registered business name.";
     if (!email.trim() || !email.includes("@")) errors.email = "Enter a valid email address.";
+    if (password.length < 8) errors.password = "Use at least 8 characters.";
+    else if (password !== confirm) errors.confirm = "The passwords do not match.";
     setFieldErrors(errors);
     if (Object.keys(errors).length) {
       setError({ title: "Registration could not be completed", body: "Correct the highlighted field and submit again." });
@@ -38,7 +48,20 @@ export function RegisterPage() {
       const input = { name: name.trim(), admin_email: email.trim().toLowerCase() };
       const payload = JSON.stringify(input);
       if (attempt.current?.payload !== payload) attempt.current = { payload, key: newIdempotencyKey() };
-      setResult(await auth.registerTenant(input, attempt.current.key));
+      const registered = await auth.registerTenant(input, attempt.current.key);
+      if (!registered.setup_token) { setResult(registered); return; }   // a replay: the link was issued earlier
+      try {
+        // One step for the person registering: activate the administrator account with the
+        // password they just chose, using the one-time token from the registration response.
+        const pair = await auth.setupPassword({ setup_token: registered.setup_token, password, email: input.admin_email });
+        setTenantSession(pair.email ?? input.admin_email, pair);
+        refresh();
+        flash(`Welcome to GraphRec. ${registered.name} is ready.`);
+        navigate("/home", { replace: true });
+      } catch {
+        // Registration succeeded but activation did not: show the one-time setup link instead.
+        setResult(registered);
+      }
     } catch (caught) {
       if (isApiError(caught) && caught.status === 409) {
         // D15: show the reason the API gives for each field instead of assuming
@@ -71,7 +94,7 @@ export function RegisterPage() {
   if (result) {
     const link = result.setup_token ? setupLink(result.setup_token) : null;
     return (
-      <Page kicker="GraphRec" title="Tenant created" badge={<Tag tone="ok">{result.status}</Tag>} subtitle="The administrator account is invited. Finish setup with the one-time link below, then sign in.">
+      <Page kicker="GraphRec" title="Account created" badge={<Tag tone="ok">{result.status}</Tag>} subtitle="Your workspace exists, but the administrator account could not be activated automatically. Finish setup with the one-time link below, then sign in.">
         {link ? (
           <Banner tone="warn" title="Save this setup link now">
             It is shown once. GraphRec stores only a hash of the token; an operator can issue a new one if this link is lost.
@@ -116,16 +139,22 @@ export function RegisterPage() {
   }
 
   return (
-    <Page kicker="GraphRec" title="Register a tenant" subtitle="Create your tenant and its first administrator account.">
-      <Form onSubmit={submit} error={error} submitLabel="Create tenant" busy={busy} width={460} secondary={{ label: "Already have a tenant? Sign in", to: "/login", variant: "link" }}>
+    <Page kicker="GraphRec" title="Create your account" subtitle="Set up a GraphRec workspace for your business. You become its administrator and can invite developers afterwards.">
+      <Form onSubmit={submit} error={error} submitLabel="Create account" busy={busy} width={460} secondary={{ label: "Already have an account? Sign in", to: "/login", variant: "link" }}>
         <Field id="name" label="Business name" wide error={fieldErrors.name}>
           <TextInput id="name" value={name} onChange={setName} placeholder="Northgate Supply" autoComplete="organization" required />
         </Field>
-        <Field id="email" label="Administrator email" wide error={fieldErrors.email}>
-          <TextInput id="email" type="email" value={email} onChange={setEmail} placeholder="admin@company.example" autoComplete="email" required />
+        <Field id="email" label="Work email" wide error={fieldErrors.email}>
+          <TextInput id="email" type="email" value={email} onChange={setEmail} placeholder="you@company.example" autoComplete="email" required />
+        </Field>
+        <Field id="password" label="Password" wide error={fieldErrors.password} hint="At least 8 characters.">
+          <TextInput id="password" type="password" value={password} onChange={setPassword} autoComplete="new-password" required />
+        </Field>
+        <Field id="confirm" label="Confirm password" wide error={fieldErrors.confirm}>
+          <TextInput id="confirm" type="password" value={confirm} onChange={setConfirm} autoComplete="new-password" required />
         </Field>
       </Form>
-      <Footnote>A setup link is shown after registration. Use it to activate your administrator account. New tenants start on the Free plan. <Link to="/pricing">Compare plans</Link>.</Footnote>
+      <Footnote>New accounts start on the Free plan. <Link to="/pricing">Compare plans</Link>. Invited by a colleague? Use the link they sent you instead.</Footnote>
     </Page>
   );
 }

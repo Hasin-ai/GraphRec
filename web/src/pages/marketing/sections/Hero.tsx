@@ -10,7 +10,7 @@ export function Hero() {
         <h1 id="hero-title">{BRAND.tagline}</h1>
         <p className="mkt-lede">{BRAND.heroLede}</p>
         <div className="mkt-hero-ctas">
-          <Link className="btn btn-on-dark" to="/register">Create a tenant</Link>
+          <Link className="btn btn-on-dark" to="/register">Create account</Link>
           <Link className="btn btn-secondary" to="/pricing">See pricing</Link>
         </div>
         <p className="mkt-hero-alt">Already have an account? <Link to="/login">Sign in</Link></p>

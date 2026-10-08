@@ -7,6 +7,7 @@ import { useMeta } from "../../hooks/useMeta";
 import { useSession } from "../../hooks/useSession";
 import { useToast } from "../../hooks/useToast";
 import { Field, Form, TextInput, type FormError } from "../../ui/Form";
+import { AuthTabs } from "../../ui/AuthTabs";
 import { Page } from "../../ui/Page";
 import { Footnote } from "../../ui/primitives";
 
@@ -72,8 +73,9 @@ export function AdminLoginPage() {
   }
 
   return (
-    <Page kicker="GraphRec · platform" title="Platform sign-in" subtitle="Sign in with your operator account to manage tenants and platform operations.">
-      <Form onSubmit={submit} error={error} submitLabel="Sign in" busy={busy} width={460} secondary={{ label: "Back to tenant sign-in", to: "/login", variant: "link" }}>
+    <Page kicker="GraphRec · platform" title="Sign in" subtitle="For GraphRec platform operators: manage tenants, plans and platform health. Operator accounts are separate from workspace accounts.">
+      <AuthTabs />
+      <Form onSubmit={submit} error={error} submitLabel="Sign in" busy={busy} width={460}>
         {mode === "operator" ? <>
           <Field id="operator-email" label="Operator email" wide>
             <TextInput id="operator-email" type="email" value={email} onChange={setEmail} autoComplete="username" required />

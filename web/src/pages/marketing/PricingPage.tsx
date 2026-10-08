@@ -5,16 +5,16 @@ import { useLivePlans } from "../../marketing/useLivePlans";
 import { useDocumentTitle } from "../../marketing/useDocumentTitle";
 
 const CARD_LIMITS = ["accepted_events", "recommendation_requests", "stored_products", "training_jobs", "active_model_versions"] as const;
-const OPERATOR_NOTE = "Every tenant starts on Free. A platform operator moves you to Basic or Pro.";
+const OPERATOR_NOTE = "Every account starts on Free. Your GraphRec operator moves you to Basic or Pro when you need more capacity; usage carries over.";
 
 function PlanCta({ plan }: { plan: MarketingPlan }) {
   const { tenant, platform } = useSession();
   if (tenant) return <Link className="btn btn-secondary" to="/usage">View your usage</Link>;
   if (platform) return <Link className="btn btn-secondary" to="/admin/plans">Manage plans</Link>;
   return plan.code === "free"
-    ? <Link className="btn btn-primary" to="/register">Create a tenant</Link>
+    ? <Link className="btn btn-primary" to="/register">Create account</Link>
     : <>
-        <Link className="btn btn-secondary" to="/register">Start on Free</Link>
+        <Link className="btn btn-secondary" to="/register">Start free, upgrade later</Link>
         <p className="mkt-plan-note">{OPERATOR_NOTE}</p>
       </>;
 }
@@ -42,7 +42,7 @@ export function PricingPage() {
       <div className="mkt-container">
         <p className="mkt-kicker">Pricing</p>
         <h1 id="pricing-title">Plans and limits</h1>
-        <p className="mkt-lede">Every plan includes the whole platform. Plans differ only in capacity: how many events, requests, products and training runs your tenant can use.</p>
+        <p className="mkt-lede">Every plan includes the whole platform. Plans differ only in capacity: how many events, requests, products and training runs your account can use.</p>
       </div>
     </section>
 
@@ -57,7 +57,7 @@ export function PricingPage() {
               {plan.code === "basic" ? <span className="tag mkt-tag">Room to grow</span> : null}
             </div>
             <p className="mkt-plan-tagline">{plan.tagline}</p>
-            <p className={`mkt-price${plan.price === null && plan.code !== "free" ? " is-assigned" : ""}`}>{plan.code === "free" ? "Free" : "Assigned by your platform operator"}</p>
+            <p className={`mkt-price${plan.price === null && plan.code !== "free" ? " is-assigned" : ""}`}>{plan.code === "free" ? "Free" : "Upgrade on request"}</p>
             <dl className="mkt-limits">
               {CARD_LIMITS.map(key => <div key={key}>
                 <dt>{limitLabel(key)}{MONTHLY_LIMITS.has(key) ? " / month" : ""}</dt>

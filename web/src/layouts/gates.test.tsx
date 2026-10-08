@@ -15,7 +15,8 @@ describe("authorization gates", () => {
   it("gate 1: the platform realm has its own sign-in", async () => {
     mockFetch([]);
     renderAt("/admin/tenants");
-    expect(await screen.findByRole("heading", { name: "Platform sign-in" })).toBeInTheDocument();
+    expect(await screen.findByLabelText("Operator email")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Platform operator/ })).toHaveClass("is-active");
   });
 
   it("gate 3: a developer reaching an administrator route sees the terminal 403 page", async () => {
