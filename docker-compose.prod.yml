@@ -1,0 +1,78 @@
+# Production overlay (D-10: single host, Compose, Caddy with automatic TLS).
+#
+#   cp .env.example .env              # then set every CHANGE value; GRAPHREC_ENV=production
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Differences from development:
+# * GRAPHREC_ENV=production: weak or placeholder secrets refuse to start, placeholder
+#   training is refused, the bootstrap token can only create the first operator,
+#   logs are JSON, /metrics needs METRICS_TOKEN.
+# * Only Caddy publishes ports (80, 443). The API, Qdrant and the console's nginx are
+#   reachable only on the internal network.
+# * Redis keeps its data in memory only (rate-limit windows and slot leases are
+#   short-lived by design); PostgreSQL, Qdrant, trained models and Caddy's
+#   certificates are on named volumes covered by scripts/backup.sh.
+x-production-env: &production-env
+  GRAPHREC_ENV: production
+  # Only nginx (behind Caddy) reaches the API on the internal network.
+  FORWARDED_ALLOW_IPS: "*"
+
+services:
+  migrate:
+    environment:
+      GRAPHREC_ENV: production
+
+  qdrant:
+    ports: !reset []
+
+  api:
+    ports: !reset []
+    environment:
+      <<: *production-env
+
+  scheduler:
+    environment:
+      <<: *production-env
+
+  worker:
+    environment:
+      <<: *production-env
+
+  frontend:
+    ports: !reset []
+
+  caddy:
+    image: caddy:2.8.4-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      GRAPHREC_DOMAIN: ${GRAPHREC_DOMAIN:?set GRAPHREC_DOMAIN to the public host name}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL for certificate notices}
+    volumes:
+      - ./infrastructure/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      frontend:
+        condition: service_healthy
+
+  # Daily data retention (D-21), run from the host's cron or a systemd timer:
+  #   docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm retention
+  retention:
+    build:
+      context: .
+      target: runtime
+    profiles: ["ops"]
+    command: ["python", "-m", "scripts.retention"]
+    environment:
+      RETENTION_DATABASE_URL: postgresql+psycopg://${POSTGRES_OWNER_USER}:${POSTGRES_OWNER_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  caddy_data: {}
+  caddy_config: {}

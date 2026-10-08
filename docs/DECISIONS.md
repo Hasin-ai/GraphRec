@@ -104,6 +104,17 @@ XR-F-10: at the end of each training run the candidate, the version active at th
 ### D-20 Members' changes and the last administrator — Decided
 UC-27: administrators change roles, lock, unlock and disable members (disable is final; pending invitations are resent or revoked, not edited). You cannot change your own account here, and the last active administrator cannot be demoted, locked or disabled. Any change ends the member's sessions.
 
+## Phase 5 decisions (2026-10-08)
+
+### D-21 Retention windows — Decided
+`scripts/retention.py` (owner connection, batched deletes, `--dry-run`) removes operational rows past these windows: serving request metrics and capacity decisions 90 days; recommendation records, results and feedback 180 days; ended sign-ins, spent setup and recovery tokens and registration idempotency records 30 days; security events 1 year; the usage ledger 25 months (UC-24 reads 24). Never trimmed by time: catalogs, interaction histories, snapshots, model versions and the append-only audit log, which follow the tenant's lifecycle. Run it daily (`docs/OPERATIONS.md`).
+
+### D-22 Metrics without a client library — Decided
+`/metrics` writes the Prometheus text format itself and sums counters across API processes through the existing Redis, instead of adding `prometheus_client` (its multi-process mode needs a shared directory per host). Labels are route templates, so tenant or product ids never become label values. The endpoint needs `METRICS_TOKEN`; in production it is off without one, and Caddy refuses it publicly.
+
+### D-23 Production topology — Decided
+`docker-compose.prod.yml` overlays the base file: `GRAPHREC_ENV=production` everywhere, no published ports except Caddy's 80/443 (automatic TLS for `GRAPHREC_DOMAIN`), HSTS at the edge. Backups (`scripts/backup.sh`) cover PostgreSQL (custom-format dump, RLS policies included), Qdrant snapshots, trained models and certificates; Redis holds only short-lived limiter state and is not backed up. Requires Docker Compose 2.24 or newer (`!reset`).
+
 ## Needs your sign-off (historical: answered above)
 
 | # | Decision | Recommendation | Why it is waiting |

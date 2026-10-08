@@ -20,6 +20,7 @@ env:
   GRAPHREC_ENV: development
   DATABASE_URL: postgresql+psycopg://graphrec_app:graphrec_app_ci@localhost:5432/graphrec
   OWNER_DATABASE_URL: postgresql+psycopg://graphrec_owner:graphrec_owner_ci@localhost:5432/graphrec
+  RETENTION_DATABASE_URL: postgresql+psycopg://graphrec_owner:graphrec_owner_ci@localhost:5432/graphrec
   AUDIT_HASH_SECRET: ci-audit-secret-0123456789abcdef0123456789
   JWT_SIGNING_SECRET: ci-jwt-secret-0123456789abcdef0123456789abcdef
   API_KEY_HMAC_PEPPER: ci-pepper-0123456789abcdef0123456789abcdef
