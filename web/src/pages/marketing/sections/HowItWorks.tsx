@@ -15,7 +15,7 @@ export function HowItWorks() {
       {STEPS.map(step => <li key={step.title}>
         <h3>{step.title}</h3>
         <p>{step.body}</p>
-        <ul className="mkt-endpoints" aria-label="API endpoints">{step.endpoints.map(e => <li key={e} className="mkt-endpoint mono">{e}</li>)}</ul>
+        <div className="mkt-endpoints" aria-label="API endpoints">{step.endpoints.map(e => <code key={e} className="mkt-endpoint mono">{e}</code>)}</div>
       </li>)}
     </ol>
   </Section>;
