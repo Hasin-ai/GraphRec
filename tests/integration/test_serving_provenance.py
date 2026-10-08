@@ -23,6 +23,7 @@ def _seed(client, headers, events):
 
 
 def test_xr_f_09_fallback_uses_recent_popularity(client):
+    """ER-F-10."""
     _, headers = provision(client)
     latest = datetime(2026, 9, 30, tzinfo=timezone.utc)
     old = latest - timedelta(days=200)

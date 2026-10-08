@@ -214,6 +214,7 @@ def test_subscription_requires_billing_scope(client: TestClient) -> None:
 
 
 def test_signed_cross_tenant_identity_fails_closed(client: TestClient) -> None:
+    """BRULE-01."""
     tenant_a, user_a, _, _ = provision_user(client)
     tenant_b, _, _, _ = provision_user(client)
     mismatched = custom_token(user_id=user_a, tenant_id=tenant_b)
@@ -235,6 +236,7 @@ def test_signed_cross_tenant_identity_fails_closed(client: TestClient) -> None:
 
 
 def test_subscription_rejects_public_tenant_selector(client: TestClient) -> None:
+    """NR-NF-02."""
     _, _, email, password = provision_user(client)
     token = login_token(client, email, password)
 

@@ -226,6 +226,7 @@ DEPRECATED_SERVER_ROUTES = {("POST", "/v1/models/{model_id}:rollback")}
 
 
 def test_sdk_covers_exactly_the_server_routes() -> None:
+    """NR-NF-07: the SDK covers exactly the documented server routes."""
     server = set(server_routes()) - DEPRECATED_SERVER_ROUTES
     sdk = {(route.method, route.path) for route in g.ROUTES.values()}
     assert sdk - server == set(), "SDK calls routes the server does not define"
@@ -311,6 +312,7 @@ SDK_ONLY_FIELDS = {"request_count", "sync_ids"}
 
 @pytest.mark.parametrize(("schema", "model"), RESPONSE_MODELS, ids=[s for s, _ in RESPONSE_MODELS])
 def test_response_models_match_server_schemas(schema: str, model: Type[BaseModel]) -> None:
+    """NR-NF-07: typed response models match the OpenAPI schemas."""
     server = schema_fields(schema)
     sdk = model.model_fields
     missing = set(server) - set(sdk)

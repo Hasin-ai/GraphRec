@@ -136,6 +136,7 @@ def test_health(public: g.GraphRec) -> None:
 
 
 def test_catalog_lifecycle(shop: Tenant) -> None:
+    """NR-F-04 / UC-05 / UC-07 / UC-08."""
     catalog = shop.admin.tenant.catalog
     result = catalog.bulk_upsert(
         [{"external_id": f"sku-{i}", "title": f"Item {i}", "price": "10.00", "category": ["a", "b"][i % 2]}
@@ -162,6 +163,7 @@ def test_catalog_lifecycle(shop: Tenant) -> None:
 
 
 def test_events_and_batches(shop: Tenant) -> None:
+    """UC-09."""
     events = shop.store.storefront.events
     first = events.create("view", user_id="u-1", product_id="sku-1", event_id=f"evt-{uuid4().hex}")
     assert first.accepted and not first.duplicate
@@ -181,6 +183,7 @@ def test_events_and_batches(shop: Tenant) -> None:
 
 
 def test_recommendations_and_feedback(shop: Tenant) -> None:
+    """NR-F-12 / UC-21 / UC-22."""
     store = shop.store.storefront
     recs = store.recommendations.get(user_id="u-1", top_n=4, exclude_product_ids=["sku-0"])
     assert "sku-0" not in recs.product_ids and len(recs) <= 4
@@ -288,6 +291,7 @@ def test_billing_and_usage(shop: Tenant) -> None:
 
 
 def test_datasets_training_and_model_registry(shop: Tenant) -> None:
+    """NR-F-09 / UC-16 / UC-20."""
     tenant = shop.admin.tenant
     csv = "event_id,event_type,user_id,external_product_id\n" + "".join(
         f"ds-{uuid4().hex[:6]}-{i},click,u-{i % 5},sku-{i % 10}\n" for i in range(30)
@@ -457,6 +461,7 @@ def test_platform_token_is_not_a_tenant_credential(ops: g.GraphRec) -> None:
 
 def test_tenant_isolation(shop: Tenant, other: Tenant) -> None:
     # Ensure tenant A has data and B starts empty.
+    """BRULE-07."""
     shop.admin.tenant.catalog.upsert({"external_id": "iso-1", "title": "Isolated"})
     assert other.store.tenant.catalog.list().total == 0
     with pytest.raises(g.NotFoundError):

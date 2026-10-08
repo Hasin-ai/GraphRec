@@ -208,6 +208,7 @@ def test_zero_usage_returns_all_dimensions_calendar_period_and_access_log(
 def test_durable_ledger_reconciles_used_remaining_and_informational_values(
     client: TestClient,
 ) -> None:
+    """ER-F-08."""
     tenant_id, _, email, password = provision_user(client)
     add_usage(tenant_id, "accepted_events", Decimal("100"))
     add_usage(tenant_id, "accepted_events", Decimal("25"))

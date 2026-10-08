@@ -71,6 +71,7 @@ def post_login(client: TestClient, email: str, password: str):
 def test_valid_login_issues_scoped_tokens_and_hashes_refresh_credential(
     client: TestClient,
 ) -> None:
+    """UC-02."""
     tenant_id, user_id, email, password = provision_active_user(client)
     correlation_id = str(uuid4())
     response = client.post(
@@ -114,6 +115,7 @@ def test_valid_login_issues_scoped_tokens_and_hashes_refresh_credential(
 def test_wrong_unknown_inactive_and_ambiguous_accounts_fail_generically(
     client: TestClient,
 ) -> None:
+    """UC-02."""
     _, _, email, password = provision_active_user(client)
     shared_email = f"shared-{uuid4().hex[:12]}@example.org"
     _, _, locked_email, _ = provision_active_user(client, password=password, status="locked")

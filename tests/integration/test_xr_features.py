@@ -86,6 +86,7 @@ def test_retraining_policy_permissions_validation_and_isolation(client):
 
 
 def test_schedule_fires_once_per_slot_and_not_while_training(client):
+    """XR-F-02."""
     tenant, admin = provision(client)
     operator(client, tenant, training_jobs=5)
     seed_trainable(client, admin)
@@ -111,6 +112,7 @@ def test_schedule_fires_once_per_slot_and_not_while_training(client):
 
 
 def test_event_trigger_fires_exactly_once_per_condition(client):
+    """XR-F-03."""
     tenant, admin = provision(client)
     operator(client, tenant, training_jobs=5)
     seed_trainable(client, admin)
@@ -135,6 +137,7 @@ def test_event_trigger_fires_exactly_once_per_condition(client):
 
 # ---- XR-F-04 -------------------------------------------------------------
 def test_recommendation_rules_change_output_respect_exclusions_and_isolation(client):
+    """XR-F-04 / XR-NF-02."""
     tenant, admin = provision(client)
     _, other = provision(client)
     dev = developer(client, tenant)
@@ -167,6 +170,7 @@ def test_recommendation_rules_change_output_respect_exclusions_and_isolation(cli
 
 # ---- XR-F-07 -------------------------------------------------------------
 def test_usage_trends_match_ledger_and_are_isolated(client):
+    """XR-F-07."""
     tenant, admin = provision(client)
     _, other = provision(client)
     seed_trainable(client, admin)
@@ -190,6 +194,7 @@ def test_usage_trends_match_ledger_and_are_isolated(client):
 
 # ---- XR-F-08 -------------------------------------------------------------
 def test_capacity_scales_with_load_is_observable_and_isolated(client, monkeypatch):
+    """XR-F-08."""
     tenant, admin = provision(client)
     _, other = provision(client)
     dev = developer(client, tenant)

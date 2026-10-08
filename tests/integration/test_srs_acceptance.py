@@ -30,6 +30,7 @@ def limits(client, tenant, **overrides):
 
 
 def test_feedback_replay_ownership_and_disabled_recommendation(client):
+    """NR-F-14 / UC-23 / BRULE-09 / BRULE-11."""
     tenant, headers = provision(client)
     provisioned_foreign_tenant, foreign = provision(client)
     assert client.put('/v1/products/movie', json={'external_id': 'movie', 'title': 'Movie'}, headers=headers).status_code == 200
@@ -82,6 +83,7 @@ def test_feedback_replay_ownership_and_disabled_recommendation(client):
 
 
 def test_limits_and_snapshot_ownership_are_enforced_by_api(client):
+    """ER-F-09 / BRULE-10."""
     tenant, headers = provision(client)
     _, foreign = provision(client)
     limits(client, tenant, stored_products=1, accepted_events=1, recommendation_requests=1, training_jobs=0)
@@ -106,6 +108,7 @@ def test_limits_and_snapshot_ownership_are_enforced_by_api(client):
 
 
 def test_snapshot_captures_real_immutable_tenant_content(client):
+    """ER-F-01 / BRULE-12."""
     tenant, headers = provision(client)
     foreign_tenant, _ = provision(client)
     product = {'external_id': 'snapshot-movie', 'title': 'Original title'}
@@ -127,6 +130,7 @@ def test_snapshot_captures_real_immutable_tenant_content(client):
 
 
 def test_training_replays_once_and_failed_activation_is_audited(client):
+    """ER-F-06 / UC-18 / ER-NF-03."""
     tenant, headers = provision(client)
     _, foreign = provision(client)
     limits(client, tenant, training_jobs=1)
@@ -160,6 +164,7 @@ def test_training_replays_once_and_failed_activation_is_audited(client):
 
 
 def test_deployment_tracks_last_ready_version_and_protects_rollback_target(client):
+    """NR-F-11 / UC-19 / XR-F-05 / XR-NF-01 / UC-25."""
     tenant, headers = provision(client)
     limits(client, tenant, training_jobs=3)
     assert client.put('/v1/products/movie', json={'external_id': 'movie', 'title': 'Movie'}, headers=headers).status_code == 200
@@ -180,6 +185,7 @@ def test_deployment_tracks_last_ready_version_and_protects_rollback_target(clien
 
 
 def test_platform_plan_assignment_preserves_overrides_and_usage(client):
+    """UC-28."""
     tenant, headers = provision(client)
     operator = {'Accept': 'application/json', 'Authorization': f'Bearer {get_settings().platform_admin_token}'}
     limits(client, tenant, stored_products=7)
@@ -232,6 +238,7 @@ def test_platform_plan_edit_updates_assigned_base_limits_and_audit(client):
 
 
 def test_operator_issued_recovery_is_single_use_and_invalidates_old_access(client):
+    """UC-03."""
     tag = uuid4().hex
     email = f"recover-{tag}@example.org"
     initial_password = f"Old-{tag}!"
@@ -279,6 +286,7 @@ def test_operator_issued_recovery_is_single_use_and_invalidates_old_access(clien
 
 
 def test_catalog_sync_and_event_batch_retain_item_outcomes_and_replay(client):
+    """NR-F-05 / NR-F-06 / NR-NF-05 / BRULE-05 / UC-06 / UC-10 / UC-11."""
     tenant, headers = provision(client)
     _, foreign = provision(client)
     product = {'external_id': 'movie', 'title': 'Movie'}
@@ -317,6 +325,7 @@ def test_catalog_sync_and_event_batch_retain_item_outcomes_and_replay(client):
 
 
 def test_concurrency_and_minute_limits_reject_excess_without_double_metering(client, monkeypatch):
+    """ER-NF-07."""
     from concurrent.futures import ThreadPoolExecutor
     from threading import Event
     from apps.api.routes import recommendations

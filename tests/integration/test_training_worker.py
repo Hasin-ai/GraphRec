@@ -35,6 +35,7 @@ def isolated_training_queue():
 
 
 def test_interrupted_job_retries_once_then_fails_visibly(client):
+    """ER-NF-04."""
     tenant, headers = provision(client)
     seed(client, headers)
     response = client.post('/v1/training-jobs', json={'configuration': {'epochs': 1}}, headers=headers)
@@ -74,6 +75,7 @@ def seed(client, headers):
 
 
 def test_real_tenant_training_and_cancel(client, tmp_path, monkeypatch):
+    """NR-F-07 / NR-F-10 / ER-F-02 / UC-12 / UC-14 / UC-15."""
     monkeypatch.setattr(get_settings(), 'generated_model_root', str(tmp_path))
     tenant, headers = provision(client)
     limits(client, tenant, training_jobs=3)
@@ -140,6 +142,7 @@ def _train(client, headers, tenant, request_id):
 
 
 def test_xr_f_10_candidate_and_active_are_compared_on_one_common_set(client, tmp_path, monkeypatch):
+    """UC-17."""
     monkeypatch.setattr(get_settings(), 'generated_model_root', str(tmp_path))
     monkeypatch.setattr(get_settings(), 'training_cooldown_seconds', 0)
     tenant, headers = provision(client)
