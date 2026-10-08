@@ -70,7 +70,8 @@ def _install_signal_handlers() -> None:
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    from graphrec_core.observability import configure_logging
+    configure_logging(get_settings().effective_log_format, get_settings().log_level)
     _install_signal_handlers()
     tick = get_settings().scheduler_tick_seconds
     with engine.connect() as guard:

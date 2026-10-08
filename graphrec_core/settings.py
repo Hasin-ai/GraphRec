@@ -15,6 +15,13 @@ class Settings(BaseSettings):
     # (placeholder training, manual model registration). ``production`` refuses
     # to start with default, placeholder or short secrets (A-10).
     graphrec_env: Literal["development", "production"] = "development"
+    # ER-NF-09: "json" (one JSON object per line, with correlation ids) or "text".
+    # Unset: json in production, text in development.
+    log_format: Literal["json", "text"] | None = None
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    # Bearer token for GET /metrics. Unset: /metrics is open in development and
+    # disabled (404) in production.
+    metrics_token: str | None = None
 
     database_url: str = "postgresql+psycopg://graphrec_app:graphrec_app_local_only@localhost:5432/graphrec"
     # Connection pool sized for uvicorn's 40-thread sync pool per process.
@@ -98,6 +105,11 @@ class Settings(BaseSettings):
     model_artifact_root: str | None = None
     generated_model_root: str = "/app/generated_artifacts"
 
+    @field_validator("log_format", "metrics_token", mode="before")
+    @classmethod
+    def _blank_means_unset(cls, value: object) -> object:
+        return None if isinstance(value, str) and not value.strip() else value
+
     @field_validator("platform_admin_token", mode="before")
     @classmethod
     def _blank_token_disables_platform(cls, value: object) -> object:
@@ -124,6 +136,10 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return self.graphrec_env == "production"
 
+    @property
+    def effective_log_format(self) -> str:
+        return self.log_format or ("json" if self.is_production else "text")
+
     @model_validator(mode="after")
     def _production_requires_strong_secrets(self) -> "Settings":
         if not self.is_production:
@@ -138,6 +154,8 @@ class Settings(BaseSettings):
             problems.append("PLATFORM_ADMIN_TOKEN must not be a placeholder")
         if self.database_url == defaults["database_url"] or "local_only" in self.database_url:
             problems.append("DATABASE_URL must not use the development default or local-only passwords")
+        if self.metrics_token is not None and (len(self.metrics_token) < 32 or _looks_like_placeholder(self.metrics_token)):
+            problems.append("METRICS_TOKEN must be a random value of at least 32 characters")
         if not self.redis_url:
             problems.append("REDIS_URL is required in production (shared rate limits and admission control)")
         if problems:

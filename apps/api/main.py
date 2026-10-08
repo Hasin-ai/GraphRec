@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import hmac
+import logging
 import time
 
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi import Request
+from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
@@ -42,7 +45,11 @@ from graphrec_core.database.session import engine
 from graphrec_core.errors import ApiError
 from graphrec_core.settings import get_settings
 from graphrec_core.usage.admission import get_admission
+from graphrec_core.observability import METRICS, configure_logging
 from graphrec_core.version import __version__
+
+configure_logging(get_settings().effective_log_format, get_settings().log_level)
+request_log = logging.getLogger("graphrec.request")
 
 app = FastAPI(
     title="GraphRec API",
@@ -58,6 +65,27 @@ app.add_middleware(
     ProxyHeadersMiddleware,
     trusted_hosts=[h.strip() for h in get_settings().forwarded_allow_ips.split(",") if h.strip()],
 )
+
+
+@app.middleware("http")
+async def observe(request, call_next):  # noqa: ANN001
+    """ER-NF-09: one structured log line and metric sample per request."""
+    started = time.perf_counter()
+    status = 500
+    try:
+        response = await call_next(request)
+        status = response.status_code
+        return response
+    finally:
+        elapsed = time.perf_counter() - started
+        route = getattr(request.scope.get("route"), "path", None) or "unmatched"
+        if route != "/metrics":
+            METRICS.observe(request.method, route, status, elapsed)
+        request_log.info("%s %s %s", request.method, route, status, extra={
+            "method": request.method, "route": route, "status": status,
+            "duration_ms": round(elapsed * 1000, 1), "event": "request"})
+
+
 app.add_exception_handler(ApiError, api_error_handler)
 app.add_exception_handler(RequestValidationError, validation_error_handler)
 app.add_exception_handler(StarletteHTTPException, http_error_handler)
@@ -82,6 +110,37 @@ app.include_router(recommendation_policy_router)
 app.include_router(platform_router)
 app.include_router(operator_auth_router)
 app.include_router(operators_router)
+
+
+@app.on_event("startup")
+def _bind_metrics_store() -> None:
+    METRICS.bind_redis(getattr(get_admission(), "_client", None))
+
+
+@app.get("/metrics", include_in_schema=False)
+def metrics(request: Request) -> PlainTextResponse:
+    """ER-NF-09: Prometheus text format. Needs METRICS_TOKEN when set; disabled in
+    production without one. Labels are route templates, never tenant data."""
+    settings = get_settings()
+    if settings.metrics_token:
+        scheme, _, token = request.headers.get("Authorization", "").partition(" ")
+        if scheme.lower() != "bearer" or not hmac.compare_digest(token.strip().encode(), settings.metrics_token.encode()):
+            raise ApiError(401, "authentication_failed", "Authentication failed")
+    elif settings.is_production:
+        raise ApiError(404, "resource_not_found", "Not found")
+    aggregates = None
+    try:
+        with engine.connect() as connection:
+            aggregates = connection.execute(text("SELECT public.platform_metrics_aggregates()")).scalar()
+        database_up = 1
+    except SQLAlchemyError:
+        database_up = 0
+    limiter = get_admission().status()
+    extra = {"graphrec_database_up": database_up,
+             "graphrec_rate_limiter_degraded": int(limiter["status"] == "degraded"),
+             "graphrec_rate_limiter_fail_open_total": limiter.get("fail_open_total", 0),
+             "graphrec_build_info{version=\"" + __version__ + "\"}": 1}
+    return PlainTextResponse(METRICS.render(aggregates, extra), media_type="text/plain; version=0.0.4")
 
 
 @app.get("/healthz", include_in_schema=False)

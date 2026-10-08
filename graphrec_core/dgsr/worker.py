@@ -365,7 +365,8 @@ def _install_signal_handlers() -> None:
 
 
 def main():
-    logging.basicConfig(level=logging.INFO)
+    from graphrec_core.observability import configure_logging
+    configure_logging(get_settings().effective_log_format, get_settings().log_level)
     _install_signal_handlers()
     # One local CPU trainer across worker processes; Postgres releases the lock
     # automatically if its process or database connection dies.

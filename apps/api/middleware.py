@@ -15,6 +15,9 @@ MULTIPART_PATHS = frozenset({"/v1/datasets/upload"})
 BULK_JSON_PATHS = frozenset({"/v1/events/batches", "/v1/products:bulk-upsert"})
 
 
+from graphrec_core.observability import correlation_id_var
+
+
 class ContractMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, *, settings: Settings) -> None:  # type: ignore[no-untyped-def]
         super().__init__(app)
@@ -25,6 +28,7 @@ class ContractMiddleware(BaseHTTPMiddleware):
     ) -> Response:
         correlation_id = self._correlation_id(request.headers.get("X-Correlation-ID"))
         request.state.correlation_id = correlation_id
+        correlation_id_var.set(str(correlation_id))
 
         if request.url.path.startswith("/v1"):
             rejection = self._validate_contract_headers(request, correlation_id)
