@@ -115,6 +115,9 @@ UC-27: administrators change roles, lock, unlock and disable members (disable is
 ### D-23 Production topology — Decided
 `docker-compose.prod.yml` overlays the base file: `GRAPHREC_ENV=production` everywhere, no published ports except Caddy's 80/443 (automatic TLS for `GRAPHREC_DOMAIN`), HSTS at the edge. Backups (`scripts/backup.sh`) cover PostgreSQL (custom-format dump, RLS policies included), Qdrant snapshots, trained models and certificates; Redis holds only short-lived limiter state and is not backed up. Requires Docker Compose 2.24 or newer (`!reset`).
 
+### D-24 Marketing claims match the product — Decided
+The tagline said recommendations "learn from every interaction". The model does not learn online: a new event changes the shopper's history, which the active version reads on the next request, and learning happens when a training run (manual or scheduled) produces a new version. The tagline is now "Recommendations that follow every interaction." Other claims were checked against the code: row-level security, scoped HMAC-stored keys, roles and the operator realm, rules with `applied_rules`, rollback, cold-start fallback; the console preview is captioned as sample values. Plan limits on the pricing page come live from `GET /v1/plans`.
+
 ## Needs your sign-off (historical: answered above)
 
 | # | Decision | Recommendation | Why it is waiting |

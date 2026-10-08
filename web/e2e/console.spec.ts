@@ -59,7 +59,7 @@ async function signIn(page: Page) {
 test("public: the landing page leads to registration, which creates a tenant with a one-time setup link", async () => {
   await page.goto("/");
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole("heading", { level: 1, name: "Recommendations that learn from every interaction." })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Recommendations that follow every interaction." })).toBeVisible();
   await shot(page, "landing");
 
   await page.getByRole("main").getByRole("link", { name: "Create a tenant" }).first().click();

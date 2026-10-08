@@ -19,7 +19,7 @@ describe("public marketing site", () => {
     expect(await screen.findByRole("heading", { level: 1, name: BRAND.tagline })).toBeInTheDocument();
     const main = screen.getByRole("main");
     expect(within(main).getAllByRole("link", { name: "Create a tenant" })[0]).toHaveAttribute("href", "/register");
-    expect(document.title).toBe("GraphRec: Recommendations that learn from every interaction");
+    expect(document.title).toBe("GraphRec: Recommendations that follow every interaction");
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     for (const id of ["features", "how-it-works", "developers", "security"]) expect(document.getElementById(id)).not.toBeNull();
     const nav = screen.getByRole("navigation", { name: "Marketing" });
