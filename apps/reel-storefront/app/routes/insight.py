@@ -59,4 +59,5 @@ async def status(ident: Identity = Depends(identity), svc: Services = Depends(se
     return Envelope(data=StatusOut(
         tenant=cfg.reel_tenant_name, graphrec=state,
         model_version_id=cfg.reel_model_version_id or None, model_version_tag=cfg.reel_model_version_tag or None,
-        model_card=svc.model_card, live_events=len(svc.live.for_shopper(ident.shopper))))
+        model_card=svc.model_card if cfg.reel_model_source == "checkpoint" else None, model_source=cfg.reel_model_source,
+        live_events=len(svc.live.for_shopper(ident.shopper))))

@@ -171,6 +171,8 @@ button.chip { font: inherit; font-size: 13px; color: var(--ink); cursor: pointer
 @media (max-width: 980px) { .topsearch { order: 3; flex-basis: 100%; max-width: none; } .topbar { flex-wrap: wrap; } }
 @media (max-width: 560px) {
   .persona-label { display: none; } .persona select { max-width: 150px; }
-  .filter-group { flex-direction: column; gap: 4px; } .filter-group .chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
+  .filter-group { flex-direction: column; align-items: stretch; gap: 4px; min-width: 0; }
+  .filter-group .chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; max-width: 100%; min-width: 0; }
+  .filter-group .chips > .chip { flex: none; white-space: nowrap; }
   .pager { flex-wrap: wrap; gap: 8px; } .actions { flex-wrap: wrap; }
 }

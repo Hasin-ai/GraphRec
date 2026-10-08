@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
+
 import json
 import re
 import threading
@@ -162,11 +164,30 @@ def history_for(persona: Persona, live: Sequence[dict]) -> List[dict]:
     return rows
 
 
+class BoundedDict(OrderedDict):
+    """A dict that forgets its least recently written keys beyond ``limit``.
+
+    Per-visitor state (previous lists, impression ids) is created by every anonymous
+    session and every film page; without a bound it grows for the life of the process.
+    """
+
+    def __init__(self, limit: int = 10_000) -> None:
+        super().__init__()
+        self.limit = limit
+
+    def __setitem__(self, key, value) -> None:  # noqa: ANN001
+        if key in self:
+            self.move_to_end(key)
+        super().__setitem__(key, value)
+        while len(self) > self.limit:
+            self.popitem(last=False)
+
+
 class LastLists:
     """The previous ranked list per (shopper, shelf), for the before/after diff."""
 
-    def __init__(self) -> None:
-        self._lists: Dict[Tuple[str, str], List[str]] = {}
+    def __init__(self, limit: int = 10_000) -> None:
+        self._lists: Dict[Tuple[str, str], List[str]] = BoundedDict(limit)
 
     def swap(self, shopper: str, shelf: str, ids: List[str]) -> Optional[List[str]]:
         previous = self._lists.get((shopper, shelf))

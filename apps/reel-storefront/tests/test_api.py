@@ -198,3 +198,33 @@ async def test_rejects_unknown_fields_and_personas(client):
     async with client as c:
         assert (await c.http.post("/api/reel/watch", json={"filmId": "1", "userId": "x"})).status_code == 422
         assert (await c.http.post("/api/reel/session/persona", json={"persona": "mallory"})).status_code == 422
+
+
+def test_per_visitor_state_is_bounded():
+    from app.store import BoundedDict, LastLists
+    seen = BoundedDict(limit=3)
+    for n in range(5):
+        seen[f"req-{n}"] = n
+    assert list(seen) == ["req-2", "req-3", "req-4"]
+    lists = LastLists(limit=2)
+    lists.swap("a", "home", ["1"]); lists.swap("b", "home", ["2"]); lists.swap("c", "home", ["3"])
+    assert lists.swap("a", "home", ["4"]) is None   # the oldest shopper's list was forgotten
+    assert lists.swap("c", "home", ["5"]) == ["3"]
+
+
+def test_bootstrap_quotes_env_values_with_spaces(tmp_path):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("bootstrap_reel", "scripts/bootstrap_reel.py")
+    module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+    path = tmp_path / ".env"
+    module.write_env(path, {"REEL_TENANT_NAME": "Reel 3f2a1c", "GRAPHREC_API_KEY": "gr_live_abc"})
+    assert path.read_text() == 'REEL_TENANT_NAME="Reel 3f2a1c"\nGRAPHREC_API_KEY=gr_live_abc\n'
+
+
+async def test_status_shows_the_checkpoint_card_only_for_the_imported_checkpoint(client):
+    async with client as c:
+        body = (await c.http.get("/api/reel/insight/status")).json()["data"]
+        assert body["modelSource"] == "checkpoint" and body["modelCard"]["dataset"] == "MovieLens 32M"
+        c.http._transport.app.state.settings.reel_model_source = "trained"
+        body = (await c.http.get("/api/reel/insight/status")).json()["data"]
+        assert body["modelSource"] == "trained" and body["modelCard"] is None

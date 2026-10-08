@@ -129,21 +129,30 @@ function TraceTab() {
 }
 
 function StatusTab() {
-  const { version } = useDemo();
+  const { version, lastTrace } = useDemo();
   const [s, setS] = useState<Status | null>(null);
   useEffect(() => { api.status().then(setS).catch(() => setS(null)); }, [version]);
   if (!s) return <p className="muted">Loading…</p>;
   const c = s.modelCard;
+  // What actually served the last list (it changes after a rollback or a fallback); the configured version may be stale.
+  const servedBy = !lastTrace ? "no list yet" : lastTrace.trace.modelVersionId
+    ? (lastTrace.trace.modelVersionId === s.modelVersionId && s.modelVersionTag ? s.modelVersionTag : lastTrace.trace.modelVersionId.slice(0, 8) + "…")
+    : "popular fallback (no model)";
   return (
     <>
       <div className="kv">
         <span>Tenant</span><b>{s.tenant}</b>
         <span>GraphRec API</span><b className={s.graphrec === "ok" ? "good" : "bad"}>{s.graphrec}</b>
-        <span>Active version</span><b>{s.modelVersionTag || s.modelVersionId || "unknown"}</b>
-        <span>Model</span><b>DGSR · imported offline checkpoint</b>
-        <span>Checkpoint</span><b><code>{c.checkpointSha256?.slice(0, 12)}…</code></b>
-        <span>Trained on</span><b>{c.dataset} cohort · {c.users.toLocaleString()} users · {c.films.toLocaleString()} films · {c.interactions.toLocaleString()} ratings</b>
-        <span>Config</span><b>dim {c.embeddingDim} · {c.layers} layers · window {c.recentItems} · {c.itemNeighborLimit} raters per film</b>
+        <span>Set up with</span><b>{s.modelVersionTag || s.modelVersionId || "unknown"}</b>
+        <span>Last list from</span><b>{servedBy}</b>
+        {c ? <>
+          <span>Model</span><b>DGSR · imported offline checkpoint</b>
+          <span>Checkpoint</span><b><code>{c.checkpointSha256?.slice(0, 12)}…</code></b>
+          <span>Trained on</span><b>{c.dataset} cohort · {c.users.toLocaleString()} users · {c.films.toLocaleString()} films · {c.interactions.toLocaleString()} ratings</b>
+          <span>Config</span><b>dim {c.embeddingDim} · {c.layers} layers · window {c.recentItems} · {c.itemNeighborLimit} raters per film</b>
+        </> : <>
+          <span>Model</span><b>DGSR · trained by GraphRec on this store's own events</b>
+        </>}
       </div>
       <h4>Strategies you may see</h4>
       <ul className="plain">
@@ -151,7 +160,7 @@ function StatusTab() {
         <li><b>Session</b> — no trained shopper; the history is encoded with the mean user vector (an approximation).</li>
         <li><b>Fallback</b> — nothing the model knows about this visitor; GraphRec's popular fallback.</li>
       </ul>
-      <h4>Offline quality (not measured by this demo)</h4>
+      {c ? <><h4>Offline quality (not measured by this demo)</h4>
       <table className="metrics">
         <tbody>
           {c.metrics.map((m) => (
@@ -161,7 +170,7 @@ function StatusTab() {
             </tr>
           ))}
         </tbody>
-      </table>
+      </table></> : <p className="muted">This version's offline quality is on its model page in the GraphRec console.</p>}
       <h4>What this demo shows, and what it doesn't</h4>
       <ul className="plain">
         <li>Shows: events reach GraphRec, the active DGSR version re-ranks from the new history, without retraining.</li>

@@ -32,5 +32,6 @@ export interface Sequence { shopper: string; total: number; window: number; item
 export interface Metric { protocol: string; source: string; hit10?: number; ndcg10?: number; recall10?: number; mrr?: number; note: string }
 export interface Status {
   tenant: string; graphrec: string; modelVersionId: string | null; modelVersionTag: string | null; liveEvents: number;
-  modelCard: { dataset: string; checkpointSha256: string; users: number; films: number; interactions: number; embeddingDim: number; layers: number; recentItems: number; itemNeighborLimit: number; metrics: Metric[] };
+  modelSource: "checkpoint" | "trained" | string;
+  modelCard: null | { dataset: string; checkpointSha256: string; users: number; films: number; interactions: number; embeddingDim: number; layers: number; recentItems: number; itemNeighborLimit: number; metrics: Metric[] };
 }

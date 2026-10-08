@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     #: Model version activated by bootstrap_reel.py, shown in the Status tab (the key cannot read versions).
     reel_model_version_id: str = ""
     reel_model_version_tag: str = ""
+    #: How bootstrap_reel.py made the version: "checkpoint" (the offline MovieLens checkpoint described by
+    #: data/model_card.json) or "trained" (GraphRec trained it on this store's events; the card does not apply).
+    reel_model_source: str = "checkpoint"
     reel_tenant_name: str = "Reel"
 
     graphrec_timeout_seconds: float = 5.0

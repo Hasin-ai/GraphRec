@@ -24,11 +24,18 @@ export function FilmPage() {
 
   useEffect(() => {
     setFilm(null); setMore(null); setReceipt(null); setMissing(false);
-    api.film(id).then((f) => { setFilm(f); document.title = `${displayTitle(f.title)} · Reel`; })
-      .catch((e) => { if (e instanceof ApiError && e.code === "not_found") setMissing(true); else notify((e as Error).message); });
-    api.recommend("more_like", id).then((r) => { setMore(r); if ("trace" in r) setLastTrace(r); }).catch(() => undefined);
+    let current = true;
+    api.film(id).then((f) => {
+      if (!current) return;
+      setFilm(f); document.title = `${displayTitle(f.title)} · Reel`;
+      // Ask for similar films only for a film that exists (an unknown id would be a 422).
+      return api.recommend("more_like", id).then((r) => { if (current) { setMore(r); if ("trace" in r) setLastTrace(r); } });
+    }).catch((e) => {
+      if (!current) return;
+      if (e instanceof ApiError && e.code === "not_found") setMissing(true); else notify((e as Error).message);
+    });
     window.scrollTo({ top: 0 });
-    return () => { document.title = "Reel — a GraphRec film store"; };
+    return () => { current = false; document.title = "Reel — a GraphRec film store"; };
   }, [id, notify, setLastTrace]);
 
   if (missing) {

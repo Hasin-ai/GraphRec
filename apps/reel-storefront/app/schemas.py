@@ -184,5 +184,7 @@ class StatusOut(Wire):
     graphrec: str
     model_version_id: Optional[str]
     model_version_tag: Optional[str]
-    model_card: Dict[str, Any]
+    #: Only for the imported checkpoint; None when the version was trained by GraphRec here.
+    model_card: Optional[Dict[str, Any]]
+    model_source: str
     live_events: int

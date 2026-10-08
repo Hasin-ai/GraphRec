@@ -10,7 +10,7 @@ import httpx
 from graphrec_sdk import AsyncGraphRec
 
 from .config import Settings
-from .store import Films, LastLists, LiveLog, Shoppers
+from .store import BoundedDict, Films, LastLists, LiveLog, Shoppers
 
 
 @dataclass
@@ -23,7 +23,7 @@ class Services:
     model_card: dict
     last_lists: LastLists = field(default_factory=LastLists)
     #: request_id -> impression feedback event id (links clicks to impressions).
-    impressions: dict = field(default_factory=dict)
+    impressions: dict = field(default_factory=BoundedDict)
 
     async def close(self) -> None:
         await self.client.close()

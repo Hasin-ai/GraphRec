@@ -42,7 +42,14 @@ def step(title: str) -> None:
     print(f"\n== {title}", flush=True)
 
 
+def env_value(value: object) -> str:
+    """Quote values a shell or Compose would split (e.g. the tenant name "Reel 3f2a1c")."""
+    text = str(value)
+    return f'"{text}"' if any(c in text for c in ' #"\'$`') else text
+
+
 def write_env(path: Path, updates: dict) -> None:
+    updates = {key: env_value(value) for key, value in updates.items()}
     lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
     seen = set()
     out = []
@@ -63,6 +70,9 @@ def main() -> int:
     parser.add_argument("--platform-token", default=os.environ.get("PLATFORM_ADMIN_TOKEN", ""))
     parser.add_argument("--name", default="Reel")
     parser.add_argument("--env-file", default=str(HERE / ".env"))
+    parser.add_argument("--train", action="store_true",
+                        help="train DGSR on the tenant's own events instead of importing the MovieLens checkpoint "
+                             "(for hosts without model_artifacts/; personas then get a much smaller model)")
     args = parser.parse_args()
     if not args.platform_token:
         raise SystemExit("Pass --platform-token (or set PLATFORM_ADMIN_TOKEN): the 7,951-film catalogue needs a quota override.")
@@ -104,7 +114,8 @@ def main() -> int:
             }
             for f in chunk
         ])
-        print(f"  {start + len(chunk):>5}/{len(films)}  {result}")
+        print(f"  {start + len(chunk):>5}/{len(films)}  created={result.created_count} updated={result.updated_count} "
+              f"rejected={result.rejected_count}")
 
     step("persona histories (real training events, original timestamps)")
     for p in personas:
@@ -123,9 +134,10 @@ def main() -> int:
             r = admin.storefront.events.create_batch(events[start : start + EVENT_CHUNK])
             print(f"  {p['name']:<5} {start + EVENT_CHUNK if start + EVENT_CHUNK < len(events) else len(events):>3}/{len(events)}  {r}")
 
-    step("import the offline DGSR checkpoint and activate it")
+    step("train DGSR on the persona histories" if args.train else "import the offline DGSR checkpoint and activate it")
     snapshot = admin.tenant.datasets.create_snapshot(description="Reel persona histories")
-    job = admin.tenant.training_jobs.create(dataset_snapshot_id=snapshot.id, configuration={"pretrained_artifact": ARTIFACT_NAME})
+    configuration = {"mode": "train", "epochs": 2} if args.train else {"pretrained_artifact": ARTIFACT_NAME}
+    job = admin.tenant.training_jobs.create(dataset_snapshot_id=snapshot.id, configuration=configuration)
     job = admin.tenant.training_jobs.wait(job.id, timeout=600, poll_interval=2)
     if job.status != "succeeded" or not job.model_version_id:
         raise SystemExit(f"Import failed: {job.status} {getattr(job, 'failure_reason', '')}")
@@ -148,6 +160,7 @@ def main() -> int:
         "REEL_TENANT_ID": str(tenant.id),
         "REEL_MODEL_VERSION_ID": str(version.id),
         "REEL_MODEL_VERSION_TAG": str(getattr(version, "version_tag", "") or ""),
+        "REEL_MODEL_SOURCE": "trained" if args.train else "checkpoint",
     })
     live = HERE / "state" / "live_events.jsonl"
     if live.is_file():

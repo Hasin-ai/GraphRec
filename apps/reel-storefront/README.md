@@ -38,6 +38,11 @@ uvicorn app.main:app --port 5290          # http://localhost:5290
 # (dev: npm run dev in frontend/ -> http://localhost:5291, proxying /api/reel)
 ```
 
+**No checkpoint on this host?** `python scripts/bootstrap_reel.py --train --platform-token …` trains
+DGSR in GraphRec on the persona histories instead (the worker must be running). The model is much
+smaller, so the measured demo script below does not apply; the Insight → Status tab then says the
+version was trained here and shows no checkpoint card (`REEL_MODEL_SOURCE=trained`).
+
 **Reset the demo** by re-running `bootstrap_reel.py`: it creates a fresh tenant.
 Events are permanent and idempotent by design, so a shopper's live history cannot
 be rolled back inside one tenant. Persona user ids must stay the real MovieLens ids
