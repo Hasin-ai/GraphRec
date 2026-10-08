@@ -214,7 +214,9 @@ def test_per_visitor_state_is_bounded():
 
 def test_bootstrap_quotes_env_values_with_spaces(tmp_path):
     import importlib.util
-    spec = importlib.util.spec_from_file_location("bootstrap_reel", "scripts/bootstrap_reel.py")
+    from pathlib import Path
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "bootstrap_reel.py"
+    spec = importlib.util.spec_from_file_location("bootstrap_reel", str(script_path))
     module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
     path = tmp_path / ".env"
     module.write_env(path, {"REEL_TENANT_NAME": "Reel 3f2a1c", "GRAPHREC_API_KEY": "gr_live_abc"})
