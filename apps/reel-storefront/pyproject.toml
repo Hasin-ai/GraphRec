@@ -9,6 +9,8 @@ dependencies = [
   "pydantic>=2.10",
   "pydantic-settings>=2.10",
   "graphrec-sdk>=1.0",
+  "redis>=5.0",
+  "itsdangerous>=2.2",
 ]
 
 [project.optional-dependencies]

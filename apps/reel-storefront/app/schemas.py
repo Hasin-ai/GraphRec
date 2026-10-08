@@ -81,6 +81,9 @@ class WatchIn(Input):
     #: Set when the watch came from a recommendation shelf: also sends conversion feedback.
     request_id: Optional[str] = Field(default=None, max_length=200)
     position: Optional[int] = Field(default=None, ge=1, le=100)
+    event_type: Literal["rating", "purchase", "view", "click", "add_to_wishlist"] = "rating"
+    rating: Optional[float] = Field(default=None, ge=0.5, le=5.0)
+    occurred_at: Optional[int] = Field(default=None, description="Unix timestamp seconds")
 
 
 class Receipt(Wire):
@@ -188,3 +191,5 @@ class StatusOut(Wire):
     model_card: Optional[Dict[str, Any]]
     model_source: str
     live_events: int
+    feedback_health: Optional[Dict[str, Dict[str, int]]] = None
+    readiness: Optional[Dict[str, str]] = None

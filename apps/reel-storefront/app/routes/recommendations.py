@@ -105,12 +105,23 @@ async def recommend(body: RecommendationIn, ident: Identity = Depends(identity),
 
     impression = None
     if recs.items:
-        try:
-            receipt = await svc.client.storefront.feedback.impression(recs, context=ctx)
-            impression = receipt.event_id
-            svc.impressions[recs.request_id] = impression
-        except APIError:
-            pass  # telemetry is best-effort
+        fb_succeeded = False
+        for attempt in range(2):
+            try:
+                receipt = await svc.client.storefront.feedback.impression(recs, context=ctx)
+                impression = receipt.event_id
+                svc.storage.set_impression(recs.request_id, impression)
+                fb_succeeded = True
+                break
+            except Exception:
+                pass
+        svc.storage.record_feedback("impression", fb_succeeded)
+
+    if omitted > 0:
+        import logging
+        logging.getLogger("reel.recommendations").warning(
+            "Catalogue mismatch in recs %s: %d items omitted from films.json", recs.request_id, omitted
+        )
 
     if body.shelf == "more_like":
         title = f"More like {display_title(svc.films.get(body.film_id)['title'])}"
@@ -131,7 +142,19 @@ async def recommend(body: RecommendationIn, ident: Identity = Depends(identity),
 
 @router.post("/feedback/click", response_model=Envelope[FeedbackOut])
 async def click(body: ClickIn, ident: Identity = Depends(identity), svc: Services = Depends(services)):
-    fb = await svc.client.storefront.feedback.click(
-        body.request_id, body.film_id, position=body.position,
-        impression_event_id=svc.impressions.get(body.request_id), context=ident.context("shelf"))
-    return Envelope(data=FeedbackOut(event_id=fb.event_id, accepted=fb.accepted, duplicate=fb.duplicate))
+    imp_id = svc.storage.get_impression(body.request_id)
+    fb = None
+    fb_succeeded = False
+    for attempt in range(2):
+        try:
+            fb = await svc.client.storefront.feedback.click(
+                body.request_id, body.film_id, position=body.position,
+                impression_event_id=imp_id, context=ident.context("shelf"))
+            fb_succeeded = True
+            break
+        except Exception:
+            pass
+    svc.storage.record_feedback("click", fb_succeeded)
+    if fb:
+        return Envelope(data=FeedbackOut(event_id=fb.event_id, accepted=fb.accepted, duplicate=fb.duplicate))
+    return Envelope(data=FeedbackOut(event_id=f"fbk_click_fallback_{body.request_id[:8]}", accepted=False, duplicate=False))

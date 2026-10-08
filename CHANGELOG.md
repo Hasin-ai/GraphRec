@@ -3,6 +3,19 @@
 All notable changes to GraphRec. Entries reference the anomaly register in
 `docs/GAP_ANALYSIS.md` (A-xx) and the decisions in `docs/DECISIONS.md` (D-xx).
 
+## [Unreleased] - Reel Reference Storefront Production Readiness
+
+### Added (Phase 1 — Correct & Consistent Backend)
+- **Single Source of Truth:** Backed shopper history and sequence directly by GraphRec interaction events (`client.storefront.events.list`), eliminating drift from local JSONL mirroring.
+- **Durable Shared State:** Implemented `SharedState` (`app/storage.py`) with Redis backing for shelf before/after diffs (`last_lists`, TTL 24h) and impression attribution (`impressions`, TTL 7d), providing full consistency across multiple uvicorn workers and process restarts.
+- **Cryptographically Signed Sessions:** Switched session identity cookie from raw unsigned string to HMAC-signed tokens via `itsdangerous`, rejecting tampered cookies safely and generating cold-start ephemeral visitors ("New visitor") on demand.
+- **Arbitrary Developer Personas:** Supported arbitrary MovieLens IDs (`user:<id>`) in non-production environments to test arbitrary customer cohorts without modifying code.
+- **Resilient Telemetry with Retry:** Added automatic retry for impression, click, and conversion feedback, recording telemetry health counters (`feedback_health`) without failing customer actions.
+- **Rich Multi-Event Semantics:** Extended storefront event model to support `view`, `click`, `add_to_wishlist`, `rating` (1-5), and `purchase`, sending real client action timestamps (`occurred_at`).
+- **Security Middlewares & Headers:** Added Content-Security-Policy (CSP), X-Frame-Options, X-Content-Type-Options, Referrer-Policy, strict Origin CSRF verification, request body size limit enforcement (413), and sliding window rate limiting (429 with `Retry-After`).
+- **Health & Readiness Probes:** Added `/healthz` (liveness) and `/readyz` (deep readiness checking GraphRec API, Redis, catalogue sync, and active model version).
+- **Directory Traversal Protection:** Hardened SPA fallback file serving with strict path containment (`is_relative_to`).
+
 ## [1.2.0] - 2026-10-08
 
 ### Added (SaaS Elevation & Production-Grade UX)

@@ -1,16 +1,45 @@
-"""The single credentialed GraphRec client plus local stores, created in the lifespan."""
+"""The single credentialed GraphRec client plus local and shared stores, created in the lifespan."""
 
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, List, Optional
 
 import httpx
 from graphrec_sdk import AsyncGraphRec
 
 from .config import Settings
-from .store import BoundedDict, Films, LastLists, LiveLog, Shoppers
+from .storage import SharedState
+from .store import Films, LiveLog, Shoppers
+
+
+class StorageLastLists:
+    """Delegates to SharedState (Redis or memory) for cross-worker diffing."""
+
+    def __init__(self, storage: SharedState) -> None:
+        self._storage = storage
+
+    def swap(self, shopper: str, shelf: str, ids: List[str]) -> Optional[List[str]]:
+        return self._storage.swap_last_list(shopper, shelf, ids)
+
+
+class StorageImpressions(dict):
+    """Delegates to SharedState for cross-worker impression attribution."""
+
+    def __init__(self, storage: SharedState) -> None:
+        super().__init__()
+        self._storage = storage
+
+    def __getitem__(self, key: str) -> Optional[str]:
+        return self._storage.get_impression(key)
+
+    def __setitem__(self, key: str, value: str) -> None:
+        self._storage.set_impression(key, value)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        val = self._storage.get_impression(key)
+        return val if val is not None else default
 
 
 @dataclass
@@ -21,12 +50,18 @@ class Services:
     live: LiveLog
     settings: Settings
     model_card: dict
-    last_lists: LastLists = field(default_factory=LastLists)
-    #: request_id -> impression feedback event id (links clicks to impressions).
-    impressions: dict = field(default_factory=BoundedDict)
+    storage: SharedState
+    last_lists: StorageLastLists = field(init=False)
+    impressions: StorageImpressions = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.last_lists = StorageLastLists(self.storage)
+        self.impressions = StorageImpressions(self.storage)
 
     async def close(self) -> None:
-        await self.client.close()
+        if hasattr(self.client, "close"):
+            await self.client.close()
+        self.storage.close()
 
 
 def build_services(settings: Settings) -> Services:
@@ -42,6 +77,7 @@ def build_services(settings: Settings) -> Services:
 
 
 def build_local(settings: Settings, client: Any) -> Services:
+    storage = SharedState(redis_url=settings.redis_url)
     return Services(
         client=client,
         films=Films(settings.data_dir / "films.json"),
@@ -49,4 +85,5 @@ def build_local(settings: Settings, client: Any) -> Services:
         live=LiveLog(settings.state_dir),
         settings=settings,
         model_card=json.loads((settings.data_dir / "model_card.json").read_text(encoding="utf-8")),
+        storage=storage,
     )

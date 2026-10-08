@@ -113,8 +113,25 @@ class Shoppers:
                 tuple((h["filmId"], int(h["time"])) for h in p["history"]),
             )
 
-    def get(self, key: Optional[str]) -> Persona:
-        return self.personas.get((key or "").lower(), ANONYMOUS)
+    def get(self, key: Optional[str], session_id: Optional[str] = None) -> Persona:
+        k = (key or "").strip().lower()
+        if not k or k == "anon":
+            return ANONYMOUS
+        if k in self.personas:
+            return self.personas[k]
+        if k == "new":
+            uid = f"user_new_{session_id[-8:]}" if session_id else f"user_new_{int(time.time())}"
+            return Persona(
+                "new", "New visitor", "Cold start: brand-new user id on demand",
+                "#8B5CF6", uid, (),
+            )
+        if k.startswith("user:") or (k.isdigit() and len(k) <= 10):
+            uid = k.split(":")[-1]
+            return Persona(
+                f"user:{uid}", f"User {uid}", f"MovieLens user {uid}",
+                "#2F6690", uid, (),
+            )
+        return ANONYMOUS
 
 
 class LiveLog:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Optional
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -37,12 +38,33 @@ class Settings(BaseSettings):
     state_dir: Path = PACKAGE_DIR / "state"
     frontend_dist: Path = PACKAGE_DIR / "frontend" / "dist"
 
+    redis_url: Optional[str] = None
+    reel_secret_key: str = "reel-dev-secret-key-please-change-in-production-min32"
+    reel_env: str = "development"
+    reel_rate_limit_per_minute: int = 120
+    reel_body_limit_bytes: int = 65536
+    reel_allowed_origins: list[str] = [
+        "http://localhost:5290",
+        "http://127.0.0.1:5290",
+        "http://localhost:5291",
+        "http://127.0.0.1:5291",
+        "http://localhost:5180",
+        "http://127.0.0.1:5180",
+    ]
+
     @field_validator("graphrec_api_key")
     @classmethod
     def _real_key(cls, value: str) -> str:
         if not value.startswith("gr_live_"):
             raise ValueError("GRAPHREC_API_KEY must be a GraphRec API key (gr_live_...). Run scripts/bootstrap_reel.py.")
         return value
+
+    def check_production_safety(self) -> None:
+        if self.reel_env == "production":
+            if not self.reel_cookie_secure:
+                raise ValueError("REEL_COOKIE_SECURE must be True when REEL_ENV=production.")
+            if self.reel_secret_key == "reel-dev-secret-key-please-change-in-production-min32":
+                raise ValueError("REEL_SECRET_KEY must be configured with a secure key in production.")
 
 
 @lru_cache(maxsize=1)
