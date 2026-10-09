@@ -74,9 +74,8 @@ test("public: the landing page leads to sign-up, which creates the account and s
   // One step: the account is activated with the chosen password and the administrator lands on Home.
   await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
   await expect(page.getByText("Administrator", { exact: true }).first()).toBeVisible();
-  await expect(page.getByRole("button", { name: `Workspace: ${tenantName}` })).toBeVisible();
-  await expect(page.getByText("Add your catalog", { exact: true })).toBeVisible();
-  await expect(page.getByText("0 of 4 steps done")).toBeVisible();
+  await expect(page.getByText("Sync product catalog", { exact: true })).toBeVisible();
+  await expect(page.getByText("0 of 6 steps done")).toBeVisible();
   await shot(page, "home-fresh");
 
   // An invitation for a developer gives the setup link that the next test redeems.
@@ -451,7 +450,7 @@ test("platform realm: operator sign-in, tenant detail, quota override, suspensio
   await expect(page.getByRole("button", { name: /^Account menu for E2E Operator/ })).toBeVisible();
   await shot(page, "platform-tenants");
 
-  await page.getByLabel("Search").fill(tenantName);
+  await page.getByRole("textbox", { name: "Search" }).fill(tenantName);
   const row = page.getByRole("row", { name: new RegExp(tenantName) });
   await expect(row).toContainText("active");
   await row.getByRole("button", { name: "Open" }).click();
@@ -489,7 +488,7 @@ test("platform realm: operator sign-in, tenant detail, quota override, suspensio
 
   // Suspend the tenant: its sessions stop verifying immediately.
   await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Tenants" }).click();
-  await page.getByLabel("Search").fill(tenantName);
+  await page.getByRole("textbox", { name: "Search" }).fill(tenantName);
   await page.getByRole("row", { name: new RegExp(tenantName) }).getByRole("button", { name: "Change status" }).click();
   await page.getByRole("dialog").getByLabel("New status").selectOption("suspended");
   // UC-27: the change is refused until a reason is given, and the reason is audited.

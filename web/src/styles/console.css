@@ -61,8 +61,8 @@
 .stat .value { font-size: 22px; font-weight: 600; letter-spacing: -.025em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .stat .note { font-size: 12px; color: var(--color-neutral-600); }
 .stat .value.warn { color: var(--warn); }.stat .value.danger { color: var(--danger); }.stat .value.ok { color: var(--ok); }
-.tabs { display: flex; gap: 20px; border-bottom: 1px solid var(--color-border); }
-.tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 0; font: inherit; color: var(--color-neutral-600); cursor: pointer; }
+.tabs { display: flex; gap: 20px; border-bottom: 1px solid var(--color-border); overflow-x: auto; max-width: 100%; -webkit-overflow-scrolling: touch; }
+.tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 0; font: inherit; color: var(--color-neutral-600); cursor: pointer; white-space: nowrap; flex-shrink: 0; }
 .tabs button.active { color: var(--color-text); border-bottom-color: var(--color-accent); }
 .filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
 .filters .field { flex: 1; min-width: 150px; max-width: 300px; }
@@ -135,8 +135,13 @@
   .form .fields { grid-template-columns: 1fr; }.btn, .btn-xs { min-height: 40px; }.filters { gap: 10px; }.filters .field { max-width: none; }
 }
 .auth-links { display: flex; flex-wrap: wrap; gap: 12px 24px; border-top: 1px solid var(--color-border); padding-top: 20px; font-size: 14px; }
-.table-scroll-hint { display: none; color: var(--color-neutral-600); font-size: 13px; margin: 0 0 8px; }
-@media (max-width: 600px) { .table-scroll-hint { display: block; } }
+@media (max-width: 600px) {
+  .table-scroll-hint { display: block; }
+  .dl > div, .panel .p-dl > div { flex-direction: column; gap: 4px; align-items: flex-start; }
+  .dl dt, .panel .p-dl dt { width: auto; flex-shrink: 1; }
+  .snippet, .snippets, .code-block { max-width: 100%; min-width: 0; }
+  .snippet pre { max-width: 100%; }
+}
 
 /* XR feature controls */
 .check { display: inline-flex; gap: 8px; align-items: center; font-weight: normal; }
