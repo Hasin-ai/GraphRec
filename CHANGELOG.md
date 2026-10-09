@@ -23,6 +23,11 @@ All notable changes to GraphRec. Entries reference the anomaly register in
 - **Production Hardened Container:** Pinned container dependencies (`requirements.txt`), configured unprivileged non-root user execution (`reel:reel`), and integrated deep readiness health check probes.
 - **Operations & Deployment Manuals:** Authored comprehensive deployment guide (`docs/REEL_DEPLOYMENT.md`) and operational runbook (`docs/REEL_OPERATIONS.md`).
 
+### Added (Phase 3 — Capability Proof Suite P1–P19)
+- **On-Demand Capability Battery:** Built `app/proof/` package implementing capability checks P1 through P19 covering personalization, accuracy vs popularity, recency sensitivity, real-time dynamic updates, sequence window behavior, session recommendations, cold start, unseen item handling, seen item exclusion, eligibility filtering, event idempotency, determinism, business rules, model lifecycle, graceful degradation, closed feedback loops, tenant isolation, training specifications, and throughput/latency.
+- **Standalone Verification CLI:** Created `scripts/prove_graphrec.py` with ASCII summary tables and machine-readable JSON output supporting `--profile tiny` and `--profile full` (achieved 19/19 100% PASS against MovieLens 32M checkpoint).
+- **Storefront Proof Endpoints:** Added `POST /api/reel/proof/run` and `GET /api/reel/proof/latest` allowing on-demand proof triggering from browser or automation.
+
 ## [1.2.0] - 2026-10-08
 
 ### Added (SaaS Elevation & Production-Grade UX)

@@ -24,7 +24,7 @@ from .dependencies import (
 from .errors import error_response, install_error_handlers
 from .graphrec import Services, build_services
 from .observability import METRICS, configure_logging, correlation_id_var
-from .routes import events, films, insight, recommendations, session
+from .routes import events, films, insight, proof, recommendations, session
 
 logger = logging.getLogger("reel")
 API_PREFIX = "/api/reel"
@@ -220,7 +220,7 @@ def create_app(settings: Optional[Settings] = None, svc: Optional[Services] = No
         )
 
     api = APIRouter(prefix=API_PREFIX)
-    for module in (session, films, events, recommendations, insight):
+    for module in (session, films, events, recommendations, insight, proof):
         api.include_router(module.router)
 
     @api.api_route("/{path:path}", methods=["GET", "POST"], include_in_schema=False)
