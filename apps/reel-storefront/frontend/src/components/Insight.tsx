@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, isUnavailable } from "../api";
 import { strategyDetail, useDemo, type Tab } from "../demo";
-import type { Sequence, Status } from "../types";
+import type { ProofReport, Sequence, Status } from "../types";
 import { Poster } from "./FilmTile";
 
 const TABS: { key: Tab; label: string }[] = [
@@ -10,6 +10,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "changes", label: "Changes" },
   { key: "trace", label: "Trace" },
   { key: "status", label: "Status" },
+  { key: "proof", label: "Proof" },
 ];
 
 export function Insight() {
@@ -31,6 +32,7 @@ export function Insight() {
         {tab === "changes" && <ChangesTab />}
         {tab === "trace" && <TraceTab />}
         {tab === "status" && <StatusTab />}
+        {tab === "proof" && <ProofTab />}
       </div>
     </aside>
   );
@@ -154,6 +156,30 @@ function StatusTab() {
           <span>Model</span><b>DGSR · trained by GraphRec on this store's own events</b>
         </>}
       </div>
+
+      <h4>Deep Readiness Probes</h4>
+      <div className="readiness-strip">
+        {s.readiness && Object.entries(s.readiness).map(([k, v]) => (
+          <span key={k} className="readiness-pill">
+            <span className={`status-dot ${v === "ok" ? "ok" : "down"}`} />
+            {k}: <b>{v}</b>
+          </span>
+        ))}
+      </div>
+
+      <h4>Telemetry Feedback Health</h4>
+      {s.feedbackHealth && (
+        <div className="telemetry-grid">
+          {Object.entries(s.feedbackHealth).map(([kind, counts]) => (
+            <div key={kind} className="telemetry-card">
+              <span>{kind}</span>
+              <b>{counts.success} ok</b>
+              {counts.failure > 0 && <span className="err">{counts.failure} fail</span>}
+            </div>
+          ))}
+        </div>
+      )}
+
       <h4>Strategies you may see</h4>
       <ul className="plain">
         <li><b>Personalized</b> — a shopper from the training data; their trained embedding plus their history.</li>
@@ -176,6 +202,123 @@ function StatusTab() {
         <li>Shows: events reach GraphRec, the active DGSR version re-ranks from the new history, without retraining.</li>
         <li>Doesn't show: recommendation quality, online learning, latency under load.</li>
       </ul>
+    </>
+  );
+}
+
+function ProofTab() {
+  const [report, setReport] = useState<ProofReport | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    api.proofLatest().then(setReport).catch(() => setReport(null));
+  }, []);
+
+  const runBattery = async () => {
+    setLoading(true);
+    try {
+      const rep = await api.proofRun("full");
+      setReport(rep);
+    } catch (err) {
+      console.error("Proof battery run failed", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleExpand = (id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const summary = report?.summary;
+
+  return (
+    <>
+      <p className="explain">
+        Automated proof battery verifying all 19 core recommender capabilities (P1–P19) on demand against the live backend and active DGSR model.
+      </p>
+
+      <div className="row-actions" style={{ marginBottom: 14 }}>
+        <button className="btn primary small" onClick={runBattery} disabled={loading}>
+          {loading ? "Running proof battery…" : "Run Capability Battery (P1–P19)"}
+        </button>
+      </div>
+
+      {summary && (
+        <div className="proof-summary-card">
+          <div className="head">
+            <span style={{ fontWeight: 600 }}>Battery Result</span>
+            <span className={`proof-badge ${summary.failed_checks === 0 ? "pass" : "fail"}`}>
+              {summary.failed_checks === 0 ? "19/19 Verified" : `${summary.passed_checks}/${summary.total_checks} Degraded`}
+            </span>
+          </div>
+          <div className="kv" style={{ fontSize: 12 }}>
+            <span>Run ID</span><code>{summary.run_id}</code>
+            <span>Profile</span><b>{summary.profile}</b>
+            <span>Total Latency</span><b>{summary.total_duration_ms.toFixed(1)} ms</b>
+            <span>Success Rate</span><b>{(summary.success_rate * 100).toFixed(1)}%</b>
+          </div>
+        </div>
+      )}
+
+      {report && (
+        <>
+          <h4>Capability Verifications (P1–P19)</h4>
+          <table className="proof-table">
+            <thead>
+              <tr>
+                <th style={{ width: 34 }}>ID</th>
+                <th>Capability</th>
+                <th style={{ width: 54 }}>Status</th>
+                <th style={{ width: 55, textAlign: "right" }}>ms</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.checks.map((chk) => {
+                const isOpen = expanded.has(chk.id);
+                return (
+                  <tr key={chk.id} className="clickable" onClick={() => toggleExpand(chk.id)}>
+                    <td colSpan={4} style={{ padding: 0 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 4px" }}>
+                        <span style={{ fontWeight: 600, width: 34 }}>{chk.id}</span>
+                        <div style={{ flex: 1, padding: "0 6px" }}>
+                          <div>{chk.name}</div>
+                          {chk.detail && <small style={{ color: "var(--ink-2)", display: "block" }}>{chk.detail}</small>}
+                        </div>
+                        <span className={`proof-badge ${chk.passed ? "pass" : "fail"}`} style={{ marginRight: 8 }}>
+                          {chk.passed ? "PASS" : "FAIL"}
+                        </span>
+                        <span style={{ width: 50, textAlign: "right", color: "var(--ink-2)", fontSize: 11 }}>
+                          {chk.duration_ms.toFixed(1)}
+                        </span>
+                      </div>
+                      {isOpen && (
+                        <div style={{ padding: "0 8px 8px" }}>
+                          <pre className="proof-evidence-box">
+                            {JSON.stringify(chk.evidence, null, 2)}
+                          </pre>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </>
+      )}
+
+      {!report && !loading && (
+        <p className="muted" style={{ marginTop: 24, textAlign: "center" }}>
+          No proof battery has been executed yet. Click above to run verification.
+        </p>
+      )}
     </>
   );
 }

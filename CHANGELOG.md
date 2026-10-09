@@ -28,6 +28,12 @@ All notable changes to GraphRec. Entries reference the anomaly register in
 - **Standalone Verification CLI:** Created `scripts/prove_graphrec.py` with ASCII summary tables and machine-readable JSON output supporting `--profile tiny` and `--profile full` (achieved 19/19 100% PASS against MovieLens 32M checkpoint).
 - **Storefront Proof Endpoints:** Added `POST /api/reel/proof/run` and `GET /api/reel/proof/latest` allowing on-demand proof triggering from browser or automation.
 
+### Added (Phase 4 — UI Polish & Frontend Consistency)
+- **OpenAPI Client Generation:** Exported OpenAPI specifications to `apps/reel-storefront/openapi.json` and generated TypeScript definitions (`src/api/schema.d.ts`) with `npm run gen:api` and `npm run check:api` drift CI verification.
+- **Storefront Capability Proof Drawer:** Added dedicated "Proof" tab to the Reel storefront "How it works" drawer with interactive on-demand execution of test suite P1–P19 and expandable capability metrics.
+- **Deep Readiness & Feedback Health Display:** Enriched the "Status" tab with real-time deep readiness status pills (GraphRec API, Redis, catalogue sync, active model) and telemetry delivery success/failure counters.
+- **End-to-End Playwright Reel Verification:** Created `web/e2e/reel.spec.ts` testing the complete shopper journey from shelf loading, drawer inspection, capability battery execution, to film interaction and history updates.
+
 ## [1.2.0] - 2026-10-08
 
 ### Added (SaaS Elevation & Production-Grade UX)

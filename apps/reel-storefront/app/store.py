@@ -150,8 +150,12 @@ class LiveLog:
     def add(self, row: dict) -> None:
         with self._lock:
             self._rows.append(row)
-            with self.path.open("a", encoding="utf-8") as fh:
-                fh.write(json.dumps(row) + "\n")
+            try:
+                with self.path.open("a", encoding="utf-8") as fh:
+                    fh.write(json.dumps(row) + "\n")
+            except Exception as exc:
+                import logging
+                logging.getLogger("reel.livelog").warning("Could not persist live event to %s: %s", self.path, exc)
 
     def for_shopper(self, shopper: str) -> List[dict]:
         return [r for r in self._rows if r["shopper"] == shopper]

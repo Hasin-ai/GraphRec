@@ -127,6 +127,7 @@ diagrams/
 # Playwright
 web/e2e-results/
 web/e2e-screens/
+test-results/
 
 # Pretrained model artifacts mounted into the API (MODEL_ARTIFACT_DIR)
 /model_artifacts/

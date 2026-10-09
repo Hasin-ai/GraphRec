@@ -34,4 +34,32 @@ export interface Status {
   tenant: string; graphrec: string; modelVersionId: string | null; modelVersionTag: string | null; liveEvents: number;
   modelSource: "checkpoint" | "trained" | string;
   modelCard: null | { dataset: string; checkpointSha256: string; users: number; films: number; interactions: number; embeddingDim: number; layers: number; recentItems: number; itemNeighborLimit: number; metrics: Metric[] };
+  feedbackHealth?: Record<string, { success: number; failure: number }>;
+  readiness?: Record<string, string>;
+}
+
+export interface ProofCheckResult {
+  id: string;
+  name: string;
+  passed: boolean;
+  duration_ms: number;
+  evidence: Record<string, unknown>;
+  detail?: string | null;
+}
+
+export interface ProofBatterySummary {
+  run_id: string;
+  profile: string;
+  started_at: string;
+  completed_at: string;
+  total_checks: number;
+  passed_checks: number;
+  failed_checks: number;
+  success_rate: number;
+  total_duration_ms: number;
+}
+
+export interface ProofReport {
+  summary: ProofBatterySummary;
+  checks: ProofCheckResult[];
 }

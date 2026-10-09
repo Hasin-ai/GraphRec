@@ -56,6 +56,9 @@ def translate_api_error(error: APIError) -> StoreError:
     return StoreError(502, "upstream_error", "GraphRec request failed.", cid)
 
 
+import logging
+logger = logging.getLogger("reel.errors")
+
 def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(StoreError)
     async def _store(_: Request, exc: StoreError) -> JSONResponse:
@@ -82,5 +85,6 @@ def install_error_handlers(app: FastAPI) -> None:
         return error_response(exc.status_code, code, str(exc.detail))
 
     @app.exception_handler(Exception)
-    async def _unexpected(_: Request, exc: Exception) -> JSONResponse:  # pragma: no cover - safety net
+    async def _unexpected(request: Request, exc: Exception) -> JSONResponse:  # pragma: no cover - safety net
+        logger.exception("Unhandled error on %s %s: %s", request.method, request.url.path, exc)
         return error_response(500, "internal_error", "The storefront hit an unexpected error.")

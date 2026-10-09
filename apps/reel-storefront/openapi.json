@@ -1,0 +1,1752 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Reel storefront",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/reel/session": {
+      "get": {
+        "tags": [
+          "session"
+        ],
+        "summary": "Get Session",
+        "operationId": "get_session_api_reel_session_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SessionOut_"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reel/session/persona": {
+      "post": {
+        "tags": [
+          "session"
+        ],
+        "summary": "Set Persona",
+        "operationId": "set_persona_api_reel_session_persona_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PersonaIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SessionOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reel/genres": {
+      "get": {
+        "tags": [
+          "films"
+        ],
+        "summary": "Genres",
+        "operationId": "genres_api_reel_genres_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_List_Genre__"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reel/tags": {
+      "get": {
+        "tags": [
+          "films"
+        ],
+        "summary": "Tags",
+        "description": "The most widely used community tags across the catalogue.",
+        "operationId": "tags_api_reel_tags_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 40,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_List_Tag__"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reel/films": {
+      "get": {
+        "tags": [
+          "films"
+        ],
+        "summary": "Browse",
+        "operationId": "browse_api_reel_films_get",
+        "parameters": [
+          {
+            "name": "genre",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 40
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Genre"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 60
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tag"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 80
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "popular",
+                "newest",
+                "oldest",
+                "title"
+              ],
+              "type": "string",
+              "default": "popular",
+              "title": "Sort"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 60,
+              "minimum": 1,
+              "default": 24,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_FilmPage_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reel/films/{film_id}": {
+      "get": {
+        "tags": [
+          "films"
+        ],
+        "summary": "Film",
+        "operationId": "film_api_reel_films__film_id__get",
+        "parameters": [
+          {
+            "name": "film_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Film Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_Film_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reel/watch": {
+      "post": {
+        "tags": [
+          "events"
+        ],
+        "summary": "Watch",
+        "operationId": "watch_api_reel_watch_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WatchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_Receipt_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reel/watch/replay": {
+      "post": {
+        "tags": [
+          "events"
+        ],
+        "summary": "Replay",
+        "description": "Re-send the shopper's last event with the SAME event_id: GraphRec must answer duplicate (NR-NF-05).",
+        "operationId": "replay_api_reel_watch_replay_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_Receipt_"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reel/recommendations": {
+      "post": {
+        "tags": [
+          "recommendations"
+        ],
+        "summary": "Recommend",
+        "operationId": "recommend_api_reel_recommendations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecommendationIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_Union_RecommendationsOut__Unavailable__"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reel/feedback/click": {
+      "post": {
+        "tags": [
+          "recommendations"
+        ],
+        "summary": "Click",
+        "operationId": "click_api_reel_feedback_click_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClickIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_FeedbackOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reel/insight/sequence": {
+      "get": {
+        "tags": [
+          "insight"
+        ],
+        "summary": "Sequence",
+        "operationId": "sequence_api_reel_insight_sequence_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SequenceOut_"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reel/insight/history": {
+      "get": {
+        "tags": [
+          "insight"
+        ],
+        "summary": "History",
+        "description": "Every film in the shopper's history, most recent first, each film once (for \"Recently watched\" and \u2713 marks).",
+        "operationId": "history_api_reel_insight_history_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_List_Film__"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reel/insight/status": {
+      "get": {
+        "tags": [
+          "insight"
+        ],
+        "summary": "Status",
+        "operationId": "status_api_reel_insight_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_StatusOut_"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ClickIn": {
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Requestid"
+          },
+          "filmId": {
+            "type": "string",
+            "maxLength": 20,
+            "minLength": 1,
+            "title": "Filmid"
+          },
+          "position": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Position"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "requestId",
+          "filmId",
+          "position"
+        ],
+        "title": "ClickIn"
+      },
+      "Diff": {
+        "properties": {
+          "hasPrevious": {
+            "type": "boolean",
+            "title": "Hasprevious"
+          },
+          "entered": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Entered"
+          },
+          "left": {
+            "items": {
+              "$ref": "#/components/schemas/Film"
+            },
+            "type": "array",
+            "title": "Left"
+          },
+          "changed": {
+            "type": "integer",
+            "title": "Changed"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "hasPrevious",
+          "entered",
+          "left",
+          "changed",
+          "summary"
+        ],
+        "title": "Diff"
+      },
+      "Envelope_FeedbackOut_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/FeedbackOut"
+          },
+          "meta": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "Envelope[FeedbackOut]"
+      },
+      "Envelope_FilmPage_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/FilmPage"
+          },
+          "meta": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "Envelope[FilmPage]"
+      },
+      "Envelope_Film_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Film"
+          },
+          "meta": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "Envelope[Film]"
+      },
+      "Envelope_List_Film__": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/Film"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "meta": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "Envelope[List[Film]]"
+      },
+      "Envelope_List_Genre__": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/Genre"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "meta": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "Envelope[List[Genre]]"
+      },
+      "Envelope_List_Tag__": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/Tag"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "meta": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "Envelope[List[Tag]]"
+      },
+      "Envelope_Receipt_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Receipt"
+          },
+          "meta": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "Envelope[Receipt]"
+      },
+      "Envelope_SequenceOut_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SequenceOut"
+          },
+          "meta": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "Envelope[SequenceOut]"
+      },
+      "Envelope_SessionOut_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SessionOut"
+          },
+          "meta": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "Envelope[SessionOut]"
+      },
+      "Envelope_StatusOut_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/StatusOut"
+          },
+          "meta": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "Envelope[StatusOut]"
+      },
+      "Envelope_Union_RecommendationsOut__Unavailable__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecommendationsOut"
+              },
+              {
+                "$ref": "#/components/schemas/Unavailable"
+              }
+            ],
+            "title": "Data"
+          },
+          "meta": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "Envelope[Union[RecommendationsOut, Unavailable]]"
+      },
+      "FeedbackOut": {
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "title": "Eventid"
+          },
+          "accepted": {
+            "type": "boolean",
+            "title": "Accepted"
+          },
+          "duplicate": {
+            "type": "boolean",
+            "title": "Duplicate"
+          }
+        },
+        "type": "object",
+        "required": [
+          "eventId",
+          "accepted",
+          "duplicate"
+        ],
+        "title": "FeedbackOut"
+      },
+      "Film": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "genres": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Genres"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags",
+            "default": []
+          },
+          "popularity": {
+            "type": "integer",
+            "title": "Popularity"
+          },
+          "popularityRank": {
+            "type": "integer",
+            "title": "Popularityrank"
+          },
+          "tmdbId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tmdbid"
+          },
+          "imdbId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imdbid"
+          },
+          "posterUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Posterurl"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "year",
+          "genres",
+          "popularity",
+          "popularityRank"
+        ],
+        "title": "Film"
+      },
+      "FilmPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Film"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "limit"
+        ],
+        "title": "FilmPage"
+      },
+      "Genre": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "films": {
+            "type": "integer",
+            "title": "Films"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "films"
+        ],
+        "title": "Genre"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "PersonaIn": {
+        "properties": {
+          "persona": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Persona"
+          },
+          "carrySession": {
+            "type": "boolean",
+            "title": "Carrysession",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "persona"
+        ],
+        "title": "PersonaIn"
+      },
+      "PersonaOut": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "blurb": {
+            "type": "string",
+            "title": "Blurb"
+          },
+          "color": {
+            "type": "string",
+            "title": "Color"
+          },
+          "userId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Userid"
+          },
+          "historyLength": {
+            "type": "integer",
+            "title": "Historylength"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "name",
+          "blurb",
+          "color",
+          "userId",
+          "historyLength"
+        ],
+        "title": "PersonaOut"
+      },
+      "Ranked": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "genres": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Genres"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags",
+            "default": []
+          },
+          "popularity": {
+            "type": "integer",
+            "title": "Popularity"
+          },
+          "popularityRank": {
+            "type": "integer",
+            "title": "Popularityrank"
+          },
+          "tmdbId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tmdbid"
+          },
+          "imdbId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imdbid"
+          },
+          "posterUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Posterurl"
+          },
+          "position": {
+            "type": "integer",
+            "title": "Position"
+          },
+          "change": {
+            "type": "string",
+            "enum": [
+              "new",
+              "up",
+              "down",
+              "same"
+            ],
+            "title": "Change",
+            "default": "same"
+          },
+          "previousPosition": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previousposition"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "year",
+          "genres",
+          "popularity",
+          "popularityRank",
+          "position"
+        ],
+        "title": "Ranked"
+      },
+      "Receipt": {
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "title": "Eventid"
+          },
+          "eventType": {
+            "type": "string",
+            "title": "Eventtype"
+          },
+          "filmId": {
+            "type": "string",
+            "title": "Filmid"
+          },
+          "accepted": {
+            "type": "boolean",
+            "title": "Accepted"
+          },
+          "duplicate": {
+            "type": "boolean",
+            "title": "Duplicate"
+          },
+          "latencyMs": {
+            "type": "integer",
+            "title": "Latencyms"
+          },
+          "feedback": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feedback"
+          }
+        },
+        "type": "object",
+        "required": [
+          "eventId",
+          "eventType",
+          "filmId",
+          "accepted",
+          "duplicate",
+          "latencyMs"
+        ],
+        "title": "Receipt"
+      },
+      "RecommendationIn": {
+        "properties": {
+          "shelf": {
+            "type": "string",
+            "enum": [
+              "home",
+              "more_like"
+            ],
+            "title": "Shelf",
+            "default": "home"
+          },
+          "filmId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filmid"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "RecommendationIn"
+      },
+      "RecommendationsOut": {
+        "properties": {
+          "shelf": {
+            "type": "string",
+            "enum": [
+              "home",
+              "more_like"
+            ],
+            "title": "Shelf"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Ranked"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "trace": {
+            "$ref": "#/components/schemas/Trace"
+          },
+          "diff": {
+            "$ref": "#/components/schemas/Diff"
+          },
+          "omitted": {
+            "type": "integer",
+            "title": "Omitted"
+          },
+          "impression": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Impression"
+          }
+        },
+        "type": "object",
+        "required": [
+          "shelf",
+          "title",
+          "items",
+          "trace",
+          "diff",
+          "omitted"
+        ],
+        "title": "RecommendationsOut"
+      },
+      "SequenceItem": {
+        "properties": {
+          "film": {
+            "$ref": "#/components/schemas/Film"
+          },
+          "time": {
+            "type": "integer",
+            "title": "Time"
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "training",
+              "live"
+            ],
+            "title": "Origin"
+          },
+          "eventType": {
+            "type": "string",
+            "title": "Eventtype"
+          },
+          "eventId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eventid"
+          },
+          "inWindow": {
+            "type": "boolean",
+            "title": "Inwindow"
+          },
+          "evicted": {
+            "type": "boolean",
+            "title": "Evicted",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "film",
+          "time",
+          "origin",
+          "eventType",
+          "inWindow"
+        ],
+        "title": "SequenceItem"
+      },
+      "SequenceOut": {
+        "properties": {
+          "shopper": {
+            "type": "string",
+            "title": "Shopper"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "window": {
+            "type": "integer",
+            "title": "Window"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SequenceItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "liveCount": {
+            "type": "integer",
+            "title": "Livecount"
+          },
+          "sessionOnly": {
+            "type": "boolean",
+            "title": "Sessiononly"
+          }
+        },
+        "type": "object",
+        "required": [
+          "shopper",
+          "total",
+          "window",
+          "items",
+          "liveCount",
+          "sessionOnly"
+        ],
+        "title": "SequenceOut"
+      },
+      "SessionOut": {
+        "properties": {
+          "persona": {
+            "$ref": "#/components/schemas/PersonaOut"
+          },
+          "sessionId": {
+            "type": "string",
+            "title": "Sessionid"
+          },
+          "personas": {
+            "items": {
+              "$ref": "#/components/schemas/PersonaOut"
+            },
+            "type": "array",
+            "title": "Personas"
+          }
+        },
+        "type": "object",
+        "required": [
+          "persona",
+          "sessionId",
+          "personas"
+        ],
+        "title": "SessionOut"
+      },
+      "StatusOut": {
+        "properties": {
+          "tenant": {
+            "type": "string",
+            "title": "Tenant"
+          },
+          "graphrec": {
+            "type": "string",
+            "title": "Graphrec"
+          },
+          "modelVersionId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modelversionid"
+          },
+          "modelVersionTag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modelversiontag"
+          },
+          "modelCard": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modelcard"
+          },
+          "modelSource": {
+            "type": "string",
+            "title": "Modelsource"
+          },
+          "liveEvents": {
+            "type": "integer",
+            "title": "Liveevents"
+          },
+          "feedbackHealth": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "type": "object"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feedbackhealth"
+          },
+          "readiness": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Readiness"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant",
+          "graphrec",
+          "modelVersionId",
+          "modelVersionTag",
+          "modelCard",
+          "modelSource",
+          "liveEvents"
+        ],
+        "title": "StatusOut"
+      },
+      "Tag": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "films": {
+            "type": "integer",
+            "title": "Films"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "films"
+        ],
+        "title": "Tag"
+      },
+      "Trace": {
+        "properties": {
+          "request": {
+            "$ref": "#/components/schemas/TraceRequest"
+          },
+          "requestId": {
+            "type": "string",
+            "title": "Requestid"
+          },
+          "modelVersionId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modelversionid"
+          },
+          "strategy": {
+            "type": "string",
+            "title": "Strategy"
+          },
+          "fallbackUsed": {
+            "type": "boolean",
+            "title": "Fallbackused"
+          },
+          "fallbackTier": {
+            "type": "string",
+            "title": "Fallbacktier"
+          },
+          "appliedRules": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Appliedrules"
+          },
+          "latencyMs": {
+            "type": "integer",
+            "title": "Latencyms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "request",
+          "requestId",
+          "modelVersionId",
+          "strategy",
+          "fallbackUsed",
+          "fallbackTier",
+          "appliedRules",
+          "latencyMs"
+        ],
+        "title": "Trace"
+      },
+      "TraceRequest": {
+        "properties": {
+          "endpoint": {
+            "type": "string",
+            "title": "Endpoint"
+          },
+          "userId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Userid"
+          },
+          "topN": {
+            "type": "integer",
+            "title": "Topn"
+          },
+          "recentProductIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Recentproductids"
+          },
+          "excludeCount": {
+            "type": "integer",
+            "title": "Excludecount"
+          }
+        },
+        "type": "object",
+        "required": [
+          "endpoint",
+          "userId",
+          "topN",
+          "recentProductIds",
+          "excludeCount"
+        ],
+        "title": "TraceRequest"
+      },
+      "Unavailable": {
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "const": false,
+            "title": "Available",
+            "default": false
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "correlationId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correlationid"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "Unavailable"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "WatchIn": {
+        "properties": {
+          "filmId": {
+            "type": "string",
+            "maxLength": 20,
+            "minLength": 1,
+            "title": "Filmid"
+          },
+          "requestId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requestid"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 100.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position"
+          },
+          "eventType": {
+            "type": "string",
+            "enum": [
+              "rating",
+              "purchase",
+              "view",
+              "click",
+              "add_to_wishlist"
+            ],
+            "title": "Eventtype",
+            "default": "rating"
+          },
+          "rating": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 5.0,
+                "minimum": 0.5
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating"
+          },
+          "occurredAt": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurredat",
+            "description": "Unix timestamp seconds"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "filmId"
+        ],
+        "title": "WatchIn"
+      }
+    }
+  }
+}

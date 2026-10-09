@@ -1,4 +1,4 @@
-import type { Film, FilmPage, Genre, Receipt, Recs, Sequence, Session, SortKey, Status, Tag, Unavailable } from "./types";
+import type { Film, FilmPage, Genre, ProofReport, Receipt, Recs, Sequence, Session, SortKey, Status, Tag, Unavailable } from "./types";
 
 export class ApiError extends Error {
   constructor(public code: string, message: string, public correlationId?: string) { super(message); }
@@ -41,6 +41,8 @@ export const api = {
   history: () => call<Film[]>("/insight/history").then((r) => r.data),
   sequence: () => call<Sequence>("/insight/sequence").then((r) => r.data),
   status: () => call<Status>("/insight/status").then((r) => r.data),
+  proofLatest: () => call<ProofReport | null>("/proof/latest").then((r) => r.data),
+  proofRun: (profile = "full") => post<ProofReport>("/proof/run", { profile }).then((r) => r.data),
 };
 
 export const isUnavailable = (r: Recs | Unavailable): r is Unavailable => (r as Unavailable).available === false;

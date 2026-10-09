@@ -10,7 +10,7 @@ function writePref(key: string, value: boolean): void {
   try { window.localStorage.setItem(`reel.${key}`, value ? "1" : "0"); } catch { /* ignore */ }
 }
 
-export type Tab = "sequence" | "changes" | "trace" | "status";
+export type Tab = "sequence" | "changes" | "trace" | "status" | "proof";
 
 interface DemoState {
   session: Session | null;

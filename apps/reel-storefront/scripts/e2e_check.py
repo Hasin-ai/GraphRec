@@ -7,6 +7,8 @@ permanent events to Sam's history (Maya stays clean for the demo) in this tenant
     docker cp apps/reel-storefront/scripts/e2e_check.py reel-reel-1:/tmp/ && docker exec reel-reel-1 python /tmp/e2e_check.py
 """
 import http.cookiejar, json, sys, urllib.request
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:5290"
 jar = http.cookiejar.CookieJar()

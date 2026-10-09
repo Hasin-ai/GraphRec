@@ -176,3 +176,26 @@ button.chip { font: inherit; font-size: 13px; color: var(--ink); cursor: pointer
   .filter-group .chips > .chip { flex: none; white-space: nowrap; }
   .pager { flex-wrap: wrap; gap: 8px; } .actions { flex-wrap: wrap; }
 }
+
+/* ── Proof & Operability Drawer Styles ── */
+.proof-summary-card { background: var(--surface-2); padding: 12px 14px; border-radius: 8px; margin-bottom: 12px; }
+.proof-summary-card .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.proof-badge { font-weight: 600; font-size: 11px; padding: 2px 8px; border-radius: 99px; text-transform: uppercase; letter-spacing: .05em; display: inline-block; }
+.proof-badge.pass { background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good); border: 1px solid var(--good); }
+.proof-badge.fail { background: color-mix(in srgb, var(--bad) 16%, transparent); color: var(--bad); border: 1px solid var(--bad); }
+.proof-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+.proof-table th { padding: 6px 4px; text-align: left; }
+.proof-table td { padding: 6px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.proof-table tr.clickable { cursor: pointer; }
+.proof-table tr.clickable:hover { background: color-mix(in srgb, var(--surface-2) 60%, transparent); }
+.proof-evidence-box { font-size: 11px; background: var(--surface-2); padding: 8px; border-radius: 6px; margin: 4px 0 8px; overflow-x: auto; max-height: 180px; }
+.readiness-strip { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 12px; }
+.readiness-pill { font-size: 12px; padding: 3px 8px; border-radius: 99px; background: var(--surface-2); display: flex; gap: 6px; align-items: center; }
+.readiness-pill .status-dot { width: 7px; height: 7px; border-radius: 50%; }
+.readiness-pill .status-dot.ok { background: var(--good); }
+.readiness-pill .status-dot.down { background: var(--bad); }
+.telemetry-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0 14px; font-size: 12px; }
+.telemetry-card { background: var(--surface-2); padding: 8px 10px; border-radius: 6px; text-align: center; }
+.telemetry-card b { display: block; font-size: 14px; color: var(--ink); margin-top: 2px; }
+.telemetry-card .err { color: var(--bad); font-size: 11px; }
+
