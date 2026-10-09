@@ -18,11 +18,28 @@ export type SortKey = "popular" | "newest" | "oldest" | "title";
 export interface Persona { key: string; name: string; blurb: string; color: string; userId: string | null; historyLength: number }
 export interface Session { persona: Persona; sessionId: string; personas: Persona[] }
 export interface Receipt { eventId: string; eventType: string; filmId: string; accepted: boolean; duplicate: boolean; latencyMs: number; feedback?: string | null }
-export interface Ranked extends Film { position: number; change: "new" | "up" | "down" | "same"; previousPosition: number | null }
+export interface Ranked extends Film {
+  position: number; change: "new" | "up" | "down" | "same"; previousPosition: number | null;
+  /** GraphRec's reason code and the sentence the storefront builds from it (glass-box pipeline only). */
+  reason?: string | null; reasonText?: string | null; sources?: string[]; score?: number | null;
+}
+export interface ExplainStage { name: string; ms: number; count: number; [detail: string]: unknown }
+export interface ExplainSource { status: string; count: number; ms: number; anchors?: string[]; categories?: string[] }
+export interface ExplainCandidate {
+  external_product_id: string; sources: string[]; reason: string; anchor_product_id: string | null; category: string | null;
+  model_score: number | null; model_norm: number | null; popularity: number | null; popularity_norm: number | null;
+  agreement: number | null; final: number | null; rank_before_rerank: number | null;
+  title?: string | null; anchor_title?: string | null;
+}
+export interface Explain {
+  pipeline: string; total_ms: number; stages: ExplainStage[]; sources: Record<string, ExplainSource>;
+  weights: Record<string, number>; diversity: number; candidates: ExplainCandidate[];
+}
 export interface Trace {
   request: { endpoint: string; userId: string | null; topN: number; recentProductIds: string[]; excludeCount: number };
   requestId: string; modelVersionId: string | null; strategy: string; fallbackUsed: boolean; fallbackTier: string;
   appliedRules: string[]; latencyMs: number;
+  pipeline?: string | null; diversity?: number | null; explain?: Explain | null;
 }
 export interface Diff { hasPrevious: boolean; entered: string[]; left: Film[]; changed: number; summary: string }
 export interface Recs { shelf: "home" | "more_like"; title: string; items: Ranked[]; trace: Trace; diff: Diff; omitted: number; impression?: string | null }

@@ -17,7 +17,7 @@ ENV PATH=/opt/venv/bin:$PATH
 # CPU-only PyTorch for DGSR training and serving (the CUDA wheels are ~2 GB and unused).
 # Installed before any source is copied so the layer stays cached across code changes.
 RUN pip install --no-cache-dir --upgrade pip==25.1.1 \
-    && pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu "torch==2.8.0"
+    && pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu "torch==2.14.1"
 
 WORKDIR /src
 COPY pyproject.toml constraints.txt VERSION ./
@@ -35,7 +35,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH=/opt/venv/bin:$PATH \
     GRAPHREC_ENV=production
 
-RUN useradd --create-home --uid 10001 graphrec
+# Pick up Debian security fixes released after the base image was built (CI scans with Trivy).
+RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --uid 10001 graphrec
 WORKDIR /app
 COPY --from=build /opt/venv /opt/venv
 COPY --chown=graphrec:graphrec apps ./apps

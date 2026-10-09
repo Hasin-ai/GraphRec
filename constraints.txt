@@ -2,6 +2,7 @@
 #   pip install -e . && pip freeze --exclude-editable | grep -v -E '^(torch|pytest|iniconfig|pluggy|Pygments|httpx|httpcore)=='
 # then review the diff. torch is pinned in the Dockerfile (CPU wheel index).
 alembic==1.16.4
+annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.15.1
 argon2-cffi==25.1.0
@@ -11,7 +12,7 @@ cffi==2.1.1
 click==8.5.0
 dnspython==2.8.0
 email_validator==2.2.0
-fastapi==0.116.1
+fastapi==0.136.3
 filelock==3.32.3
 fsspec==2026.7.0
 greenlet==3.5.6
@@ -29,7 +30,6 @@ MarkupSafe==3.0.3
 mpmath==1.3.0
 networkx==3.6.1
 numpy==2.5.3
-packaging==26.3
 portalocker==2.10.1
 protobuf==7.36.2
 psycopg==3.2.9
@@ -38,15 +38,15 @@ pycparser==3.0
 pydantic==2.13.5
 pydantic-settings==2.10.1
 pydantic_core==2.46.5
-PyJWT==2.10.1
+PyJWT==2.15.0
 python-dotenv==1.2.4
 python-multipart==0.0.32
 PyYAML==6.0.3
 qdrant-client==1.12.2
 redis==5.2.1
-setuptools==78.1.0
+setuptools==84.0.0
 SQLAlchemy==2.0.41
-starlette==0.47.3
+starlette==1.7.0
 sympy==1.14.0
 typing-inspection==0.4.4
 typing_extensions==4.16.0

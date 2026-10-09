@@ -8,6 +8,7 @@ import { Poster } from "./FilmTile";
 const TABS: { key: Tab; label: string }[] = [
   { key: "sequence", label: "Sequence" },
   { key: "changes", label: "Changes" },
+  { key: "pipeline", label: "Pipeline" },
   { key: "trace", label: "Trace" },
   { key: "status", label: "Status" },
   { key: "proof", label: "Proof" },
@@ -30,6 +31,7 @@ export function Insight() {
       <div className="insight-body">
         {tab === "sequence" && <SequenceTab />}
         {tab === "changes" && <ChangesTab />}
+        {tab === "pipeline" && <PipelineTab />}
         {tab === "trace" && <TraceTab />}
         {tab === "status" && <StatusTab />}
         {tab === "proof" && <ProofTab />}
@@ -111,18 +113,113 @@ function ChangesTab() {
   );
 }
 
+const STAGE_LABEL: Record<string, string> = {
+  query: "Query", retrieval: "Retrieval", eligibility: "Eligibility", scoring: "Scoring", rerank: "Re-rank", guarantee: "Guarantee",
+};
+const SOURCE_LABEL: Record<string, string> = {
+  dgsr_personalized: "DGSR personalized", session_neighbors: "Session neighbors",
+  popular_in_category: "Popular in category", trending: "Trending", last_good: "Last good list",
+};
+const SOURCE_ORDER = ["dgsr_personalized", "session_neighbors", "popular_in_category", "trending"];
+const SOURCE_HELP: Record<string, string> = {
+  dgsr_personalized: "Qdrant ANN over the DGSR item table with the shopper's encoded history (in-process scoring if Qdrant is slow or down)",
+  session_neighbors: "Films whose DGSR embeddings sit closest to the last films watched",
+  popular_in_category: "Most watched recently in the genres of the films just watched",
+  trending: "Most watched across the store recently",
+};
+const fmt = (v: number | null | undefined, d = 2) => (v === null || v === undefined ? "—" : v.toFixed(d));
+
+/** The glass-box funnel for the last request: stage counts and timings, sources, and the score of every candidate. */
+function PipelineTab() {
+  const { lastTrace } = useDemo();
+  if (!lastTrace) return <p className="muted">No request yet.</p>;
+  const x = lastTrace.trace.explain;
+  if (!x) {
+    return <p className="explain">This answer carried no pipeline trace.</p>;
+  }
+  const shown = new Map(lastTrace.items.map((i) => [i.id, i.position]));
+  const counted = x.stages.filter((s) => s.name !== "query");
+  const widest = Math.max(1, ...counted.map((s) => s.count));
+  return (
+    <>
+      <p className="explain">
+        How GraphRec built this list: four sources propose candidates, the catalogue removes anything unservable,
+        each survivor gets one blended score, and MMR spreads the final picks. Total {fmt(x.total_ms, 1)} ms inside GraphRec.
+      </p>
+      <ol className="funnel" aria-label="Pipeline stages">
+        {counted.map((s) => (
+          <li key={s.name}>
+            <span className="funnel-name">{STAGE_LABEL[s.name] ?? s.name}</span>
+            <span className="funnel-bar"><span style={{ width: `${Math.max(4, (s.count / widest) * 100)}%` }} /></span>
+            <span className="funnel-count">{s.count}</span>
+            <span className="funnel-ms">{fmt(s.ms, 1)} ms</span>
+          </li>
+        ))}
+      </ol>
+      {Object.keys(x.sources).length === 0 && (
+        <p className="explain">
+          GraphRec knows nothing about this visitor yet, so no model source ran: the list is the tenant's
+          recent popularity (fallback tier <code>{lastTrace.trace.fallbackTier}</code>). Watch a film to see the
+          personalized sources take over.
+        </p>
+      )}
+      {Object.keys(x.sources).length > 0 && <>
+      <h4>Sources</h4>
+      <table className="mini">
+        <thead><tr><th>Source</th><th>Status</th><th>Found</th><th>ms</th></tr></thead>
+        <tbody>
+          {Object.entries(x.sources).sort(([a], [b]) => SOURCE_ORDER.indexOf(a) - SOURCE_ORDER.indexOf(b)).map(([name, s]) => (
+            <tr key={name} title={SOURCE_HELP[name]}>
+              <td>{SOURCE_LABEL[name] ?? name}</td>
+              <td><span className={`status ${s.status.includes("error") || s.status.includes("timeout") || s.status.includes("unavailable") ? "warn" : "ok"}`}>{s.status.replace("->", " → ")}</span></td>
+              <td>{s.count}</td><td>{fmt(s.ms, 1)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <h4>Scoring</h4>
+      <p className="explain">
+        final = {fmt(x.weights.model)} × DGSR percentile + {fmt(x.weights.popularity)} × popularity percentile
+        + {fmt(x.weights.agreement)} × source agreement · MMR diversity {fmt(x.diversity)}
+      </p>
+      <div className="table-scroll">
+        <table className="mini scores">
+          <thead><tr><th>#</th><th>Film</th><th>Sources</th><th>DGSR</th><th>Pop.</th><th>Agree</th><th>Final</th><th>Shown</th></tr></thead>
+          <tbody>
+            {x.candidates.map((c) => {
+              const pos = shown.get(c.external_product_id);
+              return (
+                <tr key={c.external_product_id} className={pos ? "picked" : ""}>
+                  <td>{c.rank_before_rerank}</td>
+                  <td>{c.title ?? c.external_product_id}{c.anchor_title ? <small> ← {c.anchor_title}</small> : null}</td>
+                  <td>{c.sources.map((s) => <span key={s} className={`src ${s}`} title={SOURCE_LABEL[s] ?? s}>{(SOURCE_LABEL[s] ?? s).split(" ").map((w) => w[0]).join("")}</span>)}</td>
+                  <td>{fmt(c.model_norm)}</td><td>{fmt(c.popularity_norm)}</td><td>{fmt(c.agreement)}</td><td><b>{fmt(c.final, 3)}</b></td>
+                  <td>{pos ? `#${pos}` : ""}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="muted small">Rows are in relevance order before re-ranking; “Shown” is the final position after MMR and policy rules.</p>
+      </>}
+    </>
+  );
+}
+
 function TraceTab() {
   const { lastTrace } = useDemo();
   if (!lastTrace) return <p className="muted">No request yet.</p>;
   const t = lastTrace.trace;
   const request = { endpoint: t.request.endpoint, user_id: t.request.userId, top_n: t.request.topN,
     "context.recent_product_ids": t.request.recentProductIds, exclude_product_ids: t.request.excludeCount };
-  const response = { request_id: t.requestId, model_version_id: t.modelVersionId, strategy: t.strategy,
+  const response = { request_id: t.requestId, pipeline: t.pipeline, diversity: t.diversity, model_version_id: t.modelVersionId, strategy: t.strategy,
     fallback_used: t.fallbackUsed, fallback_tier: t.fallbackTier, applied_rules: t.appliedRules,
-    items: lastTrace.items.map((i) => ({ position: i.position, external_product_id: i.id, title: i.title })) };
+    items: lastTrace.items.map((i) => ({ position: i.position, external_product_id: i.id, title: i.title,
+      ...(i.reason ? { reason: i.reason, sources: i.sources, score: i.score } : {}) })) };
   return (
     <>
-      <p className="explain">The last request this storefront sent through the Python SDK, and GraphRec's answer. The API returns ranks only; no scores are shown because none are returned.</p>
+      <p className="explain">The last request this storefront sent through the Python SDK, and GraphRec's answer. The Pipeline tab breaks the glass-box answer down by stage.</p>
       <div className="kv"><span>Strategy</span><b>{strategyDetail(t.strategy)}</b><span>Round trip</span><b>{t.latencyMs} ms</b></div>
       <h4>Request</h4><pre>{JSON.stringify(request, null, 2)}</pre>
       <h4>Response</h4><pre>{JSON.stringify(response, null, 2)}</pre>

@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-from types import SimpleNamespace
-from uuid import uuid4
 
 import httpx
 import pytest
@@ -13,7 +11,7 @@ import pytest
 from app.config import Settings
 from app.graphrec import build_local
 from app.main import create_app
-from app.observability import JsonFormatter, METRICS, correlation_id_var
+from app.observability import JsonFormatter, correlation_id_var
 
 
 class FakeClient:

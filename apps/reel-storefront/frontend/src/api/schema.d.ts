@@ -234,6 +234,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/reel/proof/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Trigger Proof Battery */
+        post: operations["trigger_proof_battery_api_reel_proof_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reel/proof/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Latest Proof Report */
+        get: operations["latest_proof_report_api_reel_proof_latest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -311,6 +345,14 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** Envelope[ProofReport] */
+        Envelope_ProofReport_: {
+            data: components["schemas"]["ProofReport"];
+            /** Meta */
+            meta?: {
+                [key: string]: unknown;
+            };
+        };
         /** Envelope[Receipt] */
         Envelope_Receipt_: {
             data: components["schemas"]["Receipt"];
@@ -338,6 +380,14 @@ export interface components {
         /** Envelope[StatusOut] */
         Envelope_StatusOut_: {
             data: components["schemas"]["StatusOut"];
+            /** Meta */
+            meta?: {
+                [key: string]: unknown;
+            };
+        };
+        /** Envelope[Union[ProofReport, NoneType]] */
+        Envelope_Union_ProofReport__NoneType__: {
+            data: components["schemas"]["ProofReport"] | null;
             /** Meta */
             meta?: {
                 [key: string]: unknown;
@@ -435,6 +485,74 @@ export interface components {
             /** Historylength */
             historyLength: number;
         };
+        /** ProofBatterySummary */
+        ProofBatterySummary: {
+            /** Run Id */
+            run_id: string;
+            /** Profile */
+            profile: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /**
+             * Completed At
+             * Format: date-time
+             */
+            completed_at: string;
+            /** Total Checks */
+            total_checks: number;
+            /** Passed Checks */
+            passed_checks: number;
+            /** Failed Checks */
+            failed_checks: number;
+            /** Success Rate */
+            success_rate: number;
+            /** Total Duration Ms */
+            total_duration_ms: number;
+        };
+        /** ProofCheckResult */
+        ProofCheckResult: {
+            /**
+             * Id
+             * @description Proof identifier, e.g. P1, P2... P19
+             */
+            id: string;
+            /**
+             * Name
+             * @description Descriptive title of the capability
+             */
+            name: string;
+            /**
+             * Passed
+             * @description Whether the verification passed
+             */
+            passed: boolean;
+            /**
+             * Duration Ms
+             * @description Execution latency of the check in milliseconds
+             */
+            duration_ms: number;
+            /**
+             * Evidence
+             * @description Concrete measurements, IDs, and metrics
+             */
+            evidence?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Detail
+             * @description Diagnostic notes or error explanations
+             */
+            detail?: string | null;
+        };
+        /** ProofReport */
+        ProofReport: {
+            summary: components["schemas"]["ProofBatterySummary"];
+            /** Checks */
+            checks: components["schemas"]["ProofCheckResult"][];
+        };
         /** Ranked */
         Ranked: {
             /** Id */
@@ -470,6 +588,17 @@ export interface components {
             change: "new" | "up" | "down" | "same";
             /** Previousposition */
             previousPosition?: number | null;
+            /** Reason */
+            reason?: string | null;
+            /** Reasontext */
+            reasonText?: string | null;
+            /**
+             * Sources
+             * @default []
+             */
+            sources: string[];
+            /** Score */
+            score?: number | null;
         };
         /** Receipt */
         Receipt: {
@@ -498,6 +627,8 @@ export interface components {
             shelf: "home" | "more_like";
             /** Filmid */
             filmId?: string | null;
+            /** Diversity */
+            diversity?: number | null;
         };
         /** RecommendationsOut */
         RecommendationsOut: {
@@ -516,6 +647,14 @@ export interface components {
             omitted: number;
             /** Impression */
             impression?: string | null;
+        };
+        /** RunProofIn */
+        RunProofIn: {
+            /**
+             * Profile
+             * @default full
+             */
+            profile: string;
         };
         /** SequenceItem */
         SequenceItem: {
@@ -615,6 +754,14 @@ export interface components {
             appliedRules: string[];
             /** Latencyms */
             latencyMs: number;
+            /** Pipeline */
+            pipeline?: string | null;
+            /** Diversity */
+            diversity?: number | null;
+            /** Explain */
+            explain?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** TraceRequest */
         TraceRequest: {
@@ -650,6 +797,10 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+            /** Input */
+            input?: unknown;
+            /** Context */
+            ctx?: Record<string, never>;
         };
         /** WatchIn */
         WatchIn: {
@@ -1028,6 +1179,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_StatusOut_"];
+                };
+            };
+        };
+    };
+    trigger_proof_battery_api_reel_proof_run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RunProofIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ProofReport_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    latest_proof_report_api_reel_proof_latest_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_Union_ProofReport__NoneType__"];
                 };
             };
         };

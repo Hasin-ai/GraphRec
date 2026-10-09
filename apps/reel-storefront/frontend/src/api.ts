@@ -35,8 +35,8 @@ export const api = {
   watch: (filmId: string, from?: { requestId: string; position: number }) =>
     post<Receipt>("/watch", { filmId, ...(from ?? {}) }).then((r) => r.data),
   replay: () => post<Receipt>("/watch/replay").then((r) => r.data),
-  recommend: (shelf: "home" | "more_like", filmId?: string) =>
-    post<Recs | Unavailable>("/recommendations", { shelf, filmId }).then((r) => r.data),
+  recommend: (shelf: "home" | "more_like", filmId?: string, opts?: { diversity?: number }) =>
+    post<Recs | Unavailable>("/recommendations", { shelf, filmId, ...(opts ?? {}) }).then((r) => r.data),
   click: (requestId: string, filmId: string, position: number) => post("/feedback/click", { requestId, filmId, position }),
   history: () => call<Film[]>("/insight/history").then((r) => r.data),
   sequence: () => call<Sequence>("/insight/sequence").then((r) => r.data),

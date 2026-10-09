@@ -76,12 +76,14 @@ class FakeGraphRecExtended:
             applied_rules=[],
         )
 
-    async def _get(self, *, user_id, top_n, context=None, exclude_product_ids=None):
+    async def _get(self, *, user_id, top_n, context=None, exclude_product_ids=None, **options):
+        self.options = options
         self.calls.append(("get", user_id))
         live = [p for (u, p, _) in self.events.values() if u == user_id]
         return self._rank({*live}, top_n, len(live))
 
-    async def _for_session(self, session_id, *, recent_product_ids=None, top_n=10, context=None, exclude_product_ids=None, user_id=None):
+    async def _for_session(self, session_id, *, recent_product_ids=None, top_n=10, context=None, exclude_product_ids=None, user_id=None, **options):
+        self.options = options
         self.calls.append(("session", tuple(recent_product_ids or ())))
         recent = list(recent_product_ids or [])
         return self._rank(set(recent) | set(exclude_product_ids or []), top_n, len(recent))

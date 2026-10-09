@@ -1,7 +1,6 @@
 """API and isolation tests for XR-F-02/03 (retraining), XR-F-04 (rules),
 XR-F-07 (usage trends) and XR-F-08 (serving capacity)."""
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest

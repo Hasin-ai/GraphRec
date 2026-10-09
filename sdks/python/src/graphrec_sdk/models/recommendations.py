@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Iterator, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 from uuid import UUID
 
 from pydantic import Field
@@ -15,6 +15,15 @@ class RecommendationItem(GraphRecModel):
     external_product_id: str
     #: One-based rank.
     position: int
+    #: ``because_you_viewed``, ``picked_for_you``, ``popular_in_category``,
+    #: ``trending`` or ``recently_recommended`` (glass-box pipeline only).
+    reason: Optional[str] = None
+    #: Retrieval sources that proposed the item, primary first.
+    sources: List[str] = Field(default_factory=list)
+    #: The recently viewed product behind a ``because_you_viewed`` item.
+    anchor_product_id: Optional[str] = None
+    #: Blended relevance in [0, 1].
+    score: Optional[float] = None
 
 
 class Recommendations(GraphRecModel):
@@ -39,6 +48,12 @@ class Recommendations(GraphRecModel):
     applied_rules: List[str] = Field(default_factory=list)
     #: Version of the recommendation policy in force; ``None`` before one is configured.
     rules_version: Optional[int] = None
+    #: Serving pipeline that produced the list, e.g. ``glassbox-v1``.
+    pipeline: Optional[str] = None
+    #: MMR diversity applied to this list.
+    diversity: Optional[float] = None
+    #: Per-stage trace and per-candidate scores when requested with ``explain=True``.
+    explain: Optional[Dict[str, Any]] = None
 
     @property
     def product_ids(self) -> List[str]:

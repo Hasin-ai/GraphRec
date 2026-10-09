@@ -15,7 +15,7 @@ function popularityLine(f: Film): string {
 export function FilmPage() {
   const { id = "" } = useParams();
   const from = (useLocation().state ?? undefined) as { requestId: string; position: number } | undefined;
-  const { watch, notify, setLastTrace, watchedIds, insightOpen } = useDemo();
+  const { watch, notify, setLastTrace, watchedIds, insightOpen, serving } = useDemo();
   const [film, setFilm] = useState<Film | null>(null);
   const [missing, setMissing] = useState(false);
   const [more, setMore] = useState<Recs | Unavailable | null>(null);
@@ -29,14 +29,14 @@ export function FilmPage() {
       if (!current) return;
       setFilm(f); document.title = `${displayTitle(f.title)} · Reel`;
       // Ask for similar films only for a film that exists (an unknown id would be a 422).
-      return api.recommend("more_like", id).then((r) => { if (current) { setMore(r); if ("trace" in r) setLastTrace(r); } });
+      return api.recommend("more_like", id, serving).then((r) => { if (current) { setMore(r); if ("trace" in r) setLastTrace(r); } });
     }).catch((e) => {
       if (!current) return;
       if (e instanceof ApiError && e.code === "not_found") setMissing(true); else notify((e as Error).message);
     });
     window.scrollTo({ top: 0 });
     return () => { current = false; document.title = "Reel — a GraphRec film store"; };
-  }, [id, notify, setLastTrace]);
+  }, [id, notify, setLastTrace, serving]);
 
   if (missing) {
     return (

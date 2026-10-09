@@ -13,17 +13,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from graphrec_core.auth.audit import protected_auth_hash
-from graphrec_core.auth.passwords import hash_password, verify_password
+from graphrec_core.auth.passwords import hash_password
 from graphrec_core.auth.platform import (
     ROLES,
     OperatorPrincipal,
-    issue_operator_token,
     platform_administrator,
 )
 from graphrec_core.database.session import get_db
 from graphrec_core.errors import ApiError
-from graphrec_core.registration.rate_limit import SharedRateLimiter
-from graphrec_core.settings import Settings, get_settings
 
 Role = Literal["platform", "plan_management", "monitoring", "audit", "operator_admin"]
 

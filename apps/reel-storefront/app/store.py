@@ -5,7 +5,7 @@
 * ``Shoppers`` - the demo personas (real training users) plus "anonymous".
 * ``LiveLog`` - every event this storefront sent to GraphRec, persisted to
   ``state/live_events.jsonl`` so the Sequence tab survives restarts. It mirrors
-  what the API's ``_stored_history`` reads: seeded training history + live events.
+  what the API's ``stored_history`` (graphrec_core.serving.pipeline) reads: seeded training history + live events.
 """
 
 from __future__ import annotations
@@ -174,7 +174,7 @@ def shopper_key(persona: Persona, session_id: str) -> str:
 def history_for(persona: Persona, live: Sequence[dict]) -> List[dict]:
     """Chronological history as the API will read it: seeded training events, then live ones.
 
-    Only positive product events count (mirrors HISTORY_EVENT_TYPES in the API).
+    Only positive product events count (mirrors HISTORY_EVENT_TYPES in graphrec_core.serving.pipeline).
     """
 
     rows = [{"filmId": f, "time": t, "origin": "training", "eventType": "rating"} for f, t in persona.history]

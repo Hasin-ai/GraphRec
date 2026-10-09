@@ -1346,10 +1346,7 @@ export interface components {
         };
         /** Body_upload_dataset_file_v1_datasets_upload_post */
         Body_upload_dataset_file_v1_datasets_upload_post: {
-            /**
-             * File
-             * Format: binary
-             */
+            /** File */
             file: string;
         };
         /** CapacityEventResource */
@@ -1660,6 +1657,16 @@ export interface components {
              */
             received_at: string;
         };
+        /**
+         * FeedbackItem
+         * @description An impressed item: only identity and rank (explanations are ignored).
+         */
+        FeedbackItem: {
+            /** External Product Id */
+            external_product_id: string;
+            /** Position */
+            position: number;
+        };
         /** FeedbackResponse */
         FeedbackResponse: {
             /** Accepted */
@@ -1690,7 +1697,7 @@ export interface components {
             /** Event Id */
             event_id: string;
             /** Items */
-            items: components["schemas"]["RecommendationItem"][];
+            items: components["schemas"]["FeedbackItem"][];
             /**
              * Occurred At
              * Format: date-time
@@ -2418,10 +2425,18 @@ export interface components {
         };
         /** RecommendationItem */
         RecommendationItem: {
+            /** Anchor Product Id */
+            anchor_product_id?: string | null;
             /** External Product Id */
             external_product_id: string;
             /** Position */
             position: number;
+            /** Reason */
+            reason?: string | null;
+            /** Score */
+            score?: number | null;
+            /** Sources */
+            sources?: string[];
         };
         /** RecommendationPolicyResource */
         RecommendationPolicyResource: {
@@ -2493,8 +2508,15 @@ export interface components {
         /** RecommendationRequest */
         RecommendationRequest: {
             context?: components["schemas"]["RecommendationContext"];
+            /** Diversity */
+            diversity?: number | null;
             /** Exclude Product Ids */
             exclude_product_ids?: string[];
+            /**
+             * Explain
+             * @default false
+             */
+            explain: boolean;
             /**
              * Fallback Allowed
              * @default true
@@ -2516,6 +2538,12 @@ export interface components {
             active_model_version_id?: string | null;
             /** Applied Rules */
             applied_rules?: string[];
+            /** Diversity */
+            diversity?: number | null;
+            /** Explain */
+            explain?: {
+                [key: string]: unknown;
+            } | null;
             /** Fallback Tier */
             fallback_tier: string;
             /** Fallback Used */
@@ -2524,6 +2552,8 @@ export interface components {
             items: components["schemas"]["RecommendationItem"][];
             /** Model Version Id */
             model_version_id?: string | null;
+            /** Pipeline */
+            pipeline?: string | null;
             /** Request Id */
             request_id: string;
             /** Rules Version */
@@ -3081,6 +3111,10 @@ export interface components {
         };
         /** ValidationError */
         ValidationError: {
+            /** Context */
+            ctx?: Record<string, never>;
+            /** Input */
+            input?: unknown;
             /** Location */
             loc: (string | number)[];
             /** Message */

@@ -48,6 +48,11 @@ export function FilmTile({ film, ranked, requestId, onOpen, watched }: {
       <div className="tile-meta">
         <span className="tile-title">{title}</span>
         <span className="tile-sub">{[film.year, film.genres.slice(0, 2).join(" · ")].filter(Boolean).join(" · ")}</span>
+        {ranked?.reasonText && (
+          <span className={`tile-reason ${ranked.reason ?? ""}`} title={ranked.sources?.length ? `Found by: ${ranked.sources.join(", ")}` : undefined}>
+            {ranked.reasonText}
+          </span>
+        )}
         {tags.length > 0 && (
           <span className="tile-tags" aria-label="Viewer tags">
             {tags.map((t) => <span key={t} className="tag-mini">{t}</span>)}

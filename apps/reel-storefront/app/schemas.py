@@ -100,12 +100,19 @@ class RecommendationIn(Input):
     shelf: Shelf = "home"
     #: For ``more_like``: the film the shelf is about.
     film_id: Optional[str] = Field(default=None, max_length=20)
+    #: MMR diversity (0 = pure relevance); ``None`` uses GraphRec's default.
+    diversity: Optional[float] = Field(default=None, ge=0, le=1)
 
 
 class Ranked(Film):
     position: int
     change: Literal["new", "up", "down", "same"] = "same"
     previous_position: Optional[int] = None
+    #: GraphRec's reason code and the shopper-facing sentence built from it.
+    reason: Optional[str] = None
+    reason_text: Optional[str] = None
+    sources: List[str] = []
+    score: Optional[float] = None
 
 
 class TraceRequest(Wire):
@@ -125,6 +132,10 @@ class Trace(Wire):
     fallback_tier: str
     applied_rules: List[str]
     latency_ms: int
+    pipeline: Optional[str] = None
+    diversity: Optional[float] = None
+    #: GraphRec's per-stage trace (stages, sources, scored candidates).
+    explain: Optional[Dict[str, Any]] = None
 
 
 class Diff(Wire):

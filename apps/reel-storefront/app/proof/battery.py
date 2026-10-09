@@ -6,12 +6,10 @@ with concrete measurements, synthetic shoppers, and real API calls.
 
 from __future__ import annotations
 
-import asyncio
-import math
 import secrets
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, List, Optional
 
 from .schemas import ProofCheckResult
 

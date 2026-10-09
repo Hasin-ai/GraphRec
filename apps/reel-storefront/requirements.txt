@@ -1,5 +1,6 @@
 # Pinned dependencies for Reel storefront production image
-fastapi==0.116.1
+fastapi==0.136.3
+starlette==1.7.0
 uvicorn[standard]==0.35.0
 pydantic==2.13.5
 pydantic-settings==2.10.1

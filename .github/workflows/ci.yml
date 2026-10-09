@@ -58,7 +58,7 @@ jobs:
           cache: pip
       - name: Install
         run: |
-          pip install --index-url https://download.pytorch.org/whl/cpu "torch==2.8.0"
+          pip install --index-url https://download.pytorch.org/whl/cpu "torch==2.14.1"
           pip install -c constraints.txt -e ".[test]" -e sdks/python ruff==0.12.3 pip-audit==2.9.0
       - name: Lint (ruff)
         run: ruff check apps graphrec_core scripts tests --select E9,F63,F7,F82,F401 --output-format=github

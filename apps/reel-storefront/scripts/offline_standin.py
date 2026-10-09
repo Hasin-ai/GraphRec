@@ -69,12 +69,12 @@ class StandIn:
                 EVENTS[event_id] = (user_id, product_id, int(time.time()))
             return SimpleNamespace(event_id=event_id, accepted=not dup, duplicate=dup, received_at=datetime.now(timezone.utc))
 
-        async def get(*, user_id, top_n, context=None, exclude_product_ids=None):
+        async def get(*, user_id, top_n, context=None, exclude_product_ids=None, **_options):
             hist = sorted([(f, t) for (u, f, t) in EVENTS.values() if u == user_id], key=lambda x: x[1])
             r = _score(hist, user_id, exclude_product_ids or [], top_n)
             return _ranked(*r) if r else _ranked(POPULAR[:top_n], "popular_fallback", True)
 
-        async def for_session(session_id, *, recent_product_ids=None, top_n=10, context=None, exclude_product_ids=None, user_id=None):
+        async def for_session(session_id, *, recent_product_ids=None, top_n=10, context=None, exclude_product_ids=None, user_id=None, **_options):
             now = int(time.time())
             hist = [(f, now + k) for k, f in enumerate(recent_product_ids or [])]
             r = _score(hist, None, exclude_product_ids or [], top_n)

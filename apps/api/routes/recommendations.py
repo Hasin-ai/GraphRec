@@ -1,38 +1,25 @@
-"""Recommendations route — four-stage serving funnel with Qdrant Stage 1.
+"""Recommendations route.
 
-Stage 0: Query assembly. For a DGSR model version (``artifact_uri`` is a
-         ``file://`` directory) the shopper's event history from PostgreSQL,
-         plus any ``context.recent_product_ids`` from the session, is encoded
-         by the trained model into a query vector (Eq. 17-18). Placeholder
-         versions keep the unit query vector.
-Stage 1: ANN candidate retrieval via Qdrant (Top-K by the collection's
-         distance: DOT for DGSR item tables, cosine for placeholders). When the
-         collection is unavailable a DGSR version scores its item table
-         in-process so one ready capability remains (NR-NF-08).
-Stage 2: Eligibility filtering against the PostgreSQL product catalog. A
-         product is servable only when it is active and its availability is
-         ``available`` (BRULE-09: disabled, unavailable, out-of-stock and
-         discontinued products are never returned).
-Stage 3: Proxy scoring — retrieval rank order is the score
-Stage 4: Deterministic ordering — top_n items, stable tie-break by product ID
+Admission (Redis slots / RPM / quota), idempotent replay and telemetry live
+here; ranking is the glass-box pipeline in ``graphrec_core.serving``:
+query building, multi-source retrieval, eligibility, scoring, MMR re-ranking
+and the guarantee layer (see ``graphrec_core/serving/pipeline.py``).
 """
 from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Response
-from sqlalchemy import select, text, func
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from graphrec_core.auth.principal import AuthenticatedPrincipal, authenticated_principal
 from graphrec_core.database.models import (
     Customer,
-    CustomerEvent,
     ModelDeployment,
     ModelVersion,
     Product,
@@ -43,8 +30,8 @@ from graphrec_core.database.models import (
 )
 from graphrec_core.database.session import get_db
 from graphrec_core.recommendation_policy_service import load_rules
-from graphrec_core.recommendation_rules import rerank
-from graphrec_core.models_reg.service import artifact_directory
+from graphrec_core.serving import pipeline as glassbox
+from graphrec_core.serving.ranking import primary_reason, primary_source
 from graphrec_core.schemas.recommendations import (
     ClickFeedback,
     ConversionFeedback,
@@ -61,42 +48,10 @@ from graphrec_core.capacity import effective_limits, serving_slots
 from graphrec_core.usage.admission import get_admission
 from graphrec_core.usage.limits import ledger_usage, month_bounds
 from graphrec_core.vector_store.client import get_qdrant_client
-from graphrec_core.vector_store.retriever import retrieve_candidates
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["recommendations"])
-
-
-def _zero_query_vector(dim: int) -> list[float]:
-    """Return a deterministic placeholder query vector.
-
-    This is used only by explicit development-placeholder versions. Real DGSR
-    versions encode the user's history with the trained artifact.
-    """
-    vec = [0.0] * dim
-    vec[0] = 1.0
-    return vec
-
-
-#: Most recent stored events considered for one shopper's history.
-HISTORY_LIMIT = 1000
-#: Event types that become DGSR history edges. The checkpoint learns one
-#: undifferentiated "interacted with" edge, so negative or product-less signals
-#: (``remove_from_cart``, ``search``) must not be replayed as interactions.
-HISTORY_EVENT_TYPES = ("view", "click", "add_to_cart", "purchase", "rating", "add_to_wishlist")
-#: Session items accepted from ``context.recent_product_ids``.
-SESSION_ITEMS_LIMIT = 50
-#: The only availability a product may have and still be served (BRULE-09).
-SERVABLE_AVAILABILITY = "available"
-
-
-def _servable() -> tuple[Any, ...]:
-    """Stage 2 eligibility predicate, shared by retrieval filtering and fallback."""
-    return (
-        Product.is_active == True,  # noqa: E712
-        Product.availability_status == SERVABLE_AVAILABILITY,
-    )
 
 
 def _record_serving_request(
@@ -150,87 +105,6 @@ def _record_serving_request(
         return False
 
 
-def _session_items(context: dict[str, Any]) -> list[str]:
-    raw = context.get("recent_product_ids")
-    if not isinstance(raw, list):
-        return []
-    items = [str(value) for value in raw if isinstance(value, (str, int)) and str(value).strip()]
-    return items[-SESSION_ITEMS_LIMIT:]
-
-
-def _stored_history(db: Session, tenant_id: UUID, user_id: str) -> list[tuple[str, datetime]]:
-    """The shopper's product events, oldest first (bounded to the latest ones)."""
-    rows = db.execute(
-        select(CustomerEvent.external_product_id, CustomerEvent.occurred_at)
-        .where(
-            CustomerEvent.tenant_id == tenant_id,
-            CustomerEvent.user_id == user_id,
-            CustomerEvent.external_product_id.is_not(None),
-            CustomerEvent.event_type.in_(HISTORY_EVENT_TYPES),
-        )
-        .order_by(CustomerEvent.occurred_at.desc(), CustomerEvent.created_at.desc())
-        .limit(HISTORY_LIMIT)
-    ).all()
-    return [(str(product), occurred) for product, occurred in reversed(rows)]
-
-
-def _dgsr_candidates(
-    db: Session,
-    tenant_id: UUID,
-    version_id: UUID,
-    directory,
-    payload: RecommendationRequest,
-    top_k: int,
-) -> tuple[list[str], str]:
-    """Stage 0 + Stage 1 for a DGSR version: encode the shopper, retrieve Top-K.
-
-    Returns ``([], "popular_fallback")`` when nothing about the shopper is known
-    to the model (no stored or session items in its vocabulary).
-    """
-    from graphrec_core.dgsr.serving import HistoryEvent, load_artifact
-
-    artifact = load_artifact(directory)
-    history = _stored_history(db, tenant_id, payload.user_id) if payload.user_id else []
-    now = datetime.now(timezone.utc)
-    history.extend((item, now) for item in _session_items(payload.context))
-    seen = list(dict.fromkeys(item for item, _ in history))
-    if not history:
-        return [], "popular_fallback"
-
-    user = artifact.user_index(payload.user_id) if payload.user_id else None
-    session_items = _session_items(payload.context)
-    if user is not None and not session_items and sorted(seen) == sorted(set(artifact.known_history(user))):
-        # Nothing newer than the training graph: the notebook's exact serving path.
-        encoded = artifact.encode_known(user)
-    else:
-        events = [
-            HistoryEvent(index, int(occurred.timestamp()))
-            for item, occurred in history
-            if (index := artifact.item_index(item)) is not None
-        ]
-        if not events:
-            return [], "popular_fallback"
-        encoded = artifact.encode_history(events, user=user)
-
-    exclude = list(dict.fromkeys([*(payload.exclude_product_ids or []), *seen]))
-    try:
-        candidates = retrieve_candidates(
-            client=get_qdrant_client(),
-            tenant_id=tenant_id,
-            version_id=version_id,
-            query_vector=encoded.query.tolist(),
-            top_k=top_k,
-            exclude_ids=exclude or None,
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Qdrant retrieval failed; scoring the DGSR item table in-process: %s", exc)
-        candidates = []
-    if not candidates:
-        excluded_rows = [index for item in exclude if (index := artifact.item_index(item)) is not None]
-        candidates = [item for item, _ in artifact.top_k(artifact.score(encoded.query, excluded_rows), top_k)]
-    return candidates, encoded.strategy
-
-
 @router.post("/v1/recommendations", response_model=RecommendationResponse)
 def get_recommendations(
     payload: RecommendationRequest,
@@ -253,7 +127,7 @@ def get_recommendations(
             returned_ids = {item["external_product_id"] for item in existing.response["items"]}
             eligible_ids = set(db.scalars(select(Product.external_id).where(
                 Product.tenant_id == principal.tenant_id,
-                Product.external_id.in_(returned_ids), *_servable(),
+                Product.external_id.in_(returned_ids), *glassbox.servable(),
             )))
             if returned_ids != eligible_ids:
                 raise ApiError(409, "recommendation_expired", "Catalog eligibility changed. Submit a new request identifier.")
@@ -321,7 +195,8 @@ def _serve_and_record(payload: RecommendationRequest, principal: AuthenticatedPr
         db.add(RecommendationResult(
             id=uuid4(), tenant_id=principal.tenant_id, request_id=response.request_id,
             external_product_id=item.external_product_id, rank_position=item.position,
-            candidate_source=response.fallback_tier if response.fallback_used else "model_retrieval",
+            candidate_source=(item.sources[0] if item.sources else
+                              response.fallback_tier if response.fallback_used else "model_retrieval")[:48],
             strategy=response.strategy, created_at=created_at,
         ))
     recorded = _record_serving_request(
@@ -343,143 +218,47 @@ def _elapsed_ms(started: float) -> int:
     return max(0, round((time.perf_counter() - started) * 1000))
 
 
-def _serve(
-    payload: RecommendationRequest, tenant_id: UUID, db: Session
-) -> RecommendationResponse:
+def _serve(payload: RecommendationRequest, tenant_id: UUID, db: Session) -> RecommendationResponse:
     settings = get_settings()
-
-    # Resolve active model version
     active_model = db.execute(
-        select(ModelVersion).where(
-            ModelVersion.tenant_id == tenant_id, ModelVersion.status == "active"
-        )
+        select(ModelVersion).where(ModelVersion.tenant_id == tenant_id, ModelVersion.status == "active")
     ).scalar_one_or_none()
-
-    # ----------------------------------------------------------------
-    # Stage 1 — ANN Candidate Retrieval (Qdrant)
-    # ----------------------------------------------------------------
-    candidate_ids: list[str] = []
-    strategy = "popular_fallback"
-
-    directory = artifact_directory(active_model.artifact_uri) if active_model else None
-    if active_model and directory is not None:
-        try:
-            candidate_ids, strategy = _dgsr_candidates(
-                db, tenant_id, active_model.id, directory, payload, settings.qdrant_top_k
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("DGSR serving failed, falling back to popular: %s", exc)
-    elif active_model and active_model.model_type != "dgsr" and not settings.is_production:
-        query_vec = _zero_query_vector(settings.qdrant_embedding_dim)
-
-        try:
-            candidate_ids = retrieve_candidates(
-                client=get_qdrant_client(),
-                tenant_id=tenant_id,
-                version_id=active_model.id,
-                query_vector=query_vec,
-                top_k=settings.qdrant_top_k,
-                exclude_ids=payload.exclude_product_ids or None,
-            )
-            strategy = "development_placeholder"
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Qdrant retrieval failed, falling back to popular: %s", exc)
-
-    # ----------------------------------------------------------------
-    # Stage 2 — Eligibility Filtering (servable products in PostgreSQL)
-    # ----------------------------------------------------------------
-    if candidate_ids:
-        # Keep only servable products whose external_id is in Qdrant results
-        active_set: set[str] = set(
-            db.execute(
-                select(Product.external_id).where(
-                    Product.tenant_id == tenant_id,
-                    Product.external_id.in_(candidate_ids),
-                    *_servable(),
-                )
-            ).scalars()
-        )
-        # Preserve Qdrant ranking order (Stage 3 proxy score)
-        filtered_ids = list(dict.fromkeys(eid for eid in candidate_ids if eid in active_set))
-    else:
-        filtered_ids = []
-
-    # ----------------------------------------------------------------
-    # Stage 3 & 4 — Score proxy + deterministic ordering
-    # ----------------------------------------------------------------
-    # Qdrant already returns results in descending cosine similarity order.
-    # Stable tie-break: sort equal-score items by external_id lexicographically.
-    # Truncate to top_n.
     rules = load_rules(db, tenant_id)
-    if rules and filtered_ids:
-        top_ids = rerank(filtered_ids, _rule_meta(db, tenant_id, filtered_ids), rules,
-                         top_n=payload.top_n, now=datetime.now(timezone.utc))
-    else:
-        top_ids = filtered_ids[: payload.top_n]
-
-    # Fallback: if Qdrant returned nothing, pull most recent servable products
-    fallback_used = False
-    fallback_tier = "none"
-
-    if not top_ids:
-        if not payload.fallback_allowed:
-            raise ApiError(
-                503,
-                "recommendation_unavailable",
-                "Personalized recommendations are unavailable for this customer or session. Enable fallback or provide usable history.",
-            )
-        fallback_used = True
-        fallback_tier = "tenant_popular"
-        strategy = "popular_fallback"
-        # XR-F-09 / A-19: recent popularity, bounded to a window ending at the
-        # tenant's latest interaction (index ix_customer_events_tenant_time).
-        latest = db.scalar(select(func.max(CustomerEvent.occurred_at)).where(CustomerEvent.tenant_id == tenant_id))
-        recent = [CustomerEvent.tenant_id == tenant_id]
-        if latest is not None:
-            recent.append(CustomerEvent.occurred_at >= latest - timedelta(days=settings.fallback_popularity_window_days))
-        popularity = select(CustomerEvent.external_product_id.label("product_id"), func.count().label("events")).where(*recent).group_by(CustomerEvent.external_product_id).subquery()
-        fallback_query = (
-            select(Product.external_id, func.coalesce(popularity.c.events, 0))
-            .outerjoin(popularity, popularity.c.product_id == Product.external_id)
-            .where(Product.tenant_id == tenant_id, *_servable())
-            .order_by(func.coalesce(popularity.c.events, 0).desc(), Product.external_id.asc())
-            # Re-ranking needs a wider eligible pool than the final list (bounded).
-            .limit(min(max(payload.top_n * 5, 50), 500) if rules else payload.top_n)
+    # Looked up at call time so tests (and chaos drills) can replace the client.
+    outcome = glassbox.run(db, tenant_id, payload, active_model, settings, rules,
+                           qdrant_factory=lambda: get_qdrant_client())
+    if not outcome.items and not payload.fallback_allowed:
+        raise ApiError(
+            503,
+            "recommendation_unavailable",
+            "Personalized recommendations are unavailable for this customer or session. Enable fallback or provide usable history.",
         )
-        if payload.exclude_product_ids:
-            fallback_query = fallback_query.where(
-                Product.external_id.not_in(payload.exclude_product_ids)
-            )
-        rows = db.execute(fallback_query).all()
-        top_ids = [row[0] for row in rows]
-        if rules and top_ids:
-            popularity_scores = {row[0]: float(row[1]) for row in rows}
-            top_ids = rerank(top_ids, _rule_meta(db, tenant_id, top_ids), rules,
-                             top_n=payload.top_n, now=datetime.now(timezone.utc),
-                             scores=popularity_scores)
-
     items = [
-        RecommendationItem(external_product_id=eid, position=idx + 1)
-        for idx, eid in enumerate(top_ids)
+        RecommendationItem(
+            external_product_id=c.external_id,
+            position=index + 1,
+            reason=primary_reason(c),
+            sources=[primary_source(c), *[s for s in c.sources if s != primary_source(c)]],
+            anchor_product_id=c.anchor_id if primary_reason(c) == "because_you_viewed" else None,
+            score=round(c.final, 4) if c.final else None,
+        )
+        for index, c in enumerate(outcome.items)
     ]
-
+    served_by_model = outcome.model_served and active_model is not None
     return RecommendationResponse(
         request_id=payload.request_id or f"rec-{uuid4().hex}",
         items=items,
-        model_version_id=active_model.id if active_model and not fallback_used and strategy != "popular_fallback" else None,
+        model_version_id=active_model.id if served_by_model else None,
         active_model_version_id=active_model.id if active_model else None,
-        strategy=strategy,
-        fallback_used=fallback_used,
-        fallback_tier=fallback_tier,
+        strategy=outcome.strategy,
+        fallback_used=outcome.fallback_used,
+        fallback_tier=outcome.fallback_tier,
         applied_rules=rules.applied() if rules else [],
         rules_version=rules.version if rules else None,
+        pipeline=glassbox.PIPELINE_NAME,
+        diversity=outcome.diversity,
+        explain=outcome.explain if payload.explain else None,
     )
-
-
-def _rule_meta(db: Session, tenant_id: UUID, ids: list[str]) -> dict[str, tuple[str | None, datetime]]:
-    rows = db.execute(select(Product.external_id, Product.category, Product.created_at).where(
-        Product.tenant_id == tenant_id, Product.external_id.in_(ids)))
-    return {external_id: (category, created_at) for external_id, category, created_at in rows}
 
 
 @router.post("/v1/recommendations/session", response_model=RecommendationResponse)

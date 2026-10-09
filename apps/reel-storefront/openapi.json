@@ -507,6 +507,75 @@
           }
         }
       }
+    },
+    "/api/reel/proof/run": {
+      "post": {
+        "tags": [
+          "proof"
+        ],
+        "summary": "Trigger Proof Battery",
+        "operationId": "trigger_proof_battery_api_reel_proof_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RunProofIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ProofReport_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reel/proof/latest": {
+      "get": {
+        "tags": [
+          "proof"
+        ],
+        "summary": "Latest Proof Report",
+        "operationId": "latest_proof_report_api_reel_proof_latest_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_Union_ProofReport__NoneType__"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -694,6 +763,23 @@
         ],
         "title": "Envelope[List[Tag]]"
       },
+      "Envelope_ProofReport_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ProofReport"
+          },
+          "meta": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "Envelope[ProofReport]"
+      },
       "Envelope_Receipt_": {
         "properties": {
           "data": {
@@ -761,6 +847,30 @@
           "data"
         ],
         "title": "Envelope[StatusOut]"
+      },
+      "Envelope_Union_ProofReport__NoneType__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProofReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "Envelope[Union[ProofReport, NoneType]]"
       },
       "Envelope_Union_RecommendationsOut__Unavailable__": {
         "properties": {
@@ -1027,6 +1137,131 @@
         ],
         "title": "PersonaOut"
       },
+      "ProofBatterySummary": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "profile": {
+            "type": "string",
+            "title": "Profile"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          },
+          "completed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Completed At"
+          },
+          "total_checks": {
+            "type": "integer",
+            "title": "Total Checks"
+          },
+          "passed_checks": {
+            "type": "integer",
+            "title": "Passed Checks"
+          },
+          "failed_checks": {
+            "type": "integer",
+            "title": "Failed Checks"
+          },
+          "success_rate": {
+            "type": "number",
+            "title": "Success Rate"
+          },
+          "total_duration_ms": {
+            "type": "number",
+            "title": "Total Duration Ms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "profile",
+          "started_at",
+          "completed_at",
+          "total_checks",
+          "passed_checks",
+          "failed_checks",
+          "success_rate",
+          "total_duration_ms"
+        ],
+        "title": "ProofBatterySummary"
+      },
+      "ProofCheckResult": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Proof identifier, e.g. P1, P2... P19"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Descriptive title of the capability"
+          },
+          "passed": {
+            "type": "boolean",
+            "title": "Passed",
+            "description": "Whether the verification passed"
+          },
+          "duration_ms": {
+            "type": "number",
+            "title": "Duration Ms",
+            "description": "Execution latency of the check in milliseconds"
+          },
+          "evidence": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Evidence",
+            "description": "Concrete measurements, IDs, and metrics"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail",
+            "description": "Diagnostic notes or error explanations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "passed",
+          "duration_ms"
+        ],
+        "title": "ProofCheckResult"
+      },
+      "ProofReport": {
+        "properties": {
+          "summary": {
+            "$ref": "#/components/schemas/ProofBatterySummary"
+          },
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/ProofCheckResult"
+            },
+            "type": "array",
+            "title": "Checks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "summary",
+          "checks"
+        ],
+        "title": "ProofReport"
+      },
       "Ranked": {
         "properties": {
           "id": {
@@ -1129,6 +1364,47 @@
               }
             ],
             "title": "Previousposition"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "reasonText": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasontext"
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sources",
+            "default": []
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
           }
         },
         "type": "object",
@@ -1214,6 +1490,19 @@
               }
             ],
             "title": "Filmid"
+          },
+          "diversity": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diversity"
           }
         },
         "additionalProperties": false,
@@ -1273,6 +1562,17 @@
           "omitted"
         ],
         "title": "RecommendationsOut"
+      },
+      "RunProofIn": {
+        "properties": {
+          "profile": {
+            "type": "string",
+            "title": "Profile",
+            "default": "full"
+          }
+        },
+        "type": "object",
+        "title": "RunProofIn"
       },
       "SequenceItem": {
         "properties": {
@@ -1548,6 +1848,40 @@
           "latencyMs": {
             "type": "integer",
             "title": "Latencyms"
+          },
+          "pipeline": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pipeline"
+          },
+          "diversity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diversity"
+          },
+          "explain": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Explain"
           }
         },
         "type": "object",
@@ -1659,6 +1993,13 @@
           "type": {
             "type": "string",
             "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
           }
         },
         "type": "object",

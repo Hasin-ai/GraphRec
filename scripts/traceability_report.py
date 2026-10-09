@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from pathlib import Path
 
 from tests.test_srs_traceability import ROOT, python_citations, srs_ids, web_citations
 

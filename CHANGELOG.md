@@ -3,6 +3,37 @@
 All notable changes to GraphRec. Entries reference the anomaly register in
 `docs/GAP_ANALYSIS.md` (A-xx) and the decisions in `docs/DECISIONS.md` (D-xx).
 
+## [Unreleased] - Glass-box serving pipeline
+
+### Added
+- **Glass-box serving pipeline (`graphrec_core/serving/`)** is now the default for `POST /v1/recommendations` and `/session`:
+  - query building from stored history plus session clicks (unchanged DGSR encoding);
+  - four retrieval sources, each optional and individually timed: `dgsr_personalized` (Qdrant ANN under a 250 ms budget, in-memory item-table scoring when Qdrant is slow or down), `session_neighbors` (cosine neighbours of the last three viewed items), `popular_in_category` and `trending`;
+  - one eligibility query against the servable catalogue for every source;
+  - exact scoring: `0.85 × DGSR percentile + 0.05 × popularity percentile + 0.10 × source agreement`; items the model does not know stay below the personal median;
+  - MMR diversity re-ranking (default 0.25, per request `diversity` 0–1), then the tenant's policy rules as before;
+  - guarantee layer: short lists are topped up from the shopper's last good list in Redis (10 min, re-checked for eligibility, fail-open), then the tenant-popular tier.
+- Response items carry `reason` (`because_you_viewed`, `picked_for_you`, `popular_in_category`, `trending`, `recently_recommended`), `sources`, `anchor_product_id` and `score`; responses carry `pipeline` and `diversity`, and `explain` (per-stage counts and timings, source status, per-candidate score breakdown) when the request sets `explain: true`.
+- Python SDK: `explain` and `diversity` arguments on `recommendations.get` / `for_session` (sync and async) and the new response fields.
+- `scripts/eval_serving.py`: offline leave-last-out replay of glass-box vs a plain DGSR Top-K baseline on a DGSR artifact. MovieLens, 3,000 held-out users: Recall@10 0.102 → 0.109, NDCG@10 0.054 → 0.057, intra-list diversity 0.60 → 0.68, catalogue coverage 0.28 → 0.26 (`docs/serving_eval_movielens.json`).
+- Reel storefront: reason line on every tile ("Because you watched …", "Popular in Sci-Fi"), diversity slider on the home shelf, and a **Pipeline** tab in the insight drawer drawing the funnel, source status and candidate scores.
+
+### Production hardening (full-stack verification 2026-10-10)
+- **Qdrant circuit breaker:** after a Qdrant timeout or error the pipeline serves from the in-memory item table for 30 s instead of paying the 250 ms budget on every request; the ANN call now runs in parallel with the in-process sources.
+- **Tenant popularity cache:** recent popularity is computed at most once per 15 s per tenant and process (eligibility is still checked per request); popularity failures no longer affect scoring beyond dropping its 5 % weight.
+- Vectorised MMR and an `argpartition` Top-K for session neighbours.
+- **Security updates (pip-audit / npm audit / Trivy clean):** FastAPI 0.116.1 → 0.136.3 with Starlette 0.47.3 → 1.7.0, PyJWT 2.10.1 → 2.15.0, torch 2.8.0 → 2.14.1 (Dockerfile and CI), setuptools 84, pytest 9.0.3; Reel storefront `react-router-dom` 7.6.0 → 7.18.3; API image runs `apt-get upgrade` and the web image `apk upgrade` at build time.
+- Reel storefront build: Rollup pinned to 4.63.1 (4.64.2 hung during `vite build`).
+- `VERSION` and the Python SDK version raised to 1.2.0 to match the released console (the version-sync test was failing).
+- Lint (ruff F401) clean: 27 unused imports removed. Storefront `openapi.json` / `schema.d.ts` regenerated (were missing the proof endpoints).
+
+### Removed
+- The single-source serving funnel (Qdrant Top-K in rank order, popularity only when that came back empty) and its route helpers; the glass-box pipeline is the only serving path.
+
+### Changed
+- `RecommendationResult.candidate_source` records the item's primary retrieval source instead of `model_retrieval`.
+- Impression feedback items are validated as `FeedbackItem` (identity and rank only), so explanation fields sent back by clients are ignored.
+
 ## [Unreleased] - Reel Reference Storefront Production Readiness
 
 ### Added (Phase 1 — Correct & Consistent Backend)

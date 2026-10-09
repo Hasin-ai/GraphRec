@@ -119,7 +119,7 @@ class _RecordingArtifact:
             strategy = 'personalized'
         return Encoded()
 
-    def score(self, query, excluded_rows):
+    def score(self, query, excluded_rows=()):
         self.excluded = sorted(self.item_ids[i] for i in excluded_rows)
         scores = np.arange(len(self.item_ids), dtype=float)
         scores[list(excluded_rows)] = -np.inf
@@ -133,8 +133,8 @@ class _RecordingArtifact:
 def test_xr_f_01_stored_history_and_session_context_are_encoded_together(client, monkeypatch):
     """XR-F-01: the shopper's stored events (oldest first) and the session's recent
     products together form the encoded history, and every seen item is excluded."""
-    from apps.api.routes import recommendations
     from graphrec_core.schemas.recommendations import RecommendationRequest
+    from graphrec_core.serving import pipeline
 
     tenant, admin = provision(client)
     seed_trainable(client, admin)
@@ -143,19 +143,21 @@ def test_xr_f_01_stored_history_and_session_context_are_encoded_together(client,
 
     def qdrant_unreachable():
         raise ConnectionError('no qdrant in this test')
-    monkeypatch.setattr(recommendations, 'get_qdrant_client', qdrant_unreachable)
     payload = RecommendationRequest.model_validate({'user_id': 'u0', 'top_n': 2, 'context': {'recent_product_ids': ['p7']}})
     with SessionLocal() as db:
         set_local_tenant(db, UUID(tenant))
-        candidates, strategy = recommendations._dgsr_candidates(db, UUID(tenant), uuid4(), Path('.'), payload, 5)
+        query = pipeline.build_query(db, UUID(tenant), payload, Path('.'))
     # seed_trainable gives u0 views of p0..p5 in time order.
     assert artifact.encoded == ['p0', 'p1', 'p2', 'p3', 'p4', 'p5', 'p7']
-    assert artifact.excluded == ['p0', 'p1', 'p2', 'p3', 'p4', 'p5', 'p7']
-    assert strategy == 'personalized' and candidates == ['p8', 'p6']
+    assert sorted(query.seen) == ['p0', 'p1', 'p2', 'p3', 'p4', 'p5', 'p7']
+    assert query.encoded.strategy == 'personalized'
+    candidates, status = pipeline.source_personalized(
+        query, artifact.score(query.encoded.query), qdrant_unreachable, UUID(tenant), uuid4(), query.seen, 5)
+    assert status == 'qdrant_unavailable->in_memory' and candidates == ['p8', 'p6']
     session_only = RecommendationRequest.model_validate({'context': {'session_id': 's', 'recent_product_ids': ['p2']}})
     with SessionLocal() as db:
         set_local_tenant(db, UUID(tenant))
-        recommendations._dgsr_candidates(db, UUID(tenant), uuid4(), Path('.'), session_only, 5)
+        pipeline.build_query(db, UUID(tenant), session_only, Path('.'))
     assert artifact.encoded == ['p2']
 
 

@@ -81,8 +81,12 @@ def test_nr_nf_08_healthy_baseline_is_personalized(client, trained):
     tenant, headers, version, _ = trained
     body = recommend(client, headers).json()
     assert body['strategy'] == 'personalized' and body['model_version_id'] == version
-    # u0 has seen p0-p5 and p8 has no interactions (not in the model's vocabulary): only p6 and p7 remain.
-    assert sorted(i['external_product_id'] for i in body['items']) == ['p6', 'p7']
+    # u0 has seen p0-p5. p6 and p7 are ranked by the model; p8 has no interactions (not in the
+    # model's vocabulary), so it can only fill the list from a popularity source, below them.
+    ids = [i['external_product_id'] for i in body['items']]
+    assert sorted(ids[:2]) == ['p6', 'p7'] and ids[2:] in ([], ['p8'])
+    assert all(i['reason'] in ('picked_for_you', 'because_you_viewed') for i in body['items'][:2])
+    assert all(i['reason'] in ('popular_in_category', 'trending') for i in body['items'][2:])
 
 
 def test_nr_nf_08_qdrant_down_scores_in_process(client, trained, qdrant_down):

@@ -16,7 +16,6 @@ from graphrec_core.database.models import (
     TenantSubscription,
     UsageEvent,
     Product,
-    ModelVersion,
     ModelDeployment,
 )
 from graphrec_core.database.tenancy import set_local_tenant

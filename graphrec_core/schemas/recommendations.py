@@ -38,6 +38,18 @@ class RecommendationRequest(BaseModel):
     exclude_product_ids: list[str] = Field(default_factory=list, max_length=200)
     context: RecommendationContext = Field(default_factory=RecommendationContext)
     fallback_allowed: bool = True
+    #: MMR diversity for this request (0 = pure relevance); ``None`` = default.
+    diversity: float | None = Field(default=None, ge=0, le=1)
+    #: Return the per-stage trace and per-candidate score breakdown.
+    explain: bool = False
+
+    @model_serializer(mode="wrap")
+    def _omit_default_serving_options(self, handler):  # noqa: ANN001
+        # Requests that do not use the serving options keep their original
+        # shape, so idempotency fingerprints of earlier requests still match.
+        data = handler(self)
+        defaults = {"diversity": None, "explain": False}
+        return {k: v for k, v in data.items() if not (k in defaults and v == defaults[k])}
 
     @field_validator("user_id")
     @classmethod
@@ -65,6 +77,15 @@ class RecommendationRequest(BaseModel):
 class RecommendationItem(BaseModel):
     external_product_id: str
     position: int
+    #: Why this item is here: ``because_you_viewed``, ``picked_for_you``,
+    #: ``popular_in_category``, ``trending`` or ``recently_recommended``.
+    reason: str | None = None
+    #: Retrieval sources that independently proposed this item.
+    sources: list[str] = Field(default_factory=list)
+    #: For ``because_you_viewed``: the recently viewed product that led here.
+    anchor_product_id: str | None = None
+    #: Blended relevance in [0, 1] before diversity re-ranking.
+    score: float | None = None
 
 
 class RecommendationResponse(BaseModel):
@@ -81,12 +102,25 @@ class RecommendationResponse(BaseModel):
     #: XR-F-04 / XR-NF-02: re-ranking rules applied and the policy version used.
     applied_rules: list[str] = Field(default_factory=list)
     rules_version: int | None = None
+    #: Serving pipeline that produced this list (``glassbox-v1``).
+    pipeline: str | None = None
+    #: MMR diversity applied (0 when no item embeddings were available).
+    diversity: float | None = None
+    #: Per-stage trace; present only when the request set ``explain``.
+    explain: dict[str, Any] | None = None
+
+
+class FeedbackItem(BaseModel):
+    """An impressed item: only identity and rank (explanations are ignored)."""
+
+    external_product_id: str
+    position: int
 
 
 class ImpressionFeedback(BaseModel):
     event_id: str = Field(min_length=1, max_length=128)
     request_id: str = Field(min_length=1, max_length=128)
-    items: list[RecommendationItem] = Field(min_length=1, max_length=100)
+    items: list[FeedbackItem] = Field(min_length=1, max_length=100)
     occurred_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     context: dict[str, Any] = Field(default_factory=dict)
 

@@ -53,12 +53,14 @@ class FakeGraphRec:
             model_version_id=None if not seen else self.version, strategy="personalized" if seen else "popular_fallback",
             fallback_used=not seen, fallback_tier="tenant_popular" if not seen else "none", applied_rules=[])
 
-    async def _get(self, *, user_id, top_n, context=None, exclude_product_ids=None):
+    async def _get(self, *, user_id, top_n, context=None, exclude_product_ids=None, **options):
+        self.options = options
         self.calls.append(("get", user_id))
         live = [p for (u, p, _) in self.events.values() if u == user_id]
         return self._rank({*live}, top_n, len(live))
 
-    async def _for_session(self, session_id, *, recent_product_ids=None, top_n=10, context=None, exclude_product_ids=None, user_id=None):
+    async def _for_session(self, session_id, *, recent_product_ids=None, top_n=10, context=None, exclude_product_ids=None, user_id=None, **options):
+        self.options = options
         self.calls.append(("session", tuple(recent_product_ids or ())))
         recent = list(recent_product_ids or [])
         return self._rank(set(recent) | set(exclude_product_ids or []), top_n, len(recent))
@@ -230,3 +232,31 @@ async def test_status_shows_the_checkpoint_card_only_for_the_imported_checkpoint
         c.http._transport.app.state.settings.reel_model_source = "trained"
         body = (await c.http.get("/api/reel/insight/status")).json()["data"]
         assert body["modelSource"] == "trained" and body["modelCard"] is None
+
+
+async def test_pipeline_options_are_forwarded_and_reasons_explained(client):
+    async with client as c:
+        anchor = FILMS[3]
+        original = c.fake._for_session
+
+        async def explained(*args, **kwargs):
+            recs = await original(*args, **kwargs)
+            first = recs.items[0]
+            first.reason, first.anchor_product_id, first.sources, first.score = (
+                "because_you_viewed", anchor["id"], ["session_neighbors", "dgsr_personalized"], 0.91)
+            recs.items[1].reason = "trending"
+            recs.pipeline, recs.diversity = "glassbox-v1", 0.6
+            recs.explain = {"stages": [{"name": "retrieval", "count": 120, "ms": 4.2}], "sources": {}}
+            return recs
+
+        c.fake._for_session = explained
+        c.fake.storefront.recommendations.for_session = explained
+        out = (await c.http.post("/api/reel/recommendations",
+                                 json={"shelf": "home", "diversity": 0.6})).json()["data"]
+        assert c.fake.options == {"explain": True, "diversity": 0.6}
+        assert out["items"][0]["reasonText"].startswith("Because you watched")
+        assert out["items"][1]["reasonText"] == "Trending now"
+        assert out["trace"]["pipeline"] == "glassbox-v1" and out["trace"]["explain"]["stages"][0]["count"] == 120
+        await c.http.post("/api/reel/recommendations", json={"shelf": "home"})
+        assert c.fake.options == {"explain": True}
+        assert (await c.http.post("/api/reel/recommendations", json={"shelf": "home", "pipeline": "legacy"})).status_code == 422

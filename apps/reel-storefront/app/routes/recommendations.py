@@ -61,6 +61,39 @@ def build_diff(svc: Services, previous: Optional[List[str]], current: List[str])
     return Diff(has_previous=True, entered=entered, left=left, changed=len(entered), summary=summary)
 
 
+def titled(svc: Services, explain: Optional[dict]) -> Optional[dict]:
+    """Copy of GraphRec's explain trace with film titles added for the Pipeline tab."""
+    if not isinstance(explain, dict):
+        return None
+    out = dict(explain)
+    rows = []
+    for row in explain.get("candidates") or []:
+        film = svc.films.get(str(row.get("external_product_id")))
+        anchor = svc.films.get(str(row.get("anchor_product_id") or ""))
+        rows.append({**row, "title": display_title(film["title"]) if film else None,
+                     "anchor_title": display_title(anchor["title"]) if anchor else None})
+    out["candidates"] = rows
+    return out
+
+
+def reason_text(svc: Services, film: dict, item) -> Optional[str]:
+    """The shopper-facing sentence for GraphRec's reason code."""
+    reason = getattr(item, "reason", None)
+    if reason == "because_you_viewed":
+        anchor = svc.films.get(getattr(item, "anchor_product_id", None) or "")
+        return f"Because you watched {display_title(anchor['title'])}" if anchor else "Similar to what you watched"
+    if reason == "picked_for_you":
+        return "Picked for you"
+    if reason == "popular_in_category":
+        genre = (film.get("genres") or ["this genre"])[0]
+        return f"Popular in {genre}"
+    if reason == "trending":
+        return "Trending now"
+    if reason == "recently_recommended":
+        return "From your recent picks"
+    return None
+
+
 @router.post("/recommendations", response_model=Envelope[Union[RecommendationsOut, Unavailable]])
 async def recommend(body: RecommendationIn, ident: Identity = Depends(identity), svc: Services = Depends(services)):
     top_n = svc.settings.top_n
@@ -76,14 +109,19 @@ async def recommend(body: RecommendationIn, ident: Identity = Depends(identity),
         live = history_for(ident.persona, svc.live.for_shopper(ident.shopper))
         recent = [r["filmId"] for r in live][-WINDOW:]
     endpoint_name = "recommendations" if user_id is not None else "recommendations/session"
+    # Ask GraphRec to explain itself so the Pipeline tab can draw the funnel.
+    options = {"explain": True}
+    if body.diversity is not None:
+        options["diversity"] = body.diversity
     started = time.perf_counter()
     try:
         if user_id is not None:
-            recs = await svc.client.storefront.recommendations.get(user_id=user_id, top_n=top_n, context=ctx)
+            recs = await svc.client.storefront.recommendations.get(user_id=user_id, top_n=top_n, context=ctx, **options)
             endpoint = "POST /v1/recommendations"
         else:
             recs = await svc.client.storefront.recommendations.for_session(
-                ident.session_id, recent_product_ids=recent or None, top_n=top_n, context=ctx, exclude_product_ids=exclude or None)
+                ident.session_id, recent_product_ids=recent or None, top_n=top_n, context=ctx,
+                exclude_product_ids=exclude or None, **options)
             endpoint = "POST /v1/recommendations/session"
         gr_dur = time.perf_counter() - started
         METRICS.observe_graphrec(endpoint_name, "success", gr_dur)
@@ -114,7 +152,10 @@ async def recommend(body: RecommendationIn, ident: Identity = Depends(identity),
             continue
         before = old_pos.get(item.external_product_id)
         change = "same" if previous is None else ("new" if before is None else "up" if before > item.position else "down" if before < item.position else "same")
-        items.append(Ranked(**film, position=item.position, change=change, previous_position=before))
+        reason = getattr(item, "reason", None)
+        items.append(Ranked(**film, position=item.position, change=change, previous_position=before,
+                            reason=reason, reason_text=reason_text(svc, film, item),
+                            sources=list(getattr(item, "sources", None) or []), score=getattr(item, "score", None)))
 
     impression = None
     if recs.items:
@@ -150,6 +191,8 @@ async def recommend(body: RecommendationIn, ident: Identity = Depends(identity),
         model_version_id=str(recs.model_version_id) if recs.model_version_id else None,
         strategy=recs.strategy, fallback_used=recs.fallback_used, fallback_tier=recs.fallback_tier,
         applied_rules=list(recs.applied_rules or []), latency_ms=latency,
+        pipeline=getattr(recs, "pipeline", None),
+        diversity=getattr(recs, "diversity", None), explain=titled(svc, getattr(recs, "explain", None)),
     )
     return Envelope(data=RecommendationsOut(shelf=body.shelf, title=title, items=items, trace=trace,
                                             diff=build_diff(svc, previous, ids), omitted=omitted, impression=impression))

@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, isUnavailable } from "./api";
 import type { Film, Receipt, Recs, Session, Unavailable } from "./types";
 
@@ -9,8 +9,22 @@ function readPref(key: string, fallback: boolean): boolean {
 function writePref(key: string, value: boolean): void {
   try { window.localStorage.setItem(`reel.${key}`, value ? "1" : "0"); } catch { /* ignore */ }
 }
+function readText(key: string): string | null {
+  try { return window.localStorage.getItem(`reel.${key}`); } catch { return null; }
+}
+function writeText(key: string, value: string): void {
+  try { window.localStorage.setItem(`reel.${key}`, value); } catch { /* ignore */ }
+}
 
-export type Tab = "sequence" | "changes" | "trace" | "status" | "proof";
+/** How the storefront asks GraphRec to serve: how much MMR diversity. */
+export interface Serving { diversity: number }
+export const DEFAULT_DIVERSITY = 0.25;
+function readServing(): Serving {
+  const d = Number(readText("diversity"));
+  return { diversity: Number.isFinite(d) && d >= 0 && d <= 1 && readText("diversity") !== null ? d : DEFAULT_DIVERSITY };
+}
+
+export type Tab = "sequence" | "changes" | "pipeline" | "trace" | "status" | "proof";
 
 interface DemoState {
   session: Session | null;
@@ -36,6 +50,8 @@ interface DemoState {
   setAutoRefresh: (on: boolean) => void;
   notify: (message: string) => void;
   setLastTrace: (r: Recs) => void;
+  serving: Serving;
+  setServing: (next: Partial<Serving>) => Promise<void>;
 }
 
 const Ctx = createContext<DemoState | null>(null);
@@ -54,6 +70,8 @@ export function DemoProvider({ children }: { children: ReactNode }) {
   const [version, setVersion] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const [lastTrace, setLastTrace] = useState<Recs | null>(null);
+  const [serving, setServingState] = useState<Serving>(readServing);
+  const servingRef = useRef(serving);
 
   const notify = useCallback((message: string) => {
     setToast(message);
@@ -63,7 +81,7 @@ export function DemoProvider({ children }: { children: ReactNode }) {
   const refreshHome = useCallback(async () => {
     setHomeLoading(true);
     try {
-      const r = await api.recommend("home");
+      const r = await api.recommend("home", undefined, servingRef.current);
       setHome(r);
       if (!isUnavailable(r)) setLastTrace(r);
       setPending(0);
@@ -124,13 +142,21 @@ export function DemoProvider({ children }: { children: ReactNode }) {
     }
   }, [notify]);
 
+  const setServing = useCallback(async (next: Partial<Serving>) => {
+    const merged = { ...servingRef.current, ...next };
+    servingRef.current = merged;
+    setServingState(merged);
+    writeText("diversity", String(merged.diversity));
+    await refreshHome();
+  }, [refreshHome]);
+
   const value = useMemo<DemoState>(() => ({
     session, home, homeLoading, receipts, insightOpen, tab, autoRefresh, pendingSinceRefresh: pending, version, toast, lastTrace,
     history, watchedIds,
-    switchPersona, refreshHome, watch, replay, notify, setAutoRefresh, setLastTrace,
+    switchPersona, refreshHome, watch, replay, notify, setAutoRefresh, setLastTrace, serving, setServing,
     setInsight: (open, t) => { setInsightOpen(open); writePref("insight", open); if (t) setTab(t); },
   }), [session, home, homeLoading, receipts, insightOpen, tab, autoRefresh, pending, version, toast, lastTrace,
-       history, watchedIds, switchPersona, refreshHome, watch, replay, notify, setAutoRefresh]);
+       history, watchedIds, switchPersona, refreshHome, watch, replay, notify, setAutoRefresh, serving, setServing]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
