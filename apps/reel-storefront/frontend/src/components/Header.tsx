@@ -8,7 +8,7 @@ const taste = (p: Persona) => p.blurb.replace(/\s*\(.*\)\s*$/, "");
 const label = (p: Persona) => (p.userId ? `${p.name} — ${taste(p)}` : "Guest (no history)");
 
 export function Header() {
-  const { session, switchPersona, insightOpen, setInsight, notify } = useDemo();
+  const { session, switchPersona, resetGuest, insightOpen, setInsight, notify, history } = useDemo();
   const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -24,6 +24,10 @@ export function Header() {
     const carry = current.userId === null && key !== "anon";
     setBusy(true);
     try { await switchPersona(key, carry); } catch (e) { notify((e as Error).message); } finally { setBusy(false); }
+  };
+  const reset = async () => {
+    setBusy(true);
+    try { await resetGuest(); } catch (e) { notify((e as Error).message); } finally { setBusy(false); }
   };
   const search = (e: FormEvent) => {
     e.preventDefault();
@@ -48,6 +52,12 @@ export function Header() {
             {session?.personas.map((p) => <option key={p.key} value={p.key}>{label(p)}</option>)}
           </select>
         </label>
+        {current && current.userId === null && (
+          <button className="btn ghost small" onClick={reset} disabled={busy || history.length === 0}
+            title={history.length ? "Forget this visit's films and start over as a brand-new guest" : "Nothing to reset yet"}>
+            Reset guest
+          </button>
+        )}
         <button className={`btn ghost small ${insightOpen ? "on" : ""}`} onClick={() => setInsight(!insightOpen)} aria-pressed={insightOpen}
           title="Show what GraphRec did for each click">How it works</button>
       </div>

@@ -21,7 +21,7 @@ export interface Serving { diversity: number }
 export const DEFAULT_DIVERSITY = 0.25;
 function readServing(): Serving {
   const d = Number(readText("diversity"));
-  return { diversity: Number.isFinite(d) && d >= 0 && d <= 1 && readText("diversity") !== null ? d : DEFAULT_DIVERSITY };
+  return { diversity: Number.isFinite(d) && d >= 0 && d <= 0.8 && readText("diversity") !== null ? d : DEFAULT_DIVERSITY };
 }
 
 export type Tab = "sequence" | "changes" | "pipeline" | "trace" | "status" | "proof";
@@ -43,6 +43,8 @@ interface DemoState {
   history: Film[];
   watchedIds: Set<string>;
   switchPersona: (key: string, carry: boolean) => Promise<void>;
+  /** Start the guest over with a fresh session and no history. */
+  resetGuest: () => Promise<void>;
   refreshHome: () => Promise<void>;
   watch: (filmId: string, from?: { requestId: string; position: number }) => Promise<Receipt>;
   replay: () => Promise<void>;
@@ -78,17 +80,22 @@ export function DemoProvider({ children }: { children: ReactNode }) {
     window.setTimeout(() => setToast((t) => (t === message ? null : t)), 4200);
   }, []);
 
+  // Only the newest home request may update the shelf: an older answer that arrives
+  // late (e.g. after a quick change of diversity) must not overwrite a newer one.
+  const homeRequest = useRef(0);
   const refreshHome = useCallback(async () => {
+    const mine = ++homeRequest.current;
     setHomeLoading(true);
     try {
       const r = await api.recommend("home", undefined, servingRef.current);
+      if (mine !== homeRequest.current) return;
       setHome(r);
       if (!isUnavailable(r)) setLastTrace(r);
       setPending(0);
     } catch (e) {
-      setHome({ available: false, reason: (e as Error).message });
+      if (mine === homeRequest.current) setHome({ available: false, reason: (e as Error).message });
     } finally {
-      setHomeLoading(false);
+      if (mine === homeRequest.current) setHomeLoading(false);
     }
   }, []);
 
@@ -106,6 +113,18 @@ export function DemoProvider({ children }: { children: ReactNode }) {
     return () => { live = false; };
   }, [session, version]);
   const watchedIds = useMemo(() => new Set(history.map((f) => f.id)), [history]);
+
+  const resetGuest = useCallback(async () => {
+    const s = await api.resetGuest();
+    setSession(s);
+    setReceipts([]);
+    setPending(0);
+    setLastTrace(null);
+    setHistory([]);
+    setVersion((v) => v + 1);
+    await refreshHome();
+    notify("Started over as a new guest: no history, so picks begin from what's popular.");
+  }, [refreshHome, notify]);
 
   const switchPersona = useCallback(async (key: string, carry: boolean) => {
     const { session: s, carried } = await api.setPersona(key, carry);
@@ -153,10 +172,10 @@ export function DemoProvider({ children }: { children: ReactNode }) {
   const value = useMemo<DemoState>(() => ({
     session, home, homeLoading, receipts, insightOpen, tab, autoRefresh, pendingSinceRefresh: pending, version, toast, lastTrace,
     history, watchedIds,
-    switchPersona, refreshHome, watch, replay, notify, setAutoRefresh, setLastTrace, serving, setServing,
+    switchPersona, resetGuest, refreshHome, watch, replay, notify, setAutoRefresh, setLastTrace, serving, setServing,
     setInsight: (open, t) => { setInsightOpen(open); writePref("insight", open); if (t) setTab(t); },
   }), [session, home, homeLoading, receipts, insightOpen, tab, autoRefresh, pending, version, toast, lastTrace,
-       history, watchedIds, switchPersona, refreshHome, watch, replay, notify, setAutoRefresh, serving, setServing]);
+       history, watchedIds, switchPersona, resetGuest, refreshHome, watch, replay, notify, setAutoRefresh, serving, setServing]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

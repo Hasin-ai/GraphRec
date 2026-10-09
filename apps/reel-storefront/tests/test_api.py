@@ -260,3 +260,32 @@ async def test_pipeline_options_are_forwarded_and_reasons_explained(client):
         await c.http.post("/api/reel/recommendations", json={"shelf": "home"})
         assert c.fake.options == {"explain": True}
         assert (await c.http.post("/api/reel/recommendations", json={"shelf": "home", "pipeline": "legacy"})).status_code == 422
+
+
+async def test_guest_reset_starts_a_clean_visitor(client):
+    async with client as c:
+        before = (await c.http.get("/api/reel/session")).json()["data"]
+        film = FILMS[2]["id"]
+        await c.http.post("/api/reel/watch", json={"filmId": film})
+        await c.http.post("/api/reel/recommendations", json={"shelf": "home"})
+        assert [i["film"]["id"] for i in (await c.http.get("/api/reel/insight/sequence")).json()["data"]["items"]] == [film]
+        reset = await c.http.post("/api/reel/session/reset")
+        assert reset.status_code == 200
+        after = reset.json()["data"]
+        assert after["persona"]["key"] == "anon" and after["sessionId"] != before["sessionId"]
+        assert reset.json()["meta"]["previous_session_id"] == before["sessionId"]
+        # The new session carries no history: empty sequence, popular fallback, no recent ids, no stale diff.
+        assert (await c.http.get("/api/reel/insight/sequence")).json()["data"]["items"] == []
+        assert (await c.http.get("/api/reel/insight/history")).json()["data"] == []
+        recs = (await c.http.post("/api/reel/recommendations", json={"shelf": "home"})).json()["data"]
+        assert recs["trace"]["request"]["recentProductIds"] == [] and recs["trace"]["fallbackUsed"]
+        assert recs["diff"]["hasPrevious"] is False
+        assert (await c.http.get("/api/reel/session")).json()["data"]["sessionId"] == after["sessionId"]
+
+
+async def test_named_shopper_cannot_be_reset(client):
+    async with client as c:
+        await c.http.post("/api/reel/session/persona", json={"persona": "theo"})
+        refused = await c.http.post("/api/reel/session/reset")
+        assert refused.status_code == 409 and refused.json()["error"]["code"] == "reset_not_supported"
+        assert (await c.http.get("/api/reel/session")).json()["data"]["persona"]["key"] == "theo"

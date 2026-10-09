@@ -5,20 +5,32 @@ import type { Recs, Unavailable } from "../types";
 import { FilmTile } from "./FilmTile";
 
 /** Demo control: tune GraphRec's MMR diversity live. */
-function ServingControls() {
-  const { serving, setServing, homeLoading } = useDemo();
+/** Highest slider value: at 1.0 MMR ignores relevance entirely, which only makes a list look random. */
+const MAX_DIVERSITY = 0.8;
+
+function ServingControls({ applied }: { applied: boolean }) {
+  const { serving, setServing } = useDemo();
   const [draft, setDraft] = useState(serving.diversity);
   useEffect(() => setDraft(serving.diversity), [serving.diversity]);
+  // Commit once the slider has been still for a moment, so a drag or a run of arrow
+  // keys asks GraphRec once, for the value the viewer settled on.
+  useEffect(() => {
+    if (Math.abs(draft - serving.diversity) < 1e-9) return;
+    const timer = window.setTimeout(() => { void setServing({ diversity: draft }); }, 350);
+    return () => window.clearTimeout(timer);
+  }, [draft, serving.diversity, setServing]);
   return (
     <div className="serving-controls">
       <label className="diversity" title="MMR: 0 ranks by relevance only; higher values trade relevance for variety">
         <span>Diversity <b>{draft.toFixed(2)}</b></span>
-        <input type="range" min={0} max={1} step={0.05} value={draft} disabled={homeLoading}
-          onChange={(e) => setDraft(Number(e.target.value))}
-          onPointerUp={() => draft !== serving.diversity && setServing({ diversity: draft })}
-          onKeyUp={() => draft !== serving.diversity && setServing({ diversity: draft })} />
-        {draft !== DEFAULT_DIVERSITY && <button className="link" onClick={() => setServing({ diversity: DEFAULT_DIVERSITY })}>reset</button>}
+        <input type="range" min={0} max={MAX_DIVERSITY} step={0.05} value={Math.min(draft, MAX_DIVERSITY)} aria-label="Diversity"
+          onChange={(e) => setDraft(Math.round(Number(e.target.value) * 100) / 100)} />
+        {Math.abs(draft - DEFAULT_DIVERSITY) > 1e-9 && (
+          <button className="link" onClick={() => setDraft(DEFAULT_DIVERSITY)}>reset</button>
+        )}
       </label>
+      {!applied && <span className="muted small" title="Diversity re-ranks the model's candidates; a popular list has none to spread">
+        Not applied to popular picks — watch a film first.</span>}
     </div>
   );
 }
@@ -57,7 +69,7 @@ export function Shelf({ recs, loading, onUpdate, pending, emptyHint }: {
             {insightOpen && recs.diff.hasPrevious && <button className="pill change" onClick={() => setInsight(true, "changes")}>{recs.diff.summary}</button>}
             {insightOpen && recs.trace.explain && <button className="pill quiet" onClick={() => setInsight(true, "pipeline")}>pipeline</button>}
           </div>
-          {onUpdate && <ServingControls />}
+          {onUpdate && <ServingControls applied={!recs.trace.fallbackUsed} />}
         </div>
         {onUpdate && (
           <button className="btn primary" onClick={onUpdate} disabled={loading} title="Ask GraphRec for a fresh list using everything you've watched">

@@ -3,11 +3,11 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Response
 
 from ..config import Settings
-from ..dependencies import Identity, identity, services, set_cookies, settings
+from ..dependencies import Identity, identity, new_session_id, services, set_cookies, settings
 from ..errors import StoreError
 from ..graphrec import Services
 from ..schemas import Envelope, PersonaIn, PersonaOut, Receipt, SessionOut
-from ..store import Persona, shopper_key
+from ..store import ANONYMOUS, Persona, shopper_key
 from .events import record
 
 router = APIRouter(tags=["session"])
@@ -44,3 +44,22 @@ async def set_persona(body: PersonaIn, response: Response, ident: Identity = Dep
                 carried.append(await record(svc, switched, row["filmId"], event_id=f"reel-carry-{switched.user_id}-{row['eventId']}"[:100], surface="sign_in"))
     set_cookies(response, switched, cfg)
     return Envelope(data=session_out(svc, switched), meta={"carried": [c.model_dump(by_alias=True) for c in carried]})
+
+
+@router.post("/session/reset", response_model=Envelope[SessionOut])
+async def reset_guest(response: Response, ident: Identity = Depends(identity),
+                      cfg: Settings = Depends(settings), svc: Services = Depends(services)):
+    """Start the guest over: a fresh anonymous session with no history.
+
+    Guest history is keyed by session id (``shopper_key``), and GraphRec sees an
+    anonymous shopper only through ``context.session_id`` / ``recent_product_ids``,
+    so a new session id is a clean visitor everywhere - storefront history, the
+    shelf diff and GraphRec's last-good list. Identified shoppers cannot be reset:
+    their events live in GraphRec permanently (re-run bootstrap_reel.py for that).
+    """
+    if ident.persona.user_id is not None:
+        raise StoreError(409, "reset_not_supported",
+                         "Only the guest can be reset; a named shopper's history is stored in GraphRec.")
+    fresh = Identity(ANONYMOUS, new_session_id())
+    set_cookies(response, fresh, cfg)
+    return Envelope(data=session_out(svc, fresh), meta={"previous_session_id": ident.session_id})

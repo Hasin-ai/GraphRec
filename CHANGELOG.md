@@ -18,6 +18,11 @@ All notable changes to GraphRec. Entries reference the anomaly register in
 - `scripts/eval_serving.py`: offline leave-last-out replay of glass-box vs a plain DGSR Top-K baseline on a DGSR artifact. MovieLens, 3,000 held-out users: Recall@10 0.102 → 0.109, NDCG@10 0.054 → 0.057, intra-list diversity 0.60 → 0.68, catalogue coverage 0.28 → 0.26 (`docs/serving_eval_movielens.json`).
 - Reel storefront: reason line on every tile ("Because you watched …", "Popular in Sci-Fi"), diversity slider on the home shelf, and a **Pipeline** tab in the insight drawer drawing the funnel, source status and candidate scores.
 
+### Reel storefront demo controls (2026-10-10)
+- **Reset guest:** `POST /api/reel/session/reset` and a "Reset guest" button start the guest over with a fresh anonymous session, so storefront history, the shelf diff and GraphRec's last-good list all begin empty. Named shoppers are refused (409 `reset_not_supported`): their events live in GraphRec.
+- **Diversity slider fixes:** changes are committed once the slider settles (350 ms), so a drag or a run of arrow keys sends one request instead of locking the slider after the first step; a late answer can no longer overwrite a newer list; the range is capped at 0.8 (at 1.0 MMR ignores relevance); the shelf says when diversity does not apply (popular fallback).
+- Playwright `e2e/reel-controls.spec.ts` covers both.
+
 ### Production hardening (full-stack verification 2026-10-10)
 - **Qdrant circuit breaker:** after a Qdrant timeout or error the pipeline serves from the in-memory item table for 30 s instead of paying the 250 ms budget on every request; the ANN call now runs in parallel with the in-process sources.
 - **Tenant popularity cache:** recent popularity is computed at most once per 15 s per tenant and process (eligibility is still checked per request); popularity failures no longer affect scoring beyond dropping its 5 % weight.

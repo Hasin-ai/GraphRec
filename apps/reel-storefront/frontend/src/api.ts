@@ -22,6 +22,7 @@ const post = <T,>(path: string, json?: unknown) => call<T>(path, { method: "POST
 
 export const api = {
   session: () => call<Session>("/session").then((r) => r.data),
+  resetGuest: () => post<Session>("/session/reset").then((r) => r.data),
   setPersona: (persona: string, carrySession = false) =>
     post<Session>("/session/persona", { persona, carrySession }).then((r) => ({ session: r.data, carried: (r.meta.carried ?? []) as Receipt[] })),
   genres: () => call<Genre[]>("/genres").then((r) => r.data),
