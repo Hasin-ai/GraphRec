@@ -141,6 +141,8 @@ def test_xr_f_01_stored_history_and_session_context_are_encoded_together(client,
     artifact = _RecordingArtifact([f'p{i}' for i in range(9)])
     monkeypatch.setattr('graphrec_core.dgsr.serving.load_artifact', lambda directory: artifact)
 
+    pipeline._qdrant_open_until = 0.0
+
     def qdrant_unreachable():
         raise ConnectionError('no qdrant in this test')
     payload = RecommendationRequest.model_validate({'user_id': 'u0', 'top_n': 2, 'context': {'recent_product_ids': ['p7']}})

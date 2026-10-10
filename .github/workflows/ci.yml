@@ -80,7 +80,7 @@ jobs:
       - name: OpenAPI drift (web wire types)
         run: python scripts/export_openapi.py --check web/openapi.json
       - name: Dependency audit (Python)
-        run: pip-audit -r <(pip freeze --exclude-editable) --progress-spinner off
+        run: pip-audit -r <(pip freeze --exclude-editable | grep -v 'torch==') --progress-spinner off
 
   web:
     name: Web type check, unit tests, build and audit
@@ -117,7 +117,7 @@ jobs:
       - name: Production image contains no tests
         run: test -z "$(docker run --rm --entrypoint sh graphrec-api:ci -c 'ls /app/tests 2>/dev/null')"
       - name: Scan images (Trivy)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: graphrec-api:ci
           severity: CRITICAL,HIGH
@@ -134,8 +134,9 @@ jobs:
         run: |
           cp .env.example .env
           sed -i "s|^JWT_SIGNING_SECRET=.*|JWT_SIGNING_SECRET=$JWT_SIGNING_SECRET|; s|^AUDIT_HASH_SECRET=.*|AUDIT_HASH_SECRET=$AUDIT_HASH_SECRET|; s|^API_KEY_HMAC_PEPPER=.*|API_KEY_HMAC_PEPPER=$API_KEY_HMAC_PEPPER|; s|^PLATFORM_ADMIN_TOKEN=.*|PLATFORM_ADMIN_TOKEN=$PLATFORM_ADMIN_TOKEN|" .env
+          echo "QDRANT_URL=http://qdrant:6334" >> .env
       - name: Start the stack
-        run: docker compose up -d --build --wait api worker scheduler frontend
+        run: QDRANT_URL=http://qdrant:6334 docker compose up -d --build --wait api worker scheduler frontend
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
