@@ -14,6 +14,8 @@ import { ActionsCell, Badge, Cell, DataTable, DefinitionList, ErrorBanner, Filte
 import { NotFoundPage } from "../errors/ErrorPages";
 import { humanizeKey } from "../../lib/labels";
 import { ReasonField } from "../../ui/ReasonField";
+import { Alert, ButtonLink } from "../../ui/kit";
+import { getPlatformSession, hasOperatorRole } from "../../auth/session";
 
 const STATUSES: PlatformTenantStatus[] = ["active", "suspended", "deleting", "deleted"];
 const USAGE_TYPES = ["accepted_events", "recommendation_requests", "training_jobs", "training_cpu_seconds", "stored_products", "artifact_storage_bytes", "active_model_versions", "inference_replicas", "replica_runtime_minutes"];
@@ -107,7 +109,7 @@ export function PlatformTenantsPage() {
  * acknowledgement; if the API answers 409 limit_below_usage, the conflicts are
  * shown and the operator must tick the box before the change is resent.
  */
-function useBelowUsageGuard() {
+export function useBelowUsageGuard() {
   const [conflicts, setConflicts] = useState<LimitConflict[] | null>(null);
   const [acknowledged, setAcknowledged] = useState(false);
   async function attempt<T>(send: (acknowledge: boolean) => Promise<T>): Promise<T | string> {
@@ -199,6 +201,9 @@ function PlatformTenantDetail() {
   const [selectedPlan, setSelectedPlan] = useState('');
   const [planReason, setPlanReason] = useState("");
   const planGuard = useBelowUsageGuard();
+  const canSeeRequests = hasOperatorRole(getPlatformSession(), "plan_management", "platform", "monitoring");
+  const planRequests = useResource(() => canSeeRequests ? platform.listPlanRequests("pending") : Promise.resolve(null), [canSeeRequests, tenantId]);
+  const pendingRequest = planRequests.data?.items.find((r) => r.tenant_id === tenantId) ?? null;
   const crumbs = [{ label: "Platform", to: "/admin/status" }, { label: "Tenants", to: "/admin/tenants" }, { label: shortId(tenantId), mono: true }];
 
   if (tenant.error && isApiError(tenant.error) && (tenant.error.status === 404 || tenant.error.status === 422)) return <NotFoundPage />;
@@ -213,6 +218,10 @@ function PlatformTenantDetail() {
   return (
     <Page crumbs={[crumbs[0], crumbs[1], { label: t.slug, mono: true }]} kicker="Composed detail" title={t.name} badge={<Badge group="tenant" value={t.status} />} subtitle="Manage tenant access and approved quota overrides.">
       {tenant.error ? <ErrorBanner error={tenant.error} onRetry={tenant.reload} /> : null}
+      {pendingRequest ? <Alert tone="warning" title={`Requested ${pendingRequest.requested_plan_name} — awaiting approval`}
+        action={<ButtonLink size="sm" to="/admin/plan-requests">Review request</ButtonLink>}>
+        Sent {fmtDateTime(pendingRequest.created_at)}{pendingRequest.message ? <>: “{pendingRequest.message}”</> : "."} Assigning that plan here also closes the request as approved.
+      </Alert> : null}
       <div className="panels">
         <Panel
           title="Status and lifecycle"
@@ -321,7 +330,7 @@ function PlatformTenantDetail() {
         if (!planGuard.isResult(result)) return result;
         quotaResource.setData(result);
         void tenantUsage.reload();
-        setDialog(null); planGuard.reset(); flash(result.warnings?.length ? 'Tenant plan updated. The tenant is now over a storage limit.' : 'Tenant plan updated.');
+        setDialog(null); planGuard.reset(); void planRequests.reload(); flash(result.warnings?.length ? 'Tenant plan updated. The tenant is now over a storage limit.' : 'Tenant plan updated.');
       }}><Field id="tenant-plan" label="Plan"><Select id="tenant-plan" value={selectedPlan} onChange={v => { setSelectedPlan(v); planGuard.reset(); }} options={[{ value: '', label: 'Choose a plan' }, ...(plans.data ?? []).filter(p => p.is_active).map(p => ({ value: p.id, label: p.name }))]} /></Field><ReasonField id="tenant-plan-reason" value={planReason} onChange={setPlanReason} />{planGuard.notice}</Dialog> : null}
       {dialog === "recovery" ? <RecoveryDialog tenant={t} onClose={() => setDialog(null)} onDone={(token, expires) => {
         setDialog(null); setRecovery({ token, expires }); flash("One-time recovery token issued.");

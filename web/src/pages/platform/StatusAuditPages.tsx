@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { platform } from "../../api";
+import { getPlatformSession, hasOperatorRole } from "../../auth/session";
+import { Alert, ButtonLink } from "../../ui/kit";
 import type { PlatformAudit } from "../../api/types";
 import { useClearQuery, useQueryState } from "../../hooks/useQueryState";
 import { useResource } from "../../hooks/useResource";
@@ -12,6 +14,9 @@ export function PlatformStatusPage() {
   const status = useResource(() => platform.status(), []);
   const tenants = useResource(() => platform.listTenants(), []);
   const failures = useResource(() => platform.listFailures(), []);
+  const canSeeRequests = hasOperatorRole(getPlatformSession(), "plan_management", "platform", "monitoring");
+  const planRequests = useResource(() => canSeeRequests ? platform.listPlanRequests("pending") : Promise.resolve(null), [canSeeRequests]);
+  const pendingRequests = planRequests.data?.pending_count ?? 0;
   const s = status.data;
   const activeTenants = tenants.data?.items.filter((t) => t.status === "active").length ?? 0;
   const dayAgo = Date.now() - 86_400_000;
@@ -25,9 +30,13 @@ export function PlatformStatusPage() {
       badge={s ? <Badge group="platform" value={s.status} /> : undefined}
       subtitle="Shared service health across the platform. Components that are not deployed are identified as such, never as healthy."
       updated={status.loadedAt ? `updated ${relativeSeconds(status.loadedAt)}` : undefined}
-      actions={[{ label: "Refresh", onClick: () => { void status.reload(); void tenants.reload(); void failures.reload(); } }]}
+      actions={[{ label: "Refresh", onClick: () => { void status.reload(); void tenants.reload(); void failures.reload(); void planRequests.reload(); } }]}
     >
       {status.error ? <ErrorBanner error={status.error} onRetry={status.reload} /> : null}
+      {pendingRequests ? <Alert tone="warning" title={`${pendingRequests} plan ${pendingRequests === 1 ? "request" : "requests"} awaiting approval`}
+        action={<ButtonLink size="sm" to="/admin/plan-requests">Review requests</ButtonLink>}>
+        Tenants cannot change plans without your approval: GraphRec takes no payments.
+      </Alert> : null}
       {!s && status.loading ? (
         <Skeleton />
       ) : s ? (

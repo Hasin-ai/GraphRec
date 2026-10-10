@@ -1972,6 +1972,190 @@
         "title": "PlanAssignment",
         "type": "object"
       },
+      "PlanChangeRequestCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "plan_code": {
+            "enum": [
+              "free",
+              "basic",
+              "pro"
+            ],
+            "title": "Plan Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "plan_code"
+        ],
+        "title": "PlanChangeRequestCreate",
+        "type": "object"
+      },
+      "PlanChangeRequestList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PlanChangeRequestResource"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "pending": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanChangeRequestResource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "PlanChangeRequestList",
+        "type": "object"
+      },
+      "PlanChangeRequestResource": {
+        "description": "A request as the tenant sees it.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "current_plan_code": {
+            "title": "Current Plan Code",
+            "type": "string"
+          },
+          "current_plan_name": {
+            "title": "Current Plan Name",
+            "type": "string"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "decision_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Reason"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "requested_plan_code": {
+            "title": "Requested Plan Code",
+            "type": "string"
+          },
+          "requested_plan_name": {
+            "title": "Requested Plan Name",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "approved",
+              "rejected",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "current_plan_code",
+          "current_plan_name",
+          "requested_plan_code",
+          "requested_plan_name",
+          "created_at"
+        ],
+        "title": "PlanChangeRequestResource",
+        "type": "object"
+      },
+      "PlanRequestDecision": {
+        "additionalProperties": false,
+        "properties": {
+          "acknowledge_below_usage": {
+            "default": false,
+            "title": "Acknowledge Below Usage",
+            "type": "boolean"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "PlanRequestDecision",
+        "type": "object"
+      },
+      "PlanRequestDecisionResult": {
+        "properties": {
+          "request": {
+            "$ref": "#/components/schemas/PlatformPlanChangeRequest"
+          },
+          "warnings": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "request"
+        ],
+        "title": "PlanRequestDecisionResult",
+        "type": "object"
+      },
       "PlanUpdate": {
         "properties": {
           "acknowledge_below_usage": {
@@ -2244,6 +2428,180 @@
           "limits"
         ],
         "title": "PlatformPlanAssignmentResult",
+        "type": "object"
+      },
+      "PlatformPlanChangeRequest": {
+        "description": "A request as a platform operator sees it.",
+        "properties": {
+          "active_plan_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Plan Code"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "current_plan_code": {
+            "title": "Current Plan Code",
+            "type": "string"
+          },
+          "current_plan_name": {
+            "title": "Current Plan Name",
+            "type": "string"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "decided_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By"
+          },
+          "decided_by_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By Email"
+          },
+          "decision_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Reason"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "requested_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested By"
+          },
+          "requested_plan_code": {
+            "title": "Requested Plan Code",
+            "type": "string"
+          },
+          "requested_plan_id": {
+            "format": "uuid",
+            "title": "Requested Plan Id",
+            "type": "string"
+          },
+          "requested_plan_name": {
+            "title": "Requested Plan Name",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "approved",
+              "rejected",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "tenant_name": {
+            "title": "Tenant Name",
+            "type": "string"
+          },
+          "tenant_slug": {
+            "title": "Tenant Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "current_plan_code",
+          "current_plan_name",
+          "requested_plan_code",
+          "requested_plan_name",
+          "created_at",
+          "tenant_id",
+          "tenant_slug",
+          "tenant_name",
+          "requested_plan_id"
+        ],
+        "title": "PlatformPlanChangeRequest",
+        "type": "object"
+      },
+      "PlatformPlanChangeRequestList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PlatformPlanChangeRequest"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "pending_count": {
+            "title": "Pending Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "pending_count"
+        ],
+        "title": "PlatformPlanChangeRequestList",
         "type": "object"
       },
       "PlatformPlanResource": {
@@ -6783,6 +7141,165 @@
         ]
       }
     },
+    "/v1/platform/plan-requests": {
+      "get": {
+        "description": "Requests across tenants: pending first (oldest first), then decided (newest first).",
+        "operationId": "list_plan_requests_v1_platform_plan_requests_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 20,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformPlanChangeRequestList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Plan Requests",
+        "tags": [
+          "platform"
+        ]
+      }
+    },
+    "/v1/platform/plan-requests/{request_id}:approve": {
+      "post": {
+        "description": "Approve a pending request; the tenant moves to the requested plan immediately.",
+        "operationId": "approve_plan_request_v1_platform_plan_requests__request_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanRequestDecision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanRequestDecisionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve Plan Request",
+        "tags": [
+          "platform"
+        ]
+      }
+    },
+    "/v1/platform/plan-requests/{request_id}:reject": {
+      "post": {
+        "description": "Reject a pending request; the tenant keeps its plan and sees the reason.",
+        "operationId": "reject_plan_request_v1_platform_plan_requests__request_id__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanRequestDecision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanRequestDecisionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reject Plan Request",
+        "tags": [
+          "platform"
+        ]
+      }
+    },
     "/v1/platform/plans": {
       "get": {
         "operationId": "list_platform_plans_v1_platform_plans_get",
@@ -7784,6 +8301,109 @@
           }
         },
         "summary": "Get Subscription",
+        "tags": [
+          "subscription"
+        ]
+      }
+    },
+    "/v1/subscription/requests": {
+      "get": {
+        "operationId": "list_plan_requests_v1_subscription_requests_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanChangeRequestList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Plan Requests",
+        "tags": [
+          "subscription"
+        ]
+      },
+      "post": {
+        "operationId": "create_plan_request_v1_subscription_requests_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanChangeRequestCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanChangeRequestResource"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Plan Request",
+        "tags": [
+          "subscription"
+        ]
+      }
+    },
+    "/v1/subscription/requests/{request_id}:cancel": {
+      "post": {
+        "operationId": "cancel_plan_request_v1_subscription_requests__request_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanChangeRequestResource"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Plan Request",
         "tags": [
           "subscription"
         ]

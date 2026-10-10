@@ -22,6 +22,8 @@ from ..models.platform import (
     PlatformStatus,
     PlatformTenant,
     PlatformTenantList,
+    PlanRequestDecision,
+    PlatformPlanRequestList,
     PricingPlan,
     PricingPlanList,
     QuotaOverride,
@@ -32,9 +34,11 @@ from ._base import AsyncResource, SyncResource
 
 __all__ = [
     "AsyncPlatformOperations",
+    "AsyncPlatformPlanRequests",
     "AsyncPlatformPlans",
     "AsyncPlatformTenants",
     "PlatformOperations",
+    "PlatformPlanRequests",
     "PlatformPlans",
     "PlatformTenants",
 ]
@@ -391,6 +395,95 @@ class AsyncPlatformPlans(AsyncResource):
         )
 
 
+PLAN_REQUEST_STATUSES = ("pending", "approved", "rejected", "cancelled")
+
+
+def _status_query(status: Optional[str]) -> Optional[Dict[str, str]]:
+    if status is None:
+        return None
+    if status not in PLAN_REQUEST_STATUSES:
+        raise InputValidationError(f"status must be one of {PLAN_REQUEST_STATUSES}")
+    return {"status": status}
+
+
+def _decision_body(reason: str, acknowledge_below_usage: bool) -> Dict[str, Any]:
+    body: Dict[str, Any] = dict(_reason_body(reason))
+    if not body:
+        raise InputValidationError("reason is required")
+    if acknowledge_below_usage:
+        body["acknowledge_below_usage"] = True
+    return body
+
+
+class PlatformPlanRequests(SyncResource):
+    """Tenants' plan change requests. GraphRec takes no payments: plans change on approval."""
+
+    def list(self, *, status: Optional[str] = None) -> PlatformPlanRequestList:
+        """Pending requests first (oldest first), then decided ones. ``GET /v1/platform/plan-requests``."""
+
+        return cast(
+            PlatformPlanRequestList,
+            self._client.request("platform.list_plan_requests", query=_status_query(status),
+                                 cast_to=PlatformPlanRequestList),
+        )
+
+    def approve(self, request_id: Id, *, reason: str, acknowledge_below_usage: bool = False) -> PlanRequestDecision:
+        """Approve a pending request; the tenant moves to the requested plan at once.
+
+        ``POST /v1/platform/plan-requests/{request_id}:approve``. Raises
+        :class:`~graphrec_sdk.LimitBelowUsageError` when the plan is below the tenant's
+        stored inventory, unless ``acknowledge_below_usage=True``.
+        """
+
+        return cast(
+            PlanRequestDecision,
+            self._client.request("platform.approve_plan_request", path_params={"request_id": request_id},
+                                 json=_decision_body(reason, acknowledge_below_usage), cast_to=PlanRequestDecision),
+        )
+
+    def reject(self, request_id: Id, *, reason: str) -> PlanRequestDecision:
+        """Reject a pending request; the tenant keeps its plan and sees ``reason``."""
+
+        return cast(
+            PlanRequestDecision,
+            self._client.request("platform.reject_plan_request", path_params={"request_id": request_id},
+                                 json=_decision_body(reason, False), cast_to=PlanRequestDecision),
+        )
+
+
+class AsyncPlatformPlanRequests(AsyncResource):
+    """Async variant of :class:`PlatformPlanRequests`."""
+
+    async def list(self, *, status: Optional[str] = None) -> PlatformPlanRequestList:
+        """Async variant of :meth:`PlatformPlanRequests.list`."""
+
+        return cast(
+            PlatformPlanRequestList,
+            await self._client.request("platform.list_plan_requests", query=_status_query(status),
+                                       cast_to=PlatformPlanRequestList),
+        )
+
+    async def approve(self, request_id: Id, *, reason: str,
+                      acknowledge_below_usage: bool = False) -> PlanRequestDecision:
+        """Async variant of :meth:`PlatformPlanRequests.approve`."""
+
+        return cast(
+            PlanRequestDecision,
+            await self._client.request("platform.approve_plan_request", path_params={"request_id": request_id},
+                                       json=_decision_body(reason, acknowledge_below_usage),
+                                       cast_to=PlanRequestDecision),
+        )
+
+    async def reject(self, request_id: Id, *, reason: str) -> PlanRequestDecision:
+        """Async variant of :meth:`PlatformPlanRequests.reject`."""
+
+        return cast(
+            PlanRequestDecision,
+            await self._client.request("platform.reject_plan_request", path_params={"request_id": request_id},
+                                       json=_decision_body(reason, False), cast_to=PlanRequestDecision),
+        )
+
+
 class PlatformOperations(SyncResource):
     """Cross-tenant monitoring: service health, failures and audit trail."""
 
@@ -486,4 +579,4 @@ class AsyncPlatformOperations(AsyncResource):
         return cast(
             AuditRecordList,
             await self._client.request("platform.list_audit_logs", query=query, cast_to=AuditRecordList),
-        )
+        )

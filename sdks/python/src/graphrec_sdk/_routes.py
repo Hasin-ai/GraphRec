@@ -100,6 +100,9 @@ ROUTES: Dict[str, Route] = dict(
         _r(Route("tenant_users.revoke_invitation", "DELETE", "/v1/tenant/users/{user_id}/invitation", auth="bearer", scope="users:write", scope_enforced=True, idempotent=True)),
         # -- billing -----------------------------------------------------------------------
         _r(Route("subscription.get", "GET", "/v1/subscription", scope="billing:read", scope_enforced=True, idempotent=True)),
+        _r(Route("subscription.list_requests", "GET", "/v1/subscription/requests", scope="billing:read", scope_enforced=True, idempotent=True)),
+        _r(Route("subscription.request_plan", "POST", "/v1/subscription/requests", scope="billing:write", scope_enforced=True, body="json")),
+        _r(Route("subscription.cancel_request", "POST", "/v1/subscription/requests/{request_id}:cancel", scope="billing:write", scope_enforced=True)),
         _r(Route("usage.get", "GET", "/v1/usage", scope="usage:read", scope_enforced=True, idempotent=True)),
         _r(Route("usage.trends", "GET", "/v1/usage/trends", scope="usage:read", scope_enforced=True, idempotent=True)),
         # -- catalog -----------------------------------------------------------------------
@@ -162,6 +165,9 @@ ROUTES: Dict[str, Route] = dict(
         _r(Route("platform.set_tenant_status", "POST", "/v1/platform/tenants/{tenant_id}/status", auth="bearer", scope="platform:admin", idempotent=True, body="json")),
         _r(Route("platform.list_plans", "GET", "/v1/platform/plans", auth="bearer", scope="platform:admin", idempotent=True)),
         _r(Route("platform.update_plan", "PUT", "/v1/platform/plans/{plan_id}", auth="bearer", scope="platform:admin", idempotent=True, body="json")),
+        _r(Route("platform.list_plan_requests", "GET", "/v1/platform/plan-requests", auth="bearer", scope="platform:admin", idempotent=True)),
+        _r(Route("platform.approve_plan_request", "POST", "/v1/platform/plan-requests/{request_id}:approve", auth="bearer", scope="platform:admin", body="json")),
+        _r(Route("platform.reject_plan_request", "POST", "/v1/platform/plan-requests/{request_id}:reject", auth="bearer", scope="platform:admin", body="json")),
         _r(Route("platform.issue_recovery", "POST", "/v1/platform/tenants/{tenant_id}/recovery", auth="bearer", scope="platform:admin", body="json")),
         _r(Route("platform.set_quota_override", "POST", "/v1/platform/tenants/{tenant_id}/quotas", auth="bearer", scope="platform:admin", idempotent=True, body="json")),
         _r(Route("platform.list_failures", "GET", "/v1/platform/failures", auth="bearer", scope="platform:admin", idempotent=True)),

@@ -3,7 +3,7 @@ import { setPlatformSession, setTenantSession } from "../auth/session";
 import type { AuthTokenPair } from "../api/types";
 
 export const ADMIN_SCOPES = [
-  "keys:write", "billing:read", "usage:read", "catalog:read", "catalog:write", "events:read", "events:write",
+  "keys:write", "billing:read", "billing:write", "usage:read", "catalog:read", "catalog:write", "events:read", "events:write",
   "training:read", "training:write", "models:read", "models:write", "models:deploy", "recommendations:read",
   "deployments:read", "metrics:read",
 ];

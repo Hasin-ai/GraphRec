@@ -68,12 +68,14 @@ def world(client_module):
     version = client.post("/v1/model-versions", json={"version_tag": marker, "model_type": "placeholder"}, headers=a).json()
     job = client.post("/v1/training-jobs", json={"request_id": marker, "configuration": {"mode": "placeholder"}}, headers=a)
     assert job.status_code == 200, job.text
+    plan_request = client.post("/v1/subscription/requests", json={"plan_code": "basic", "message": marker}, headers=a)
+    assert plan_request.status_code == 201, plan_request.text
     b_key = client.post("/v1/api-keys", json={"name": "b", "scopes": ["catalog:read", "events:write", "recommendations:read"]},
                         headers=b).json()["secret"]
     ids = {"external_id": sku, "sync_id": sync.get("sync_id"), "batch_id": batch.get("batch_id") or batch.get("id"),
            "key_id": key["id"], "user_id": user["id"], "snapshot_id": snapshot.get("id"), "version_id": version.get("id"),
            "model_id": version.get("id"), "job_id": job.json()["id"], "tenant_id": a_id, "operator_id": str(uuid4()),
-           "plan_id": str(uuid4())}
+           "plan_id": str(uuid4()), "request_id": plan_request.json()["id"]}
     assert all(ids.values()), ids  # every foreign id is a real resource of tenant A
     return {"client": client, "a": a, "b": b, "b_key": {"Authorization": f"ApiKey {b_key}"}, "ids": ids,
             "marker": marker, "sku": sku, "a_id": a_id}

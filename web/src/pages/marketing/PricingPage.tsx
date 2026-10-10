@@ -5,11 +5,15 @@ import { useLivePlans } from "../../marketing/useLivePlans";
 import { useDocumentTitle } from "../../marketing/useDocumentTitle";
 
 const CARD_LIMITS = ["accepted_events", "recommendation_requests", "stored_products", "training_jobs", "active_model_versions"] as const;
-const OPERATOR_NOTE = "Every account starts on Free. Your GraphRec operator moves you to Basic or Pro when you need more capacity; usage carries over.";
+const OPERATOR_NOTE = "Every account starts on Free demo. Request Basic or Pro from the console when you need more capacity; your GraphRec operator approves it and usage carries over.";
 
 function PlanCta({ plan }: { plan: MarketingPlan }) {
   const { tenant, platform } = useSession();
-  if (tenant) return <Link className="btn btn-secondary" to="/usage">View your usage</Link>;
+  // No payments: a signed-in tenant requests the plan; a platform operator approves it.
+  if (tenant) return <>
+    <Link className="btn btn-primary" to={`/usage?request=${plan.code}`}>Request {plan.name}</Link>
+    <Link className="btn btn-secondary" to="/usage">View your usage</Link>
+  </>;
   if (platform) return <Link className="btn btn-secondary" to="/admin/plans">Manage plans</Link>;
   return plan.code === "free"
     ? <Link className="btn btn-primary" to="/register">Create account</Link>
@@ -27,7 +31,7 @@ const FAQ: { q: string; a: string }[] = [
   { q: "Do limits reset every month?",
     a: "Accepted events, recommendation requests and training jobs are counted per calendar month (UTC) and reset at the start of the next one. Stored products, active model versions and artifact storage are standing totals; requests per minute and concurrency limits apply continuously." },
   { q: "How do I change plans?",
-    a: "Plans are assigned by your GraphRec platform operator. Every tenant starts on Free; ask your operator to move you to Basic or Pro. The new limits apply immediately and your usage is not reset." },
+    a: "Every tenant starts on Free demo. A workspace administrator requests Free demo, Basic or Pro from Usage & Quotas (or the buttons on this page); your GraphRec platform operator approves or rejects it. On approval the new limits apply immediately and your usage is not reset." },
   { q: "Is there a payment flow?",
     a: "No. Plans carry no prices, and GraphRec has no checkout and collects no payments. Plans set capacity only." },
 ];

@@ -7,7 +7,15 @@ from pydantic import Field
 
 from ._base import GraphRecModel
 
-__all__ = ["Subscription", "UsageDimension", "UsageSummary", "UsageTrend", "UsageTrendBucket"]
+__all__ = [
+    "PlanChangeRequest",
+    "PlanChangeRequestList",
+    "Subscription",
+    "UsageDimension",
+    "UsageSummary",
+    "UsageTrend",
+    "UsageTrendBucket",
+]
 
 
 class Subscription(GraphRecModel):
@@ -83,3 +91,33 @@ class UsageTrend(GraphRecModel):
     usage_types: List[str] = Field(default_factory=list)
     buckets: List[UsageTrendBucket] = Field(default_factory=list)
     totals: Dict[str, Union[int, float]] = Field(default_factory=dict)
+
+
+class PlanChangeRequest(GraphRecModel):
+    """A request to move this workspace to another plan; a platform operator decides it.
+
+    GraphRec takes no payments, so plans change only through an approved request.
+    """
+
+    id: str
+    #: ``pending``, ``approved``, ``rejected`` or ``cancelled``.
+    status: str
+    current_plan_code: str
+    current_plan_name: str
+    requested_plan_code: str
+    requested_plan_name: str
+    message: Optional[str] = None
+    #: The operator's reason for approving or rejecting.
+    decision_reason: Optional[str] = None
+    created_at: datetime
+    decided_at: Optional[datetime] = None
+
+    @property
+    def is_pending(self) -> bool:
+        return self.status == "pending"
+
+
+class PlanChangeRequestList(GraphRecModel):
+    items: List[PlanChangeRequest] = Field(default_factory=list)
+    #: The open request, if any.
+    pending: Optional[PlanChangeRequest] = None

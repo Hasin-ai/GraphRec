@@ -17,6 +17,7 @@ function RelativeTimeUntil({ value }: { value: string }) {
   return <span title={fmtDateTime(value)}>{days <= 0 ? 'today' : days === 1 ? 'in 1 day' : `in ${days} days`}</span>;
 }
 import { UsageTrends } from "./UsageTrends";
+import { PlanRequestPanel } from "./PlanRequests";
 
 /** The current month and the 11 before it, as YYYY-MM (UTC billing periods). */
 export function recentPeriods(now = new Date()): { value: string; label: string }[] {
@@ -57,7 +58,8 @@ export function UsagePage() {
             <span><Link to="/pricing">Compare plans</Link></span>
           </div>
         </div>
-        {over.length || near.length ? <span className="plan-cta muted small"><Icon name="info" size={14} />To raise a limit, ask your GraphRec platform operator to change your plan.</span> : null}
+        {over.length || near.length ? <span className="plan-cta muted small"><Icon name="info" size={14} />To raise a limit, request a bigger plan. Your platform operator approves it.</span> : null}
+        {can('billing:read') ? <PlanRequestPanel plan={plan ?? null} onPlanChanged={() => { void subscription.reload(); void usage.reload(); }} /> : null}
       </Card>
       {!past && (exhausted.length || approaching.length) ? <div className="alert-list">{[...exhausted, ...approaching].map(d => {
         const msg = quotaMessage(d.type, d.used, d.limit); const ex = quotaState(d.used, d.limit).status === 'exhausted';

@@ -36,6 +36,8 @@ ROLE_SCOPES: dict[str, list[str]] = {
         "keys:write",
         "users:write",
         "billing:read",
+        # Request a plan change; a platform operator approves it (migration 0039).
+        "billing:write",
         "usage:read",
         "catalog:read",
         "catalog:write",

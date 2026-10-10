@@ -9,8 +9,14 @@ from graphrec_core.auth.principal import AuthenticatedPrincipal, authenticated_p
 from graphrec_core.database.session import get_db
 from graphrec_core.errors import ApiError
 from graphrec_core.registration.rate_limit import SharedRateLimiter
+from graphrec_core.schemas.plan_requests import (
+    PlanChangeRequestCreate,
+    PlanChangeRequestList,
+    PlanChangeRequestResource,
+)
 from graphrec_core.schemas.subscription import SubscriptionResponse
 from graphrec_core.settings import get_settings
+from graphrec_core.subscription.requests import PlanRequestService
 from graphrec_core.subscription.service import SubscriptionService
 
 router = APIRouter(prefix="/v1", tags=["subscription"])
@@ -57,3 +63,39 @@ def get_subscription(
         principal,
         correlation_id=correlation_id,
     )
+
+
+# -- plan change requests (migration 0039) ---------------------------------------------
+# GraphRec takes no payments: a tenant administrator asks for a plan, a platform
+# operator approves it, and approval activates the plan.
+
+@router.get("/subscription/requests", response_model=PlanChangeRequestList)
+def list_plan_requests(
+    request: Request,
+    principal: AuthenticatedPrincipal = Depends(authenticated_principal),
+    db: Session = Depends(get_db),
+) -> PlanChangeRequestList:
+    principal.require_scope("billing:read")
+    return PlanRequestService(db, principal, request.state.correlation_id).list()
+
+
+@router.post("/subscription/requests", response_model=PlanChangeRequestResource, status_code=201)
+def create_plan_request(
+    payload: PlanChangeRequestCreate,
+    request: Request,
+    principal: AuthenticatedPrincipal = Depends(authenticated_principal),
+    db: Session = Depends(get_db),
+) -> PlanChangeRequestResource:
+    principal.require_scope("billing:write")
+    return PlanRequestService(db, principal, request.state.correlation_id).create(payload)
+
+
+@router.post("/subscription/requests/{request_id}:cancel", response_model=PlanChangeRequestResource)
+def cancel_plan_request(
+    request_id: UUID,
+    request: Request,
+    principal: AuthenticatedPrincipal = Depends(authenticated_principal),
+    db: Session = Depends(get_db),
+) -> PlanChangeRequestResource:
+    principal.require_scope("billing:write")
+    return PlanRequestService(db, principal, request.state.correlation_id).cancel(request_id)

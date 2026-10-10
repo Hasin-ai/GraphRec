@@ -153,6 +153,54 @@ export interface SubscriptionResult {
   project_defaults: boolean;
 }
 
+// ── plan change requests (no payments: an operator approves) ───
+export type PlanCode = "free" | "basic" | "pro";
+export type PlanRequestStatus = "pending" | "approved" | "rejected" | "cancelled";
+
+export interface PlanChangeRequest {
+  id: string;
+  status: PlanRequestStatus;
+  current_plan_code: string;
+  current_plan_name: string;
+  requested_plan_code: string;
+  requested_plan_name: string;
+  message?: string | null;
+  decision_reason?: string | null;
+  created_at: string;
+  decided_at?: string | null;
+}
+
+export interface PlanChangeRequestList {
+  items: PlanChangeRequest[];
+  pending?: PlanChangeRequest | null;
+}
+
+export interface PlanChangeRequestCreate {
+  plan_code: PlanCode;
+  message?: string;
+}
+
+export interface PlatformPlanRequest extends PlanChangeRequest {
+  tenant_id: string;
+  tenant_slug: string;
+  tenant_name: string;
+  requested_plan_id: string;
+  active_plan_code?: string | null;
+  requested_by?: string | null;
+  decided_by?: string | null;
+  decided_by_email?: string | null;
+}
+
+export interface PlatformPlanRequestList {
+  items: PlatformPlanRequest[];
+  pending_count: number;
+}
+
+export interface PlanRequestDecisionResult {
+  request: PlatformPlanRequest;
+  warnings?: Record<string, unknown>[];
+}
+
 export type UsageType =
   | "accepted_events"
   | "recommendation_requests"

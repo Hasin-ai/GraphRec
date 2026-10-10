@@ -404,6 +404,31 @@ def test_platform_tenants_quotas_and_plans(ops: g.GraphRec, shop: Tenant) -> Non
         platform.plans.update(pro.id, name=pro.name, limits={"stored_products": 1}, is_active=True)
 
 
+def test_plan_change_requests(public: g.GraphRec, ops: g.GraphRec) -> None:
+    """No payments: the tenant requests a plan, the operator approves or rejects it."""
+    tenant = _provision(public, "plans")
+    subscription = tenant.admin.tenant.subscription
+    assert subscription.list_requests().pending is None
+    asked = subscription.request_plan("basic", message="Launch week")
+    assert asked.is_pending and asked.requested_plan_code == "basic"
+    with pytest.raises(g.ConflictError):
+        subscription.request_plan("pro")
+    with pytest.raises(g.PermissionDeniedError):
+        tenant.store.tenant.subscription.request_plan("pro")   # API keys cannot request plans
+
+    queue = ops.platform.plan_requests.list(status="pending")
+    assert queue.pending_count >= 1 and any(r.id == UUID(asked.id) for r in queue.items)
+    decided = ops.platform.plan_requests.approve(asked.id, reason="Approved for launch")
+    assert decided.request.status == "approved" and decided.warnings == []
+    assert subscription.get().plan_code == "basic"
+
+    rejected = ops.platform.plan_requests.reject(subscription.request_plan("pro").id, reason="Start with Basic")
+    assert rejected.request.status == "rejected" and subscription.get().plan_code == "basic"
+    cancelled = subscription.cancel_request(subscription.request_plan("free").id)
+    assert cancelled.status == "cancelled"
+    assert [r.status for r in subscription.list_requests().items][:3] == ["cancelled", "rejected", "approved"]
+
+
 def test_tenant_account_status(shop: Tenant) -> None:
     """D-13: any signed-in member can read the workspace status."""
     status = shop.admin.tenant.account.status()

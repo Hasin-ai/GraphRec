@@ -49,6 +49,7 @@ const PLATFORM_NAV: NavGroup[] = [{ id: "platform", label: "Platform", items: [
   { label: "Platform Status", to: "/admin/status", icon: "server" },
   { label: "Tenants", to: "/admin/tenants", icon: "users", scope: "platform|plan_management|monitoring|audit" },
   { label: "Plans & Quotas", to: "/admin/plans", icon: "gauge", scope: "plan_management|platform|monitoring" },
+  { label: "Plan requests", to: "/admin/plan-requests", icon: "check", scope: "plan_management|platform|monitoring" },
   { label: "Usage", to: "/admin/usage", icon: "gauge", scope: "monitoring|plan_management" },
   { label: "Failures & Audit", to: "/admin/audit", icon: "activity", scope: "audit|monitoring" },
   { label: "Operators", to: "/admin/operators", icon: "users", scope: "operator_admin" },

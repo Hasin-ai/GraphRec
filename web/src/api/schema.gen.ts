@@ -667,6 +667,66 @@ export interface paths {
         patch: operations["update_operator_v1_platform_operators__operator_id__patch"];
         trace?: never;
     };
+    "/v1/platform/plan-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Plan Requests
+         * @description Requests across tenants: pending first (oldest first), then decided (newest first).
+         */
+        get: operations["list_plan_requests_v1_platform_plan_requests_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/platform/plan-requests/{request_id}:approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve Plan Request
+         * @description Approve a pending request; the tenant moves to the requested plan immediately.
+         */
+        post: operations["approve_plan_request_v1_platform_plan_requests__request_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/platform/plan-requests/{request_id}:reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject Plan Request
+         * @description Reject a pending request; the tenant keeps its plan and sees the reason.
+         */
+        post: operations["reject_plan_request_v1_platform_plan_requests__request_id__reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/platform/plans": {
         parameters: {
             query?: never;
@@ -1016,6 +1076,41 @@ export interface paths {
         get: operations["get_subscription_v1_subscription_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/subscription/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Plan Requests */
+        get: operations["list_plan_requests_v1_subscription_requests_get"];
+        put?: never;
+        /** Create Plan Request */
+        post: operations["create_plan_request_v1_subscription_requests_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/subscription/requests/{request_id}:cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Plan Request */
+        post: operations["cancel_plan_request_v1_subscription_requests__request_id__cancel_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1941,6 +2036,75 @@ export interface components {
             /** Reason */
             reason?: string | null;
         };
+        /** PlanChangeRequestCreate */
+        PlanChangeRequestCreate: {
+            /** Message */
+            message?: string | null;
+            /**
+             * Plan Code
+             * @enum {string}
+             */
+            plan_code: "free" | "basic" | "pro";
+        };
+        /** PlanChangeRequestList */
+        PlanChangeRequestList: {
+            /** Items */
+            items: components["schemas"]["PlanChangeRequestResource"][];
+            pending?: components["schemas"]["PlanChangeRequestResource"] | null;
+        };
+        /**
+         * PlanChangeRequestResource
+         * @description A request as the tenant sees it.
+         */
+        PlanChangeRequestResource: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Current Plan Code */
+            current_plan_code: string;
+            /** Current Plan Name */
+            current_plan_name: string;
+            /** Decided At */
+            decided_at?: string | null;
+            /** Decision Reason */
+            decision_reason?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Message */
+            message?: string | null;
+            /** Requested Plan Code */
+            requested_plan_code: string;
+            /** Requested Plan Name */
+            requested_plan_name: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "approved" | "rejected" | "cancelled";
+        };
+        /** PlanRequestDecision */
+        PlanRequestDecision: {
+            /**
+             * Acknowledge Below Usage
+             * @default false
+             */
+            acknowledge_below_usage: boolean;
+            /** Reason */
+            reason: string;
+        };
+        /** PlanRequestDecisionResult */
+        PlanRequestDecisionResult: {
+            request: components["schemas"]["PlatformPlanChangeRequest"];
+            /** Warnings */
+            warnings?: {
+                [key: string]: unknown;
+            }[];
+        };
         /** PlanUpdate */
         PlanUpdate: {
             /**
@@ -2055,6 +2219,70 @@ export interface components {
             warnings: {
                 [key: string]: unknown;
             }[];
+        };
+        /**
+         * PlatformPlanChangeRequest
+         * @description A request as a platform operator sees it.
+         */
+        PlatformPlanChangeRequest: {
+            /** Active Plan Code */
+            active_plan_code?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Current Plan Code */
+            current_plan_code: string;
+            /** Current Plan Name */
+            current_plan_name: string;
+            /** Decided At */
+            decided_at?: string | null;
+            /** Decided By */
+            decided_by?: string | null;
+            /** Decided By Email */
+            decided_by_email?: string | null;
+            /** Decision Reason */
+            decision_reason?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Message */
+            message?: string | null;
+            /** Requested By */
+            requested_by?: string | null;
+            /** Requested Plan Code */
+            requested_plan_code: string;
+            /**
+             * Requested Plan Id
+             * Format: uuid
+             */
+            requested_plan_id: string;
+            /** Requested Plan Name */
+            requested_plan_name: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "approved" | "rejected" | "cancelled";
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /** Tenant Name */
+            tenant_name: string;
+            /** Tenant Slug */
+            tenant_slug: string;
+        };
+        /** PlatformPlanChangeRequestList */
+        PlatformPlanChangeRequestList: {
+            /** Items */
+            items: components["schemas"]["PlatformPlanChangeRequest"][];
+            /** Pending Count */
+            pending_count: number;
         };
         /** PlatformPlanResource */
         PlatformPlanResource: {
@@ -4434,6 +4662,107 @@ export interface operations {
             };
         };
     };
+    list_plan_requests_v1_platform_plan_requests_get: {
+        parameters: {
+            query?: {
+                status?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformPlanChangeRequestList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_plan_request_v1_platform_plan_requests__request_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanRequestDecision"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanRequestDecisionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_plan_request_v1_platform_plan_requests__request_id__reject_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanRequestDecision"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanRequestDecisionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_platform_plans_v1_platform_plans_get: {
         parameters: {
             query?: never;
@@ -5169,6 +5498,90 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SubscriptionResponse"];
+                };
+            };
+        };
+    };
+    list_plan_requests_v1_subscription_requests_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanChangeRequestList"];
+                };
+            };
+        };
+    };
+    create_plan_request_v1_subscription_requests_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanChangeRequestCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanChangeRequestResource"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_plan_request_v1_subscription_requests__request_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanChangeRequestResource"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

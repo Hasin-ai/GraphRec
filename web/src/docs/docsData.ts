@@ -1756,6 +1756,133 @@ export const ENDPOINTS: EndpointDoc[] = [
     }
   },
   {
+    "id": "get-v1-platform-plan-requests",
+    "group": "platform",
+    "method": "GET",
+    "path": "/v1/platform/plan-requests",
+    "summary": "List Plan Requests",
+    "description": "Requests across tenants: pending first (oldest first), then decided (newest first).",
+    "scope": null,
+    "auth": "bearer",
+    "parameters": [
+      {
+        "name": "status",
+        "in": "query",
+        "required": false,
+        "type": "string",
+        "description": "",
+        "example": ""
+      }
+    ],
+    "requestBody": null,
+    "responses": [
+      {
+        "status": 200,
+        "description": "Successful Response",
+        "exampleJson": "{\n  \"items\": [\n    {\n      \"active_plan_code\": \"...\",\n      \"created_at\": \"...\",\n      \"current_plan_code\": \"...\",\n      \"current_plan_name\": \"...\",\n      \"decided_at\": \"...\",\n      \"decided_by\": \"...\",\n      \"decided_by_email\": \"...\",\n      \"decision_reason\": \"...\",\n      \"id\": \"...\",\n      \"message\": \"...\",\n      \"requested_by\": \"...\",\n      \"requested_plan_code\": \"...\"\n    }\n  ],\n  \"pending_count\": 1\n}"
+      },
+      {
+        "status": 422,
+        "description": "Validation Error",
+        "exampleJson": "{\n  \"detail\": [\n    {\n      \"ctx\": \"...\",\n      \"input\": \"...\",\n      \"loc\": \"...\",\n      \"msg\": \"...\",\n      \"type\": \"...\"\n    }\n  ]\n}"
+      }
+    ],
+    "sdkMethod": null,
+    "examples": {
+      "curl": "curl -X GET \"https://api.graphrec.io/v1/platform/plan-requests\" \\\n  -H \"Authorization: Bearer <ACCESS_TOKEN>\" \\\n  -H \"Accept: application/json\"",
+      "python": "# Direct client call via SyncAPIClient\nfrom graphrec_sdk import GraphRec\n\nclient = GraphRec(api_key='gr_live_...')\n# Endpoint: GET /v1/platform/plan-requests",
+      "javascript": "const response = await fetch('https://api.graphrec.io/v1/platform/plan-requests', {\n  method: 'GET',\n  headers: {\n    'Accept': 'application/json',\n    'Authorization': 'Bearer ' + token,\n  },\n});\nconst data = await response.json();"
+    }
+  },
+  {
+    "id": "post-v1-platform-plan-requests-request-id-approve",
+    "group": "platform",
+    "method": "POST",
+    "path": "/v1/platform/plan-requests/{request_id}:approve",
+    "summary": "Approve Plan Request",
+    "description": "Approve a pending request; the tenant moves to the requested plan immediately.",
+    "scope": null,
+    "auth": "bearer",
+    "parameters": [
+      {
+        "name": "request_id",
+        "in": "path",
+        "required": true,
+        "type": "string",
+        "description": "",
+        "example": ""
+      }
+    ],
+    "requestBody": {
+      "required": true,
+      "contentType": "application/json",
+      "schemaSummary": "Request Payload",
+      "exampleJson": "{\n  \"acknowledge_below_usage\": true,\n  \"reason\": \"example_string\"\n}"
+    },
+    "responses": [
+      {
+        "status": 200,
+        "description": "Successful Response",
+        "exampleJson": "{\n  \"request\": {\n    \"active_plan_code\": {},\n    \"created_at\": \"2026-10-10T12:00:00Z\",\n    \"current_plan_code\": \"example_string\",\n    \"current_plan_name\": \"example_string\",\n    \"decided_at\": {},\n    \"decided_by\": {},\n    \"decided_by_email\": {},\n    \"decision_reason\": {},\n    \"id\": \"5b1f0c9e-7d2a-4c1b-9e83-2f6a0d4b71c5\",\n    \"message\": {},\n    \"requested_by\": {},\n    \"requested_plan_code\": \"example_string\"\n  },\n  \"warnings\": [\n    {}\n  ]\n}"
+      },
+      {
+        "status": 422,
+        "description": "Validation Error",
+        "exampleJson": "{\n  \"detail\": [\n    {\n      \"ctx\": \"...\",\n      \"input\": \"...\",\n      \"loc\": \"...\",\n      \"msg\": \"...\",\n      \"type\": \"...\"\n    }\n  ]\n}"
+      }
+    ],
+    "sdkMethod": null,
+    "examples": {
+      "curl": "curl -X POST \"https://api.graphrec.io/v1/platform/plan-requests/{request_id}:approve\" \\\n  -H \"Authorization: Bearer <ACCESS_TOKEN>\" \\\n  -H \"Accept: application/json\" \\\n  -H \"Content-Type: application/json\" \\\n  -d \"{\\\"acknowledge_below_usage\\\": true, \\\"reason\\\": \\\"example_string\\\"}\"",
+      "python": "# Direct client call via SyncAPIClient\nfrom graphrec_sdk import GraphRec\n\nclient = GraphRec(api_key='gr_live_...')\n# Endpoint: POST /v1/platform/plan-requests/{request_id}:approve",
+      "javascript": "const response = await fetch('https://api.graphrec.io/v1/platform/plan-requests/{request_id}:approve', {\n  method: 'POST',\n  headers: {\n    'Accept': 'application/json',\n    'Authorization': 'Bearer ' + token,\n    'Content-Type': 'application/json',\n  },\n  body: JSON.stringify({\n  \"acknowledge_below_usage\": true,\n  \"reason\": \"example_string\"\n}),\n});\nconst data = await response.json();"
+    }
+  },
+  {
+    "id": "post-v1-platform-plan-requests-request-id-reject",
+    "group": "platform",
+    "method": "POST",
+    "path": "/v1/platform/plan-requests/{request_id}:reject",
+    "summary": "Reject Plan Request",
+    "description": "Reject a pending request; the tenant keeps its plan and sees the reason.",
+    "scope": null,
+    "auth": "bearer",
+    "parameters": [
+      {
+        "name": "request_id",
+        "in": "path",
+        "required": true,
+        "type": "string",
+        "description": "",
+        "example": ""
+      }
+    ],
+    "requestBody": {
+      "required": true,
+      "contentType": "application/json",
+      "schemaSummary": "Request Payload",
+      "exampleJson": "{\n  \"acknowledge_below_usage\": true,\n  \"reason\": \"example_string\"\n}"
+    },
+    "responses": [
+      {
+        "status": 200,
+        "description": "Successful Response",
+        "exampleJson": "{\n  \"request\": {\n    \"active_plan_code\": {},\n    \"created_at\": \"2026-10-10T12:00:00Z\",\n    \"current_plan_code\": \"example_string\",\n    \"current_plan_name\": \"example_string\",\n    \"decided_at\": {},\n    \"decided_by\": {},\n    \"decided_by_email\": {},\n    \"decision_reason\": {},\n    \"id\": \"5b1f0c9e-7d2a-4c1b-9e83-2f6a0d4b71c5\",\n    \"message\": {},\n    \"requested_by\": {},\n    \"requested_plan_code\": \"example_string\"\n  },\n  \"warnings\": [\n    {}\n  ]\n}"
+      },
+      {
+        "status": 422,
+        "description": "Validation Error",
+        "exampleJson": "{\n  \"detail\": [\n    {\n      \"ctx\": \"...\",\n      \"input\": \"...\",\n      \"loc\": \"...\",\n      \"msg\": \"...\",\n      \"type\": \"...\"\n    }\n  ]\n}"
+      }
+    ],
+    "sdkMethod": null,
+    "examples": {
+      "curl": "curl -X POST \"https://api.graphrec.io/v1/platform/plan-requests/{request_id}:reject\" \\\n  -H \"Authorization: Bearer <ACCESS_TOKEN>\" \\\n  -H \"Accept: application/json\" \\\n  -H \"Content-Type: application/json\" \\\n  -d \"{\\\"acknowledge_below_usage\\\": true, \\\"reason\\\": \\\"example_string\\\"}\"",
+      "python": "# Direct client call via SyncAPIClient\nfrom graphrec_sdk import GraphRec\n\nclient = GraphRec(api_key='gr_live_...')\n# Endpoint: POST /v1/platform/plan-requests/{request_id}:reject",
+      "javascript": "const response = await fetch('https://api.graphrec.io/v1/platform/plan-requests/{request_id}:reject', {\n  method: 'POST',\n  headers: {\n    'Accept': 'application/json',\n    'Authorization': 'Bearer ' + token,\n    'Content-Type': 'application/json',\n  },\n  body: JSON.stringify({\n  \"acknowledge_below_usage\": true,\n  \"reason\": \"example_string\"\n}),\n});\nconst data = await response.json();"
+    }
+  },
+  {
     "id": "get-v1-platform-plans",
     "group": "platform",
     "method": "GET",
@@ -2661,6 +2788,105 @@ export const ENDPOINTS: EndpointDoc[] = [
       "curl": "curl -X GET \"https://api.graphrec.io/v1/subscription\" \\\n  -H \"Authorization: ApiKey <YOUR_API_KEY>\" \\\n  -H \"Accept: application/json\"",
       "python": "from graphrec_sdk import GraphRec\n\nclient = GraphRec(api_key='gr_live_...')\nresult = client.tenant.subscription.get()\nprint(result)",
       "javascript": "const response = await fetch('https://api.graphrec.io/v1/subscription', {\n  method: 'GET',\n  headers: {\n    'Accept': 'application/json',\n    'Authorization': 'ApiKey ' + apiKey,\n  },\n});\nconst data = await response.json();"
+    }
+  },
+  {
+    "id": "get-v1-subscription-requests",
+    "group": "management",
+    "method": "GET",
+    "path": "/v1/subscription/requests",
+    "summary": "List Plan Requests",
+    "description": "List Plan Requests",
+    "scope": null,
+    "auth": "apiKey",
+    "parameters": [],
+    "requestBody": null,
+    "responses": [
+      {
+        "status": 200,
+        "description": "Successful Response",
+        "exampleJson": "{\n  \"items\": [\n    {\n      \"created_at\": \"...\",\n      \"current_plan_code\": \"...\",\n      \"current_plan_name\": \"...\",\n      \"decided_at\": \"...\",\n      \"decision_reason\": \"...\",\n      \"id\": \"...\",\n      \"message\": \"...\",\n      \"requested_plan_code\": \"...\",\n      \"requested_plan_name\": \"...\",\n      \"status\": \"...\"\n    }\n  ],\n  \"pending\": {}\n}"
+      }
+    ],
+    "sdkMethod": null,
+    "examples": {
+      "curl": "curl -X GET \"https://api.graphrec.io/v1/subscription/requests\" \\\n  -H \"Authorization: ApiKey <YOUR_API_KEY>\" \\\n  -H \"Accept: application/json\"",
+      "python": "# Direct client call via SyncAPIClient\nfrom graphrec_sdk import GraphRec\n\nclient = GraphRec(api_key='gr_live_...')\n# Endpoint: GET /v1/subscription/requests",
+      "javascript": "const response = await fetch('https://api.graphrec.io/v1/subscription/requests', {\n  method: 'GET',\n  headers: {\n    'Accept': 'application/json',\n    'Authorization': 'ApiKey ' + apiKey,\n  },\n});\nconst data = await response.json();"
+    }
+  },
+  {
+    "id": "post-v1-subscription-requests",
+    "group": "management",
+    "method": "POST",
+    "path": "/v1/subscription/requests",
+    "summary": "Create Plan Request",
+    "description": "Create Plan Request",
+    "scope": null,
+    "auth": "apiKey",
+    "parameters": [],
+    "requestBody": {
+      "required": true,
+      "contentType": "application/json",
+      "schemaSummary": "Request Payload",
+      "exampleJson": "{\n  \"message\": {},\n  \"plan_code\": \"free\"\n}"
+    },
+    "responses": [
+      {
+        "status": 201,
+        "description": "Successful Response",
+        "exampleJson": "{\n  \"created_at\": \"2026-10-10T12:00:00Z\",\n  \"current_plan_code\": \"example_string\",\n  \"current_plan_name\": \"example_string\",\n  \"decided_at\": {},\n  \"decision_reason\": {},\n  \"id\": \"5b1f0c9e-7d2a-4c1b-9e83-2f6a0d4b71c5\",\n  \"message\": {},\n  \"requested_plan_code\": \"example_string\",\n  \"requested_plan_name\": \"example_string\",\n  \"status\": \"pending\"\n}"
+      },
+      {
+        "status": 422,
+        "description": "Validation Error",
+        "exampleJson": "{\n  \"detail\": [\n    {\n      \"ctx\": \"...\",\n      \"input\": \"...\",\n      \"loc\": \"...\",\n      \"msg\": \"...\",\n      \"type\": \"...\"\n    }\n  ]\n}"
+      }
+    ],
+    "sdkMethod": null,
+    "examples": {
+      "curl": "curl -X POST \"https://api.graphrec.io/v1/subscription/requests\" \\\n  -H \"Authorization: ApiKey <YOUR_API_KEY>\" \\\n  -H \"Accept: application/json\" \\\n  -H \"Content-Type: application/json\" \\\n  -d \"{\\\"message\\\": {}, \\\"plan_code\\\": \\\"free\\\"}\"",
+      "python": "# Direct client call via SyncAPIClient\nfrom graphrec_sdk import GraphRec\n\nclient = GraphRec(api_key='gr_live_...')\n# Endpoint: POST /v1/subscription/requests",
+      "javascript": "const response = await fetch('https://api.graphrec.io/v1/subscription/requests', {\n  method: 'POST',\n  headers: {\n    'Accept': 'application/json',\n    'Authorization': 'ApiKey ' + apiKey,\n    'Content-Type': 'application/json',\n  },\n  body: JSON.stringify({\n  \"message\": {},\n  \"plan_code\": \"free\"\n}),\n});\nconst data = await response.json();"
+    }
+  },
+  {
+    "id": "post-v1-subscription-requests-request-id-cancel",
+    "group": "management",
+    "method": "POST",
+    "path": "/v1/subscription/requests/{request_id}:cancel",
+    "summary": "Cancel Plan Request",
+    "description": "Cancel Plan Request",
+    "scope": null,
+    "auth": "apiKey",
+    "parameters": [
+      {
+        "name": "request_id",
+        "in": "path",
+        "required": true,
+        "type": "string",
+        "description": "",
+        "example": ""
+      }
+    ],
+    "requestBody": null,
+    "responses": [
+      {
+        "status": 200,
+        "description": "Successful Response",
+        "exampleJson": "{\n  \"created_at\": \"2026-10-10T12:00:00Z\",\n  \"current_plan_code\": \"example_string\",\n  \"current_plan_name\": \"example_string\",\n  \"decided_at\": {},\n  \"decision_reason\": {},\n  \"id\": \"5b1f0c9e-7d2a-4c1b-9e83-2f6a0d4b71c5\",\n  \"message\": {},\n  \"requested_plan_code\": \"example_string\",\n  \"requested_plan_name\": \"example_string\",\n  \"status\": \"pending\"\n}"
+      },
+      {
+        "status": 422,
+        "description": "Validation Error",
+        "exampleJson": "{\n  \"detail\": [\n    {\n      \"ctx\": \"...\",\n      \"input\": \"...\",\n      \"loc\": \"...\",\n      \"msg\": \"...\",\n      \"type\": \"...\"\n    }\n  ]\n}"
+      }
+    ],
+    "sdkMethod": null,
+    "examples": {
+      "curl": "curl -X POST \"https://api.graphrec.io/v1/subscription/requests/{request_id}:cancel\" \\\n  -H \"Authorization: ApiKey <YOUR_API_KEY>\" \\\n  -H \"Accept: application/json\"",
+      "python": "# Direct client call via SyncAPIClient\nfrom graphrec_sdk import GraphRec\n\nclient = GraphRec(api_key='gr_live_...')\n# Endpoint: POST /v1/subscription/requests/{request_id}:cancel",
+      "javascript": "const response = await fetch('https://api.graphrec.io/v1/subscription/requests/{request_id}:cancel', {\n  method: 'POST',\n  headers: {\n    'Accept': 'application/json',\n    'Authorization': 'ApiKey ' + apiKey,\n  },\n});\nconst data = await response.json();"
     }
   },
   {

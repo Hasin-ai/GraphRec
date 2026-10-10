@@ -32,6 +32,12 @@ import type {
   SetupPasswordInput,
   RecoverPasswordInput,
   SubscriptionResult,
+  PlanChangeRequest,
+  PlanChangeRequestCreate,
+  PlanChangeRequestList,
+  PlanRequestDecisionResult,
+  PlanRequestStatus,
+  PlatformPlanRequestList,
   TenantRegistrationInput,
   TenantRegistrationResult,
   TrainingJobCreate,
@@ -120,6 +126,12 @@ export const apiKeys = {
 
 export const billing = {
   subscription: () => request<SubscriptionResult>("/v1/subscription"),
+  /** No payments: an administrator requests a plan, a platform operator approves it. */
+  planRequests: () => request<PlanChangeRequestList>("/v1/subscription/requests"),
+  requestPlan: (input: PlanChangeRequestCreate) =>
+    request<PlanChangeRequest>("/v1/subscription/requests", { method: "POST", json: input }),
+  cancelPlanRequest: (id: string) =>
+    request<PlanChangeRequest>(`/v1/subscription/requests/${enc(id)}:cancel`, { method: "POST" }),
   /** UC-24: `period` is YYYY-MM; omitted means the current billing period. */
   usage: (period?: string) => request<UsageSummaryResult>(`/v1/usage${period ? `?period=${encodeURIComponent(period)}` : ""}`),
   /** XR-F-07: ledger sums per bucket. `start`/`end` are ISO-8601 with offset. */
@@ -253,6 +265,14 @@ export const platform = {
       json: { overrides, acknowledge_below_usage: acknowledge, ...reasonBody(reason) },
     }),
   listPlans: () => request<PlatformPlan[]>("/v1/platform/plans", platformRealm),
+  listPlanRequests: (status?: PlanRequestStatus) =>
+    request<PlatformPlanRequestList>(`/v1/platform/plan-requests${status ? `?status=${status}` : ""}`, platformRealm),
+  /** Approval activates the requested plan immediately. The reason is shown to the tenant. */
+  decidePlanRequest: (id: string, decision: "approve" | "reject", reason: string, acknowledge = false) =>
+    request<PlanRequestDecisionResult>(`/v1/platform/plan-requests/${enc(id)}:${decision}`, {
+      ...platformRealm, method: "POST",
+      json: { reason: reason.trim(), ...(acknowledge ? { acknowledge_below_usage: true } : {}) },
+    }),
   updatePlan: (id: string, value: Pick<PlatformPlan, "name" | "limits" | "is_active">, acknowledge = false, reason?: string) =>
     request<PlatformPlan>(`/v1/platform/plans/${enc(id)}`, { ...platformRealm, method: "PUT", json: { ...value, acknowledge_below_usage: acknowledge, ...reasonBody(reason) } }),
   login: (email: string, password: string) =>

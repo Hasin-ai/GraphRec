@@ -32,6 +32,15 @@ class Case:
 BEARER = {"api_key": None, "access_token": "jwt"}
 PLATFORM = {"api_key": None, "access_token": "platform-admin-token-0123456789abcdef"}
 EXPIRES = datetime(2030, 1, 1, tzinfo=timezone.utc)
+PLAN_REQUEST = {
+    "id": fx.UUID_A, "status": "pending", "current_plan_code": "free", "current_plan_name": "Free demo",
+    "requested_plan_code": "basic", "requested_plan_name": "Basic", "message": "Launch week",
+    "decision_reason": None, "created_at": fx.NOW, "decided_at": None,
+}
+PLATFORM_PLAN_REQUEST = {
+    **PLAN_REQUEST, "tenant_id": fx.UUID_B, "tenant_slug": "shop", "tenant_name": "Shop",
+    "requested_plan_id": fx.UUID_B, "active_plan_code": "free",
+}
 
 
 def _eq(expected: Dict[str, Any]) -> Callable[[Any], None]:
@@ -661,6 +670,56 @@ CASES: List[Case] = [
         {"id": fx.UUID_A, "code": "free", "name": "Free", "limits": {"accepted_events": 100}, "is_active": True},
         lambda c: c.platform.plans.update(fx.UUID_A, name="Free", limits={"accepted_events": 100}, is_active=True),
         body=_eq({"name": "Free", "limits": {"accepted_events": 100}, "is_active": True}),
+        client_kwargs=PLATFORM,
+    ),
+    Case(
+        "subscription.list_requests",
+        "/v1/subscription/requests",
+        {"items": [PLAN_REQUEST], "pending": PLAN_REQUEST},
+        lambda c: c.tenant.subscription.list_requests(),
+        check=lambda r: r.pending is not None and r.pending.is_pending and r.items[0].requested_plan_code == "basic",
+    ),
+    Case(
+        "subscription.request_plan",
+        "/v1/subscription/requests",
+        PLAN_REQUEST,
+        lambda c: c.tenant.subscription.request_plan("basic", message=" Launch week "),
+        body=_eq({"plan_code": "basic", "message": "Launch week"}),
+        check=lambda r: r.status == "pending",
+        client_kwargs=BEARER,
+    ),
+    Case(
+        "subscription.cancel_request",
+        f"/v1/subscription/requests/{fx.UUID_A}:cancel",
+        {**PLAN_REQUEST, "status": "cancelled", "decided_at": fx.NOW},
+        lambda c: c.tenant.subscription.cancel_request(fx.UUID_A),
+        check=lambda r: r.status == "cancelled",
+        client_kwargs=BEARER,
+    ),
+    Case(
+        "platform.list_plan_requests",
+        "/v1/platform/plan-requests",
+        {"items": [PLATFORM_PLAN_REQUEST], "pending_count": 1},
+        lambda c: c.platform.plan_requests.list(status="pending"),
+        check=lambda r: r.pending_count == 1 and r.items[0].tenant_slug == "shop",
+        client_kwargs=PLATFORM,
+    ),
+    Case(
+        "platform.approve_plan_request",
+        f"/v1/platform/plan-requests/{fx.UUID_A}:approve",
+        {"request": {**PLATFORM_PLAN_REQUEST, "status": "approved", "decided_at": fx.NOW}, "warnings": []},
+        lambda c: c.platform.plan_requests.approve(fx.UUID_A, reason="Approved for launch"),
+        body=_eq({"reason": "Approved for launch"}),
+        check=lambda r: r.request.status == "approved",
+        client_kwargs=PLATFORM,
+    ),
+    Case(
+        "platform.reject_plan_request",
+        f"/v1/platform/plan-requests/{fx.UUID_A}:reject",
+        {"request": {**PLATFORM_PLAN_REQUEST, "status": "rejected", "decided_at": fx.NOW}, "warnings": []},
+        lambda c: c.platform.plan_requests.reject(fx.UUID_A, reason="Start with Basic"),
+        body=_eq({"reason": "Start with Basic"}),
+        check=lambda r: r.request.status == "rejected",
         client_kwargs=PLATFORM,
     ),
     Case(

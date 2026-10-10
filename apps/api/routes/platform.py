@@ -12,13 +12,19 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from graphrec_core.auth.platform import platform_administrator
+from graphrec_core.auth.platform import OperatorPrincipal, platform_administrator
 from graphrec_core.auth.service import AuthenticationService
 from graphrec_core.database.models import PricingPlan
 from graphrec_core.database.session import get_db
 from graphrec_core.database.tenancy import set_audit_reason
 from graphrec_core.errors import ApiError
+from graphrec_core.subscription import requests as plan_requests
 from graphrec_core.subscription.service import SubscriptionService
+from graphrec_core.schemas.plan_requests import (
+    PlanRequestDecision,
+    PlanRequestDecisionResult,
+    PlatformPlanChangeRequestList,
+)
 from graphrec_core.usage.limits import limits_below_inventory
 from graphrec_core.usage.service import UsageService
 from graphrec_core.schemas.usage import UsageSummaryResponse
@@ -128,10 +134,22 @@ def issue_account_recovery(tenant_id: UUID, payload: RecoveryIssue, request: Req
 
 
 @router.post("/tenants/{tenant_id}/plan", response_model=PlatformPlanAssignmentResult)
-def assign_tenant_plan(tenant_id: UUID, payload: PlanAssignment, request: Request, db: Session = Depends(get_db)):
+def assign_tenant_plan(tenant_id: UUID, payload: PlanAssignment, request: Request, db: Session = Depends(get_db),
+                       principal: OperatorPrincipal = Depends(platform_administrator)):
     set_audit_reason(db, payload.reason)
-    changed = db.scalar(text("SELECT public.platform_assign_plan(:tenant_id, :plan_id, :correlation_id)"),
-        {"tenant_id": tenant_id, "plan_id": payload.plan_id, "correlation_id": request.state.correlation_id})
+    # A pending request for exactly this plan is fulfilled by the assignment: close it as approved
+    # (which assigns the plan) instead of leaving the tenant waiting for an approval that already happened.
+    open_request = next((r for r in plan_requests.platform_list(db, "pending")
+                         if r.tenant_id == tenant_id and r.requested_plan_id == payload.plan_id), None)
+    if open_request is not None:
+        changed = db.scalar(
+            text("SELECT public.platform_decide_plan_request(:id, true, :reason, :operator, :correlation)"),
+            {"id": open_request.id, "reason": payload.reason or "Plan assigned by the platform operator.",
+             "operator": principal.operator_id, "correlation": request.state.correlation_id},
+        ) is not None
+    else:
+        changed = db.scalar(text("SELECT public.platform_assign_plan(:tenant_id, :plan_id, :correlation_id)"),
+            {"tenant_id": tenant_id, "plan_id": payload.plan_id, "correlation_id": request.state.correlation_id})
     if not changed:
         raise ApiError(404, "resource_not_found", "Tenant or active plan not found.")
     # Evaluate inside the same transaction, so a refused change is rolled back.
@@ -383,3 +401,62 @@ def list_platform_usage(request: Request, db: Session = Depends(get_db)) -> Plat
             items.append(PlatformTenantUsage(tenant_id=tenant["id"], name=tenant["name"], status=tenant["status"],
                                              unavailable=True))
     return PlatformUsageList(items=items)
+
+
+# -- plan change requests (migration 0039) ---------------------------------------------
+
+@router.get("/plan-requests", response_model=PlatformPlanChangeRequestList)
+def list_plan_requests(status: str | None = Query(default=None, max_length=20),
+                       db: Session = Depends(get_db)) -> PlatformPlanChangeRequestList:
+    """Requests across tenants: pending first (oldest first), then decided (newest first)."""
+    if status is not None and status not in plan_requests.STATUSES:
+        raise ApiError(422, "validation_failed", f"Unknown status '{status}'.",
+                       details={"fields": [{"field": "status", "message": "Use pending, approved, rejected or cancelled"}]})
+    return PlatformPlanChangeRequestList(items=plan_requests.platform_list(db, status),
+                                         pending_count=plan_requests.platform_pending_count(db))
+
+
+def _decide(request_id: UUID, approve: bool, payload: PlanRequestDecision, request: Request,
+            db: Session, principal: OperatorPrincipal) -> dict[str, Any]:
+    set_audit_reason(db, payload.reason)
+    try:
+        tenant_id = db.scalar(
+            text("SELECT public.platform_decide_plan_request(:id, :approve, :reason, :operator, :correlation)"),
+            {"id": request_id, "approve": approve, "reason": payload.reason, "operator": principal.operator_id,
+             "correlation": request.state.correlation_id},
+        )
+    except SQLAlchemyError as exc:
+        db.rollback()
+        if "plan_not_assignable" in str(exc):
+            raise ApiError(409, "plan_not_available",
+                           "The requested plan is closed or the tenant has no subscription; reject the request instead.") from exc
+        raise
+    if tenant_id is None:
+        db.rollback()
+        existing = plan_requests.platform_get(db, request_id)
+        if existing is None:
+            raise ApiError(404, "resource_not_found", f"Plan request '{request_id}' not found.")
+        raise ApiError(409, "plan_request_closed", f"This request was already {existing.status}.")
+    warnings: list[dict[str, Any]] = []
+    if approve:
+        effective = get_tenant_quota(tenant_id, db)
+        warnings = _guard_below_usage(db, limits_below_inventory(db, tenant_id, effective["limits"]),
+                                      payload.acknowledge_below_usage)
+    db.commit()
+    return {"request": plan_requests.platform_get(db, request_id), "warnings": warnings}
+
+
+@router.post("/plan-requests/{request_id}:approve", response_model=PlanRequestDecisionResult)
+def approve_plan_request(request_id: UUID, payload: PlanRequestDecision, request: Request,
+                         db: Session = Depends(get_db),
+                         principal: OperatorPrincipal = Depends(platform_administrator)) -> dict[str, Any]:
+    """Approve a pending request; the tenant moves to the requested plan immediately."""
+    return _decide(request_id, True, payload, request, db, principal)
+
+
+@router.post("/plan-requests/{request_id}:reject", response_model=PlanRequestDecisionResult)
+def reject_plan_request(request_id: UUID, payload: PlanRequestDecision, request: Request,
+                        db: Session = Depends(get_db),
+                        principal: OperatorPrincipal = Depends(platform_administrator)) -> dict[str, Any]:
+    """Reject a pending request; the tenant keeps its plan and sees the reason."""
+    return _decide(request_id, False, payload, request, db, principal)

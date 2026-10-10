@@ -9,6 +9,9 @@ from pydantic import Field
 from ._base import GraphRecModel, ItemList
 
 __all__ = [
+    "PlanRequestDecision",
+    "PlatformPlanRequest",
+    "PlatformPlanRequestList",
     "AuditRecord",
     "AuditRecordList",
     "LimitConflict",
@@ -152,3 +155,38 @@ class PlatformTenantUsage(GraphRecModel):
 
 class PlatformUsageList(GraphRecModel):
     items: List[PlatformTenantUsage]
+
+
+class PlatformPlanRequest(GraphRecModel):
+    """A tenant's plan change request as an operator sees it."""
+
+    id: UUID
+    status: str
+    tenant_id: UUID
+    tenant_slug: str
+    tenant_name: str
+    current_plan_code: str
+    current_plan_name: str
+    requested_plan_id: UUID
+    requested_plan_code: str
+    requested_plan_name: str
+    #: The tenant's plan right now.
+    active_plan_code: Optional[str] = None
+    message: Optional[str] = None
+    requested_by: Optional[str] = None
+    decision_reason: Optional[str] = None
+    decided_by: Optional[UUID] = None
+    decided_by_email: Optional[str] = None
+    created_at: datetime
+    decided_at: Optional[datetime] = None
+
+
+class PlatformPlanRequestList(GraphRecModel):
+    items: List[PlatformPlanRequest] = Field(default_factory=list)
+    pending_count: int = 0
+
+
+class PlanRequestDecision(GraphRecModel):
+    request: PlatformPlanRequest
+    #: Inventory limits the approved plan puts the tenant over (acknowledged).
+    warnings: List[LimitConflict] = Field(default_factory=list)

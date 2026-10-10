@@ -22,9 +22,11 @@ from .resources.events import AsyncEvents, Events
 from .resources.ml import AsyncModelVersions, AsyncTrainingJobs, ModelVersions, TrainingJobs
 from .resources.platform import (
     AsyncPlatformOperations,
+    AsyncPlatformPlanRequests,
     AsyncPlatformPlans,
     AsyncPlatformTenants,
     PlatformOperations,
+    PlatformPlanRequests,
     PlatformPlans,
     PlatformTenants,
 )
@@ -161,17 +163,19 @@ class AsyncTenantNamespace:
 
 
 class PlatformNamespace(PlatformOperations):
-    """Cross-tenant operations: ``tenants``, ``plans`` plus ``status()``,
+    """Cross-tenant operations: ``tenants``, ``plans``, ``plan_requests`` plus ``status()``,
     ``list_failures()`` and ``list_audit_logs()``."""
 
     tenants: PlatformTenants
     plans: PlatformPlans
+    plan_requests: PlatformPlanRequests
     operators: PlatformOperators
 
     def __init__(self, api: SyncAPIClient) -> None:
         super().__init__(api)
         self.tenants = PlatformTenants(api)
         self.plans = PlatformPlans(api)
+        self.plan_requests = PlatformPlanRequests(api)
         self.operators = PlatformOperators(api)
 
 
@@ -180,10 +184,12 @@ class AsyncPlatformNamespace(AsyncPlatformOperations):
 
     tenants: AsyncPlatformTenants
     plans: AsyncPlatformPlans
+    plan_requests: AsyncPlatformPlanRequests
     operators: AsyncPlatformOperators
 
     def __init__(self, api: AsyncAPIClient) -> None:
         super().__init__(api)
         self.tenants = AsyncPlatformTenants(api)
         self.plans = AsyncPlatformPlans(api)
+        self.plan_requests = AsyncPlatformPlanRequests(api)
         self.operators = AsyncPlatformOperators(api)

@@ -20,6 +20,7 @@ import { AuditPage } from "./pages/tenant/AuditPage";
 import { PlatformOperatorsPage } from "./pages/platform/OperatorsPage";
 import { TenantStatusPage } from "./pages/tenant/TenantStatusPage";
 import { PlatformPlanPage, PlatformPlansPage, PlatformTenantPage, PlatformTenantsPage } from "./pages/platform/TenantPages";
+import { PlatformPlanRequestsPage } from "./pages/platform/PlanRequestsPage";
 import { AdminLoginPage } from "./pages/public/AdminLoginPage";
 import { LoginPage } from "./pages/public/LoginPage";
 import { RecoverPage } from "./pages/public/RecoverPage";
@@ -121,6 +122,7 @@ export function AppRoutes() {
           <Route path="/admin/tenants/:tenantId" element={<PlatformTenantPage />} />
           <Route path="/admin/plans" element={<PlatformPlansPage />} />
           <Route path="/admin/plans/:planId" element={<PlatformPlanPage />} />
+          <Route path="/admin/plan-requests" element={<PlatformPlanRequestsPage />} />
           <Route path="/admin/usage" element={<PlatformUsagePage />} />
           <Route path="/admin/audit" element={<PlatformAuditPage />} />
           <Route path="/admin/operators" element={<PlatformOperatorsPage />} />

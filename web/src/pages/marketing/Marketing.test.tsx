@@ -118,6 +118,9 @@ describe("/pricing", () => {
     expect(links).toHaveLength(PLANS.length);
     expect(links[0]).toHaveAttribute("href", "/usage");
     expect(screen.queryByRole("link", { name: "Start free, upgrade later" })).not.toBeInTheDocument();
+    // No payments: each plan card asks the operator through a plan request.
+    expect(screen.getByRole("link", { name: "Request Basic" })).toHaveAttribute("href", "/usage?request=basic");
+    expect(screen.getByRole("link", { name: "Request Pro" })).toHaveAttribute("href", "/usage?request=pro");
   });
 
   it("every plan limit key has a label in lib/labels.ts", () => {

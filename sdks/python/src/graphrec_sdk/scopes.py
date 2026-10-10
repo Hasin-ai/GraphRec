@@ -22,6 +22,8 @@ __all__ = [
 
 class Scope(str, Enum):
     BILLING_READ = "billing:read"
+    #: Bearer-token only, administrators only - request a plan change (operator approves).
+    BILLING_WRITE = "billing:write"
     USAGE_READ = "usage:read"
     CATALOG_READ = "catalog:read"
     CATALOG_WRITE = "catalog:write"
@@ -47,7 +49,9 @@ class Scope(str, Enum):
 
 
 #: Every scope an API key may carry.
-BEARER_ONLY_SCOPES: FrozenSet[Scope] = frozenset({Scope.KEYS_WRITE, Scope.USERS_WRITE, Scope.AUDIT_READ})
+BEARER_ONLY_SCOPES: FrozenSet[Scope] = frozenset(
+    {Scope.KEYS_WRITE, Scope.USERS_WRITE, Scope.AUDIT_READ, Scope.BILLING_WRITE}
+)
 API_KEY_SCOPES: FrozenSet[str] = frozenset(s.value for s in Scope if s not in BEARER_ONLY_SCOPES)
 
 #: Scopes a console user's access token carries. Tokens keep the scopes granted

@@ -3,16 +3,18 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, Optional, Union, cast
+from uuid import UUID
 
 from ..enums import UsageType
 from ..errors import InputValidationError
-from ..models.billing import Subscription, UsageSummary, UsageTrend
+from ..models.billing import PlanChangeRequest, PlanChangeRequestList, Subscription, UsageSummary, UsageTrend
 from ._base import AsyncResource, SyncResource
 
 __all__ = ["AsyncSubscriptions", "AsyncUsage", "Subscriptions", "Usage"]
 
 
 GRANULARITIES = ("hour", "day", "week")
+Id = Union[str, UUID]
 
 
 def _utc(value: Optional[datetime], name: str) -> Optional[datetime]:
@@ -45,6 +47,20 @@ def _trend_query(
     }
 
 
+PLAN_CODES = ("free", "basic", "pro")
+
+
+def _request_body(plan_code: str, message: Optional[str]) -> Dict[str, Any]:
+    if plan_code not in PLAN_CODES:
+        raise InputValidationError(f"plan_code must be one of {PLAN_CODES}")
+    if message is not None and len(message) > 500:
+        raise InputValidationError("message must be at most 500 characters")
+    body: Dict[str, Any] = {"plan_code": plan_code}
+    if message is not None and message.strip():
+        body["message"] = message.strip()
+    return body
+
+
 class Subscriptions(SyncResource):
     def get(self) -> Subscription:
         """Current plan, period and effective limits.
@@ -54,6 +70,42 @@ class Subscriptions(SyncResource):
 
         return cast(Subscription, self._client.request("subscription.get", cast_to=Subscription))
 
+    def list_requests(self) -> PlanChangeRequestList:
+        """This workspace's plan change requests, newest first, and the open one.
+
+        ``GET /v1/subscription/requests`` - scope ``billing:read``.
+        """
+
+        return cast(
+            PlanChangeRequestList,
+            self._client.request("subscription.list_requests", cast_to=PlanChangeRequestList),
+        )
+
+    def request_plan(self, plan_code: str, *, message: Optional[str] = None) -> PlanChangeRequest:
+        """Ask a platform operator to move this workspace to ``plan_code``.
+
+        ``free`` (Free demo), ``basic`` or ``pro``. GraphRec takes no payments: the plan
+        changes when an operator approves. One request may be open at a time.
+        ``POST /v1/subscription/requests`` - scope ``billing:write`` (administrators).
+        """
+
+        return cast(
+            PlanChangeRequest,
+            self._client.request(
+                "subscription.request_plan", json=_request_body(plan_code, message), cast_to=PlanChangeRequest
+            ),
+        )
+
+    def cancel_request(self, request_id: Id) -> PlanChangeRequest:
+        """Withdraw a pending request. ``POST /v1/subscription/requests/{request_id}:cancel``."""
+
+        return cast(
+            PlanChangeRequest,
+            self._client.request(
+                "subscription.cancel_request", path_params={"request_id": request_id}, cast_to=PlanChangeRequest
+            ),
+        )
+
 
 class AsyncSubscriptions(AsyncResource):
     async def get(self) -> Subscription:
@@ -61,6 +113,34 @@ class AsyncSubscriptions(AsyncResource):
 
         return cast(
             Subscription, await self._client.request("subscription.get", cast_to=Subscription)
+        )
+
+    async def list_requests(self) -> PlanChangeRequestList:
+        """Async variant of :meth:`Subscriptions.list_requests`."""
+
+        return cast(
+            PlanChangeRequestList,
+            await self._client.request("subscription.list_requests", cast_to=PlanChangeRequestList),
+        )
+
+    async def request_plan(self, plan_code: str, *, message: Optional[str] = None) -> PlanChangeRequest:
+        """Async variant of :meth:`Subscriptions.request_plan`."""
+
+        return cast(
+            PlanChangeRequest,
+            await self._client.request(
+                "subscription.request_plan", json=_request_body(plan_code, message), cast_to=PlanChangeRequest
+            ),
+        )
+
+    async def cancel_request(self, request_id: Id) -> PlanChangeRequest:
+        """Async variant of :meth:`Subscriptions.cancel_request`."""
+
+        return cast(
+            PlanChangeRequest,
+            await self._client.request(
+                "subscription.cancel_request", path_params={"request_id": request_id}, cast_to=PlanChangeRequest
+            ),
         )
 
 

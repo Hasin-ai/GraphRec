@@ -9,9 +9,11 @@ from .events import AsyncEvents, Events
 from .ml import AsyncModelVersions, AsyncTrainingJobs, ModelVersions, TrainingJobs
 from .platform import (
     AsyncPlatformOperations,
+    AsyncPlatformPlanRequests,
     AsyncPlatformPlans,
     AsyncPlatformTenants,
     PlatformOperations,
+    PlatformPlanRequests,
     PlatformPlans,
     PlatformTenants,
 )
@@ -50,6 +52,7 @@ __all__ = [
     "AsyncMetrics",
     "AsyncModelVersions",
     "AsyncPlatformOperations",
+    "AsyncPlatformPlanRequests",
     "AsyncPlatformPlans",
     "AsyncPlatformTenants",
     "AsyncProducts",
@@ -68,6 +71,7 @@ __all__ = [
     "Metrics",
     "ModelVersions",
     "PlatformOperations",
+    "PlatformPlanRequests",
     "PlatformPlans",
     "PlatformTenants",
     "Products",

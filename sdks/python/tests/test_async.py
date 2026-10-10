@@ -34,6 +34,7 @@ SYNC_TO_ASYNC = {
     resources.Feedback: resources.AsyncFeedback,
     resources.PlatformTenants: resources.AsyncPlatformTenants,
     resources.PlatformPlans: resources.AsyncPlatformPlans,
+    resources.PlatformPlanRequests: resources.AsyncPlatformPlanRequests,
     resources.PlatformOperations: resources.AsyncPlatformOperations,
     resources.RecommendationPolicyResource: resources.AsyncRecommendationPolicyResource,
     resources.RetrainingPolicyResource: resources.AsyncRetrainingPolicyResource,

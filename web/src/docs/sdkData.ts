@@ -1478,6 +1478,89 @@ export const SDK_REFERENCE: SdkReference = {
          "idempotent": true
         }
        ]
+      },
+      {
+       "name": "list_requests",
+       "call": "client.tenant.subscription.list_requests",
+       "signature": "client.tenant.subscription.list_requests() -> PlanChangeRequestList",
+       "doc": "This workspace's plan change requests, newest first, and the open one.\n\n`GET /v1/subscription/requests` - scope `billing:read`.",
+       "params": [],
+       "returns": "PlanChangeRequestList",
+       "routes": [
+        {
+         "key": "subscription.list_requests",
+         "method": "GET",
+         "path": "/v1/subscription/requests",
+         "auth": "any",
+         "scopes": [
+          "billing:read"
+         ],
+         "idempotent": true
+        }
+       ]
+      },
+      {
+       "name": "request_plan",
+       "call": "client.tenant.subscription.request_plan",
+       "signature": "client.tenant.subscription.request_plan(\n    plan_code: str,\n    *,\n    message: Optional[str] = None,\n) -> PlanChangeRequest",
+       "doc": "Ask a platform operator to move this workspace to `plan_code`.\n\n`free` (Free demo), `basic` or `pro`. GraphRec takes no payments: the plan\nchanges when an operator approves. One request may be open at a time.\n`POST /v1/subscription/requests` - scope `billing:write` (administrators).",
+       "params": [
+        {
+         "name": "plan_code",
+         "type": "str",
+         "default": null,
+         "required": true,
+         "kind": "positional"
+        },
+        {
+         "name": "message",
+         "type": "Optional[str]",
+         "default": "None",
+         "required": false,
+         "kind": "keyword"
+        }
+       ],
+       "returns": "PlanChangeRequest",
+       "routes": [
+        {
+         "key": "subscription.request_plan",
+         "method": "POST",
+         "path": "/v1/subscription/requests",
+         "auth": "any",
+         "scopes": [
+          "billing:write"
+         ],
+         "idempotent": false
+        }
+       ]
+      },
+      {
+       "name": "cancel_request",
+       "call": "client.tenant.subscription.cancel_request",
+       "signature": "client.tenant.subscription.cancel_request(request_id: Id) -> PlanChangeRequest",
+       "doc": "Withdraw a pending request. `POST /v1/subscription/requests/{request_id}:cancel`.",
+       "params": [
+        {
+         "name": "request_id",
+         "type": "Id",
+         "default": null,
+         "required": true,
+         "kind": "positional"
+        }
+       ],
+       "returns": "PlanChangeRequest",
+       "routes": [
+        {
+         "key": "subscription.cancel_request",
+         "method": "POST",
+         "path": "/v1/subscription/requests/{request_id}:cancel",
+         "auth": "any",
+         "scopes": [
+          "billing:write"
+         ],
+         "idempotent": false
+        }
+       ]
       }
      ]
     },
@@ -2874,7 +2957,7 @@ export const SDK_REFERENCE: SdkReference = {
      "title": "platform (operations)",
      "className": "PlatformOperations",
      "asyncClass": "AsyncPlatformOperations",
-     "doc": "Cross-tenant operations: `tenants`, `plans` plus `status()`,\n`list_failures()` and `list_audit_logs()`.",
+     "doc": "Cross-tenant operations: `tenants`, `plans`, `plan_requests` plus `status()`,\n`list_failures()` and `list_audit_logs()`.",
      "methods": [
       {
        "name": "status",
@@ -3392,6 +3475,121 @@ export const SDK_REFERENCE: SdkReference = {
           "platform:admin"
          ],
          "idempotent": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "client-platform-plan_requests",
+     "path": "client.platform.plan_requests",
+     "title": "plan_requests",
+     "className": "PlatformPlanRequests",
+     "asyncClass": "AsyncPlatformPlanRequests",
+     "doc": "Tenants' plan change requests. GraphRec takes no payments: plans change on approval.",
+     "methods": [
+      {
+       "name": "list",
+       "call": "client.platform.plan_requests.list",
+       "signature": "client.platform.plan_requests.list(*, status: Optional[str] = None) -> PlatformPlanRequestList",
+       "doc": "Pending requests first (oldest first), then decided ones. `GET /v1/platform/plan-requests`.",
+       "params": [
+        {
+         "name": "status",
+         "type": "Optional[str]",
+         "default": "None",
+         "required": false,
+         "kind": "keyword"
+        }
+       ],
+       "returns": "PlatformPlanRequestList",
+       "routes": [
+        {
+         "key": "platform.list_plan_requests",
+         "method": "GET",
+         "path": "/v1/platform/plan-requests",
+         "auth": "bearer",
+         "scopes": [
+          "platform:admin"
+         ],
+         "idempotent": true
+        }
+       ]
+      },
+      {
+       "name": "approve",
+       "call": "client.platform.plan_requests.approve",
+       "signature": "client.platform.plan_requests.approve(\n    request_id: Id,\n    *,\n    reason: str,\n    acknowledge_below_usage: bool = False,\n) -> PlanRequestDecision",
+       "doc": "Approve a pending request; the tenant moves to the requested plan at once.\n\n`POST /v1/platform/plan-requests/{request_id}:approve`. Raises\n`LimitBelowUsageError` when the plan is below the tenant's\nstored inventory, unless `acknowledge_below_usage=True`.",
+       "params": [
+        {
+         "name": "request_id",
+         "type": "Id",
+         "default": null,
+         "required": true,
+         "kind": "positional"
+        },
+        {
+         "name": "reason",
+         "type": "str",
+         "default": null,
+         "required": true,
+         "kind": "keyword"
+        },
+        {
+         "name": "acknowledge_below_usage",
+         "type": "bool",
+         "default": "False",
+         "required": false,
+         "kind": "keyword"
+        }
+       ],
+       "returns": "PlanRequestDecision",
+       "routes": [
+        {
+         "key": "platform.approve_plan_request",
+         "method": "POST",
+         "path": "/v1/platform/plan-requests/{request_id}:approve",
+         "auth": "bearer",
+         "scopes": [
+          "platform:admin"
+         ],
+         "idempotent": false
+        }
+       ]
+      },
+      {
+       "name": "reject",
+       "call": "client.platform.plan_requests.reject",
+       "signature": "client.platform.plan_requests.reject(\n    request_id: Id,\n    *,\n    reason: str,\n) -> PlanRequestDecision",
+       "doc": "Reject a pending request; the tenant keeps its plan and sees `reason`.",
+       "params": [
+        {
+         "name": "request_id",
+         "type": "Id",
+         "default": null,
+         "required": true,
+         "kind": "positional"
+        },
+        {
+         "name": "reason",
+         "type": "str",
+         "default": null,
+         "required": true,
+         "kind": "keyword"
+        }
+       ],
+       "returns": "PlanRequestDecision",
+       "routes": [
+        {
+         "key": "platform.reject_plan_request",
+         "method": "POST",
+         "path": "/v1/platform/plan-requests/{request_id}:reject",
+         "auth": "bearer",
+         "scopes": [
+          "platform:admin"
+         ],
+         "idempotent": false
         }
        ]
       }
@@ -4990,6 +5188,7 @@ export const SDK_REFERENCE: SdkReference = {
    "tenant_administrator": [
     "audit:read",
     "billing:read",
+    "billing:write",
     "catalog:read",
     "catalog:write",
     "deployments:read",
@@ -5059,9 +5258,9 @@ export const SDK_REFERENCE: SdkReference = {
   }
  ],
  "stats": {
-  "methods": 90,
-  "routes": 84,
-  "routesCovered": 84,
+  "methods": 96,
+  "routes": 90,
+  "routesCovered": 90,
   "uncoveredRoutes": []
  }
 };

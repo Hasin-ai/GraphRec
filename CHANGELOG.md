@@ -3,6 +3,21 @@
 All notable changes to GraphRec. Entries reference the anomaly register in
 `docs/GAP_ANALYSIS.md` (A-xx) and the decisions in `docs/DECISIONS.md` (D-xx).
 
+## [Unreleased] - Plan requests and one public URL
+
+### Added
+- **Plan change requests (no payments, operator approval).** GraphRec takes no payments, so a tenant administrator now *requests* Free demo, Basic or Pro and a platform operator approves or rejects it. Approval activates the plan in the same transaction (migration `0039_plan_change_requests`: RLS-protected `plan_change_requests`, one pending request per tenant, `platform_decide_plan_request` calling `platform_assign_plan`).
+  - Tenant API: `GET /v1/subscription/requests`, `POST /v1/subscription/requests` (`plan_code`, optional `message`), `POST /v1/subscription/requests/{id}:cancel`. New scope `billing:write` for administrators (console only; API keys cannot request plans).
+  - Platform API: `GET /v1/platform/plan-requests?status=…`, `POST /v1/platform/plan-requests/{id}:approve|:reject` with a required reason (shown to the tenant, written to the audit trail). Approving below the tenant's stored inventory needs `acknowledge_below_usage`, as for direct assignment. Listing needs plan-management, platform or monitoring; deciding needs plan-management.
+  - Assigning a tenant the plan it requested (Tenants → Assign plan) closes the open request as approved.
+  - Console: "Change plan" on Usage & Quotas (pending request with cancel, the latest decision and the operator's note); "Request Basic/Pro" on the pricing page for signed-in tenants; operator **Plan requests** page (pending / approved / rejected / cancelled / all) with approve and reject dialogs; an "awaiting approval" notice on Platform Status and on the tenant detail page.
+  - SDK: `tenant.subscription.list_requests()`, `request_plan()`, `cancel_request()`; `platform.plan_requests.list()`, `approve()`, `reject()`; `Scope.BILLING_WRITE`.
+  - Tests: `tests/integration/test_plan_requests.py`, isolation sweep and live SDK coverage, Playwright `e2e/plan-requests.spec.ts`.
+- **One public URL:** `PUBLIC_ORIGIN` (e.g. `https://graphrec.example.com`) makes the web container redirect page requests made by any other address (such as `http://<vm-ip>:5180/docs/sdk`) to the same path on the public origin, so the home page, docs and consoles share one domain. Requests through a Cloudflare tunnel (CF-Ray) or for the public host are served as-is; `/v1`, health and asset paths are never redirected. Empty by default. `web/nginx.conf` is now an envsubst template.
+
+### Fixed
+- Reel storefront tests no longer pick up `REDIS_URL` from the environment (shared Redis made rate-limit tests fail between runs).
+
 ## [Unreleased] - Glass-box serving pipeline
 
 ### Added
