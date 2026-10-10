@@ -1,6 +1,12 @@
 # GraphRec
 
-**Documentation:** [Deploy](docs/DEPLOYMENT.md) · [Operate](docs/OPERATIONS.md) ·
+![version](https://img.shields.io/badge/version-1.2.0-blue) ![CI](https://github.com/Hasin-ai/GraphRec/actions/workflows/ci.yml/badge.svg)
+
+**Developer docs:** served by the console at `/docs` (getting started, auth,
+guides, errors & limits, API reference and a Python SDK reference generated
+from the SDK source).
+
+**Repository docs:** [Deploy](docs/DEPLOYMENT.md) · [Operate](docs/OPERATIONS.md) ·
 [Security](docs/SECURITY.md) · [API conventions](docs/API.md) ·
 [Performance](docs/PERFORMANCE.md) · [Decisions](docs/DECISIONS.md) ·
 [Requirement traceability](docs/GAP_ANALYSIS.md) · [Changes](CHANGELOG.md)
@@ -11,7 +17,8 @@ sign-in, the protected subscription/quota overview, current usage
 reconciliation, and scoped API-key lifecycle management. A second group of
 domain paths (catalog, events, datasets, training, model versions, deployment
 status, recommendations, and platform administration) supports real DGSR training
-and checkpoint serving. See [SRS acceptance](SRS_ACCEPTANCE.md) for verified
+and checkpoint serving, explained per request by the glass-box serving
+pipeline. See [SRS acceptance](SRS_ACCEPTANCE.md) for verified
 workflows, local capacity limits, and remaining requirements.
 
 ## Hardened paths
@@ -42,6 +49,8 @@ workflows, local capacity limits, and remaining requirements.
 - Platform administration: `/v1/platform/*`, for operator accounts with roles
   (`POST /v1/platform/auth/login`); `PLATFORM_ADMIN_TOKEN` only bootstraps the first
   operator in production
+- Plans and billing: `/v1/subscription`, `/v1/subscription/requests` (tenants
+  request a plan; operators approve at `/v1/platform/plan-requests`)
 - Product: public `/v1/meta` (one version for API, console and SDK), `/v1/plans`
   (live plan limits), `/healthz` (liveness) and `/readyz` (database, Redis and
   Qdrant, measured live)
@@ -88,6 +97,39 @@ version, strategy (`personalized`, `session` or `popular_fallback`) and
 fallback tier. When the Qdrant collection is missing the item table is scored
 in-process so one capability stays ready.
 
+## Glass-box serving pipeline
+
+`graphrec_core/serving/` is the default path for `POST /v1/recommendations` and
+`/session`. Each request runs:
+
+1. **Query** – stored history plus session clicks, encoded by DGSR.
+2. **Retrieval** – four optional, individually timed sources:
+   `dgsr_personalized` (Qdrant ANN, 250 ms budget, circuit breaker with
+   in-memory fallback), `session_neighbors`, `popular_in_category`, `trending`.
+3. **Eligibility** – one query against the servable catalogue for all sources.
+4. **Scoring** – `0.85 × DGSR percentile + 0.05 × popularity percentile + 0.10 × source agreement`.
+5. **Diversity** – MMR re-ranking (default 0.25, per-request `diversity` 0–1),
+   then the tenant's policy rules.
+6. **Guarantee** – short lists are topped up from the shopper's last good list
+   in Redis, then the tenant-popular tier.
+
+Items carry `reason` (`because_you_viewed`, `picked_for_you`,
+`popular_in_category`, `trending`, `recently_recommended`), `sources`,
+`anchor_product_id` and `score`. Set `explain: true` for per-stage counts,
+timings, source status and a per-candidate score breakdown.
+
+Offline replay (`scripts/eval_serving.py`, MovieLens, 3,000 held-out users)
+against a plain DGSR Top-K baseline:
+
+| Metric | DGSR Top-K | Glass-box |
+|---|---|---|
+| Recall@10 | 0.102 | 0.109 |
+| NDCG@10 | 0.054 | 0.057 |
+| Intra-list diversity | 0.60 | 0.68 |
+| Catalogue coverage | 0.28 | 0.26 |
+
+Full results: `docs/serving_eval_movielens.json`.
+
 ### Beauty end-to-end run
 
 `tests/e2e/USER_STORIES.md` writes every SRS role as user stories and
@@ -99,6 +141,9 @@ activation, rollback, archive, recommendations that match
 feedback, tenant isolation, platform operations):
 
 The reference storefront is **Reel** (`apps/reel-storefront`, MovieLens; see its README).
+It shows a reason line on every tile, a diversity slider, a **Pipeline** tab in
+the insight drawer (funnel, source status, candidate scores) and a **Reset
+guest** button that starts an anonymous session over.
 The earlier Facet storefront is archived in `archive/demo-storefront` (D-09).
 
 ```bash
@@ -128,7 +173,8 @@ docker compose exec api python -m scripts.issue_account_setup_token admin@exampl
 
 Every tenant route checks the credential's scope and answers `403
 insufficient_scope` when it is missing. `tenant_administrator` holds all
-tenant scopes including `users:write`; `tenant_developer` holds `keys:write`,
+tenant scopes including `users:write` and `billing:write` (plan requests;
+console only, never delegable to API keys); `tenant_developer` holds `keys:write`,
 `catalog:*`, `events:*` and `training:read`. Access tokens carry the scopes
 granted at login, so sign in again after a role or scope change. API keys are
 limited to the scopes the creating role may delegate (administrators: all 14
@@ -167,8 +213,24 @@ screens are not backed by the API, and how to run it against a bare uvicorn.
   `/submissions/:id`, `/datasets`, `/training`, `/models`, `/usage`,
   `/service-status`. Navigation and route gates are derived from the scopes
   the login returns.
-- Platform realm: `/admin/login` with `PLATFORM_ADMIN_TOKEN`, then
-  `/admin/status`, `/admin/tenants`, `/admin/plans`, `/admin/audit`.
+- Platform realm: `/admin/login` (operator accounts; `PLATFORM_ADMIN_TOKEN`
+  bootstraps the first one), then `/admin/status`, `/admin/tenants`,
+  `/admin/plans`, `/admin/plan-requests`, `/admin/audit`.
+- Public: marketing and pricing pages, and the developer docs under `/docs`.
+
+## Plans and plan requests
+
+GraphRec takes no payments. A tenant administrator requests Free demo, Basic or
+Pro (**Usage & Quotas → Change plan**, or **Request** on the pricing page); a
+platform operator approves or rejects it on **Plan requests** with a reason
+that the tenant sees and the audit trail records. Approval activates the plan
+in the same transaction. One request may be pending per tenant; approving a
+plan below current usage needs `acknowledge_below_usage`.
+
+| Who | Endpoint |
+|---|---|
+| Tenant | `GET/POST /v1/subscription/requests`, `POST /v1/subscription/requests/{id}:cancel` |
+| Operator | `GET /v1/platform/plan-requests?status=…`, `POST /v1/platform/plan-requests/{id}:approve` / `:reject` |
 
 ## Automation, rules, trends and capacity (XR-F-02/03/04/07/08)
 
@@ -293,6 +355,18 @@ npm install
 npm run dev        # http://localhost:5173, proxies /v1 to http://localhost:8010
 ```
 
+## Deploy
+
+`docker-compose.prod.yml` and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) cover a
+single-VM deployment. `.github/workflows/cd.yml` deploys every push to `main`
+to a GCP VM over SSH (secrets `VM_HOST`, `VM_USER`, `VM_SSH_KEY`) and rebuilds
+the Compose stack; `ci.yml` runs tests, e2e, `pip-audit`, `npm audit` and Trivy.
+
+Set `PUBLIC_ORIGIN` (e.g. `https://graphrec.example.com`) to serve the home
+page, docs and consoles from one domain: page requests made to any other
+address, such as the VM IP, are redirected there. Cloudflare tunnel requests,
+`/v1`, health and asset paths are never redirected. Empty by default.
+
 ## Verify
 
 ```bash
@@ -300,6 +374,9 @@ docker compose --profile test run --rm api-test       # backend unit + integrati
 docker compose --profile test run --rm frontend-test  # console unit tests, build, npm audit
 cd web && E2E_BASE_URL=http://localhost:5180 npx playwright test   # browser suite
 ```
+
+Current suite: 348 backend, 386 SDK, 28 Reel storefront, 93 web unit and 23
+Playwright tests.
 
 Or, for the console alone: `cd web && npm test -- --run && npm run build`.
 
@@ -310,6 +387,9 @@ require the Compose PostgreSQL database; the unit tests run without it.
 
 The Python SDK (`sdks/python`, `graphrec-sdk` 1.x) covers every API route,
 grouped by audience (`client.storefront`, `client.tenant`, `client.platform`),
-with retries, body-size splitting and e-commerce helpers. See
+with retries, body-size splitting, e-commerce helpers, `explain` / `diversity`
+on recommendations, and plan requests (`tenant.subscription.request_plan()`,
+`platform.plan_requests.approve()`). Its reference is generated from the source
+and published at `/docs/sdk`. See
 [`sdks/python/README.md`](sdks/python/README.md). It has an end-to-end smoke test
 for the Compose stack and a live integration suite (`tests/integration/test_sdk_live.py`).
