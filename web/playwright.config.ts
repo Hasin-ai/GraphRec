@@ -3,6 +3,7 @@ import { defineConfig } from "@playwright/test";
 // End-to-end suite against the running Compose stack (frontend on FRONTEND_PORT, nginx -> api).
 export default defineConfig({
   testDir: "./e2e",
+  testIgnore: process.env.REEL_URL ? [] : ["**/reel*.spec.ts"],
   timeout: 60_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,
