@@ -7,6 +7,13 @@ import { ErrorLayout, PlatformLayout, PublicLayout, RequirePlatform, RequireScop
 import { FailurePage, ForbiddenPage, NotFoundPage } from "./pages/errors/ErrorPages";
 import { LandingPage } from "./pages/marketing/LandingPage";
 import { PricingPage } from "./pages/marketing/PricingPage";
+import { DocsLayout } from "./docs/DocsLayout";
+import { DocsGettingStartedPage } from "./pages/docs/DocsGettingStartedPage";
+import { DocsAuthPage } from "./pages/docs/DocsAuthPage";
+import { DocsApiReferencePage } from "./pages/docs/DocsApiReferencePage";
+import { DocsSdkPage } from "./pages/docs/DocsSdkPage";
+import { DocsGuidesPage } from "./pages/docs/DocsGuidesPage";
+import { DocsErrorsLimitsPage } from "./pages/docs/DocsErrorsLimitsPage";
 import { PlatformAuditPage, PlatformStatusPage } from "./pages/platform/StatusAuditPages";
 import { PlatformUsagePage } from "./pages/platform/UsagePage";
 import { AuditPage } from "./pages/tenant/AuditPage";
@@ -56,6 +63,17 @@ export function AppRoutes() {
       {/* Public marketing pages; /pricing stays reachable when signed in. */}
       <Route element={<MarketingLayout />}>
         <Route path="/pricing" element={<PricingPage />} />
+      </Route>
+
+      {/* Public Developer Documentation */}
+      <Route element={<DocsLayout />}>
+        <Route path="/docs" element={<DocsGettingStartedPage />} />
+        <Route path="/docs/getting-started" element={<DocsGettingStartedPage />} />
+        <Route path="/docs/authentication" element={<DocsAuthPage />} />
+        <Route path="/docs/reference" element={<DocsApiReferencePage />} />
+        <Route path="/docs/sdk" element={<DocsSdkPage />} />
+        <Route path="/docs/guides" element={<DocsGuidesPage />} />
+        <Route path="/docs/errors-and-limits" element={<DocsErrorsLimitsPage />} />
       </Route>
 
       <Route element={<PublicLayout />}>

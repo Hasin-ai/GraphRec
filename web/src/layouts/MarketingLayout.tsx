@@ -85,6 +85,7 @@ export function MarketingLayout({ children }: { children?: ReactNode }) {
         <nav id="mkt-nav" aria-label="Marketing" className={`mkt-nav${open ? " is-open" : ""}`}>
           <ul>
             {sections.map(s => <li key={s.id}><Link to={{ pathname: "/", hash: `#${s.id}` }} onClick={close}>{s.label}</Link></li>)}
+            <li><Link to="/docs" onClick={close}>Docs</Link></li>
             <li><Link to="/pricing" aria-current={pathname === "/pricing" ? "page" : undefined} onClick={close}>Pricing</Link></li>
           </ul>
           <div className="mkt-nav-cta"><HeaderCta onNavigate={close} /></div>
@@ -120,6 +121,15 @@ export function MarketingLayout({ children }: { children?: ReactNode }) {
               <li><Link to="/register">Create account</Link></li>
               <li><Link to="/setup">Finish account setup</Link></li>
               <li><Link to="/recover">Reset password</Link></li>
+            </ul>
+          </nav>
+          <nav aria-label="Developers" className="mkt-footer-col">
+            <h2>Developers</h2>
+            <ul>
+              <li><Link to="/docs">Documentation</Link></li>
+              <li><Link to="/docs/reference">API Reference</Link></li>
+              <li><Link to="/docs/sdk">Python SDK</Link></li>
+              <li><Link to="/docs/errors-and-limits#changelog">Changelog</Link></li>
             </ul>
           </nav>
           <nav aria-label="Operators" className="mkt-footer-col">
