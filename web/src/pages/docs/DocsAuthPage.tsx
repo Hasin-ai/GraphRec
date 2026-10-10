@@ -3,7 +3,7 @@ import { DocsCodeTabs } from "../../docs/DocsCodeTabs";
 
 export function DocsAuthPage() {
   const apiKeyCurl = `# Calling GraphRec Storefront API with an API key
-curl -X GET "https://api.graphrec.io/v1/catalog/products?limit=10" \\
+curl -X GET "https://api.graphrec.io/v1/products?limit=10" \\
   -H "Authorization: ApiKey gr_live_your_storefront_key" \\
   -H "Accept: application/json"`;
 
@@ -16,10 +16,10 @@ client = GraphRec(
 )
 
 # Authenticated call
-products = client.storefront.catalog.list_products(limit=10)`;
+products = client.tenant.catalog.list(limit=10)   # needs the catalog:read scope`;
 
   const apiKeyJs = `// Browser / Node.js fetch with API Key
-const response = await fetch("https://api.graphrec.io/v1/catalog/products?limit=10", {
+const response = await fetch("https://api.graphrec.io/v1/products?limit=10", {
   method: "GET",
   headers: {
     "Authorization": "ApiKey gr_live_your_storefront_key",

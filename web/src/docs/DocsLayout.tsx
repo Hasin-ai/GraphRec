@@ -172,7 +172,7 @@ export function DocsLayout({ children }: { children?: ReactNode }) {
                 </li>
                 {DOCS_GROUPS.map((g) => (
                   <li key={g.id}>
-                    <NavLink to={`/docs/reference#${g.id}`} className={hash === `#${g.id}` ? "active" : ""}>
+                    <NavLink to={`/docs/reference#${g.id}`} className={() => (hash === `#${g.id}` ? "active" : "")}>
                       {g.title}
                     </NavLink>
                   </li>
@@ -189,18 +189,33 @@ export function DocsLayout({ children }: { children?: ReactNode }) {
                   </NavLink>
                 </li>
                 <li>
-                  <NavLink to="/docs/sdk#storefront" className={hash === "#storefront" ? "active" : ""}>
+                  <NavLink to="/docs/sdk#storefront" className={() => (hash === "#storefront" ? "active" : "")}>
                     Storefront Namespace
                   </NavLink>
                 </li>
                 <li>
-                  <NavLink to="/docs/sdk#tenant" className={hash === "#tenant" ? "active" : ""}>
+                  <NavLink to="/docs/sdk#tenant" className={() => (hash === "#tenant" ? "active" : "")}>
                     Tenant Management
                   </NavLink>
                 </li>
                 <li>
-                  <NavLink to="/docs/sdk#ecommerce" className={hash === "#ecommerce" ? "active" : ""}>
+                  <NavLink to="/docs/sdk#platform" className={() => (hash === "#platform" ? "active" : "")}>
+                    Platform Operations
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink to="/docs/sdk#ecommerce" className={() => (hash === "#ecommerce" ? "active" : "")}>
                     E-Commerce Helpers
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink to="/docs/sdk#errors" className={() => (hash === "#errors" ? "active" : "")}>
+                    Errors
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink to="/docs/sdk#examples" className={() => (hash === "#examples" ? "active" : "")}>
+                    Runnable Examples
                   </NavLink>
                 </li>
               </ul>
@@ -215,22 +230,22 @@ export function DocsLayout({ children }: { children?: ReactNode }) {
                   </NavLink>
                 </li>
                 <li>
-                  <NavLink to="/docs/guides#event-ingestion" className={hash === "#event-ingestion" ? "active" : ""}>
+                  <NavLink to="/docs/guides#event-ingestion" className={() => (hash === "#event-ingestion" ? "active" : "")}>
                     Interaction Event Ingestion
                   </NavLink>
                 </li>
                 <li>
-                  <NavLink to="/docs/guides#recommendation-strategies" className={hash === "#recommendation-strategies" ? "active" : ""}>
+                  <NavLink to="/docs/guides#recommendation-strategies" className={() => (hash === "#recommendation-strategies" ? "active" : "")}>
                     Recommendation Strategies
                   </NavLink>
                 </li>
                 <li>
-                  <NavLink to="/docs/guides#cold-start" className={hash === "#cold-start" ? "active" : ""}>
+                  <NavLink to="/docs/guides#cold-start" className={() => (hash === "#cold-start" ? "active" : "")}>
                     Cold-Start & Fallbacks
                   </NavLink>
                 </li>
                 <li>
-                  <NavLink to="/docs/guides#retries-errors" className={hash === "#retries-errors" ? "active" : ""}>
+                  <NavLink to="/docs/guides#retries-errors" className={() => (hash === "#retries-errors" ? "active" : "")}>
                     Retries & Observability
                   </NavLink>
                 </li>

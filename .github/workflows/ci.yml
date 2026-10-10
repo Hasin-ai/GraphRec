@@ -79,6 +79,10 @@ jobs:
         run: python -m pytest -q tests
       - name: OpenAPI drift (web wire types)
         run: python scripts/export_openapi.py --check web/openapi.json
+      - name: SDK docs drift (web/src/docs/sdkData.ts matches the SDK)
+        run: python scripts/build_sdk_docs.py --check
+      - name: Every SDK call shown on the site exists in the SDK
+        run: python scripts/check_doc_sdk_calls.py
       - name: Dependency audit (Python)
         run: pip-audit -r <(pip freeze --exclude-editable | grep -v 'torch==') --progress-spinner off
 

@@ -26,26 +26,25 @@ export function DocsGuidesPage() {
     "fallback_allowed": true
   }'`;
 
-  const retryPython = `import time
-import httpx
-from graphrec_sdk.exceptions import RateLimitError, ServiceUnavailableError
+  const retryPython = `from graphrec_sdk import GraphRec, RateLimitError, ServiceUnavailableError, APIConnectionError
 
-def fetch_recommendations_with_retry(client, user_id, max_attempts=3):
-    for attempt in range(1, max_attempts + 1):
-        try:
-            return client.storefront.recommendations.get(
-                user_id=user_id,
-                top_n=10,
-                fallback_allowed=True
-            )
-        except RateLimitError as e:
-            # Respect server Retry-After header or backoff
-            sleep_sec = getattr(e, "retry_after", 2 ** attempt)
-            time.sleep(sleep_sec)
-        except ServiceUnavailableError:
-            time.sleep(1.0 * attempt)
-    # Graceful fallback to catalog popular items
-    return client.storefront.recommendations.popular(top_n=10)`;
+# The SDK already retries 429s, retryable 503s and connection failures with
+# backoff (max_retries, default 2). Only handle what is left after that.
+client = GraphRec(api_key="gr_live_YOUR_STOREFRONT_KEY", max_retries=3)
+
+def recommendations_or_empty(user_id: str) -> list[str]:
+    try:
+        recs = client.storefront.recommendations.get(
+            user_id=user_id,
+            top_n=10,
+            fallback_allowed=True,   # the server serves popularity if the model can't
+        )
+        return [item.external_product_id for item in recs.items]
+    except RateLimitError as exc:
+        print("rate limited; retry after", exc.retry_after_seconds, "s")
+    except (ServiceUnavailableError, APIConnectionError):
+        pass
+    return []   # render the shelf from your own bestsellers instead`;
 
   return (
     <div className="docs-page">

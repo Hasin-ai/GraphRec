@@ -217,7 +217,7 @@ export function DocsGettingStartedPage() {
 
         <h3>Step 2: Install the Python SDK</h3>
         <pre className="docs-code-pre">
-          <code>pip install graphrec-sdk</code>
+          <code>pip install ./sdks/python</code>
         </pre>
 
         <h3>Step 3: Ingest Data & Fetch Recommendations</h3>
