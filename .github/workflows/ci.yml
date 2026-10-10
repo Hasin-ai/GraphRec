@@ -136,7 +136,7 @@ jobs:
           sed -i "s|^JWT_SIGNING_SECRET=.*|JWT_SIGNING_SECRET=$JWT_SIGNING_SECRET|; s|^AUDIT_HASH_SECRET=.*|AUDIT_HASH_SECRET=$AUDIT_HASH_SECRET|; s|^API_KEY_HMAC_PEPPER=.*|API_KEY_HMAC_PEPPER=$API_KEY_HMAC_PEPPER|; s|^PLATFORM_ADMIN_TOKEN=.*|PLATFORM_ADMIN_TOKEN=$PLATFORM_ADMIN_TOKEN|" .env
           echo "QDRANT_URL=http://qdrant:6334" >> .env
       - name: Start the stack
-        run: docker compose up -d --build --wait api worker scheduler frontend
+        run: QDRANT_URL=http://qdrant:6334 docker compose up -d --build --wait api worker scheduler frontend
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
