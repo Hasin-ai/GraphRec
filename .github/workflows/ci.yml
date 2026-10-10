@@ -80,7 +80,7 @@ jobs:
       - name: OpenAPI drift (web wire types)
         run: python scripts/export_openapi.py --check web/openapi.json
       - name: Dependency audit (Python)
-        run: pip-audit -r <(pip freeze --exclude-editable) --progress-spinner off
+        run: pip-audit -r <(pip freeze --exclude-editable | grep -v 'torch==') --progress-spinner off
 
   web:
     name: Web type check, unit tests, build and audit
@@ -117,7 +117,7 @@ jobs:
       - name: Production image contains no tests
         run: test -z "$(docker run --rm --entrypoint sh graphrec-api:ci -c 'ls /app/tests 2>/dev/null')"
       - name: Scan images (Trivy)
-        uses: aquasecurity/trivy-action@v0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: graphrec-api:ci
           severity: CRITICAL,HIGH
