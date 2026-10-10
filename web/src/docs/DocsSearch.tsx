@@ -1,7 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Icon } from "../ui/icons";
-import { ENDPOINTS, SDK_METHODS } from "./docsData";
+import { ENDPOINTS } from "./docsData";
+import { SDK_REFERENCE } from "./sdkData";
+
+const SDK_SEARCH_METHODS = [
+  ...SDK_REFERENCE.clientMethods,
+  ...SDK_REFERENCE.namespaces.flatMap((n) => n.resources.flatMap((r) => r.methods)),
+  ...SDK_REFERENCE.helpers.flatMap((h) => h.methods),
+];
 
 export interface SearchResult {
   id: string;
@@ -84,19 +91,19 @@ export function DocsSearchModal({ isOpen, onClose }: { isOpen: boolean; onClose:
         });
       }
     }
-    // 3. SDK Methods
-    for (const sm of SDK_METHODS) {
+    // 3. SDK Methods (generated from the SDK source)
+    for (const sm of SDK_SEARCH_METHODS) {
       if (
-        sm.name.toLowerCase().includes(q) ||
-        sm.description.toLowerCase().includes(q) ||
-        sm.signature.toLowerCase().includes(q)
+        sm.call.toLowerCase().includes(q) ||
+        sm.doc.toLowerCase().includes(q) ||
+        sm.routes.some((r) => r.path.toLowerCase().includes(q))
       ) {
         results.push({
-          id: sm.name,
+          id: sm.call,
           category: "SDK Method",
-          title: sm.signature.split("(")[0],
-          subtitle: sm.description,
-          url: `/docs/sdk#${sm.name.replace(/\./g, "-")}`,
+          title: `${sm.call}()`,
+          subtitle: sm.doc.split("\n")[0] || sm.routes.map((r) => `${r.method} ${r.path}`).join(", "),
+          url: `/docs/sdk#${sm.call.replace(/[^a-zA-Z0-9_-]/g, "-")}`,
         });
       }
     }

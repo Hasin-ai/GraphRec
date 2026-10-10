@@ -100,9 +100,18 @@ describe("Developer Documentation", () => {
     );
 
     expect(screen.getByRole("heading", { level: 1, name: /Python SDK Reference/i })).toBeDefined();
-    expect(screen.getByText(/pip install graphrec-sdk/i)).toBeDefined();
+    expect(screen.getAllByText(/pip install \.\/sdks\/python/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/CatalogSync/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/EventTracker/i).length).toBeGreaterThan(0);
+    // Generated reference: every namespace, the error table and real method anchors render.
+    for (const id of ["storefront", "tenant", "platform", "ecommerce", "errors", "examples"]) {
+      expect(document.getElementById(id)).not.toBeNull();
+    }
+    expect(document.getElementById("client-tenant-catalog-bulk_upsert")).not.toBeNull();
+    expect(document.getElementById("client-platform-tenants")).not.toBeNull();
+    expect(screen.getAllByText("/v1/recommendations").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/storefront\.health\(\)/)).toBeNull();
+    expect(screen.queryByText(/bearer_token/)).toBeNull();
   });
 
   it("renders Guides page with recommendation strategies and cold start", async () => {

@@ -1,96 +1,235 @@
-import { useState } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { SDK_METHODS, type SdkMethodDoc } from "../../docs/docsData";
+import { SDK_REFERENCE as SDK } from "../../docs/sdkData";
+import type { SdkMethod, SdkParam, SdkResource } from "../../docs/sdkTypes";
 import { DocsCodeTabs } from "../../docs/DocsCodeTabs";
 import { Icon } from "../../ui/icons";
 
-export function DocsSdkPage() {
-  const { hash } = useLocation();
-  const [filterQuery, setFilterQuery] = useState("");
+// Everything on this page is generated from the SDK source by
+// scripts/build_sdk_docs.py (signatures, docstrings, routes, errors, examples).
 
-  const filteredMethods = SDK_METHODS.filter((m) => {
-    if (!filterQuery.trim()) return true;
-    const q = filterQuery.toLowerCase();
-    return (
-      m.name.toLowerCase().includes(q) ||
-      m.namespace.toLowerCase().includes(q) ||
-      m.description.toLowerCase().includes(q) ||
-      m.signature.toLowerCase().includes(q)
-    );
-  });
+const C = SDK.constants;
 
-  const installCode = `# Install using pip
-pip install graphrec-sdk
+const INSTALL = `# From a checkout of the GraphRec repository
+pip install ./sdks/python
 
-# Or with poetry
-poetry add graphrec-sdk`;
+# Python ${SDK.requiresPython}; dependencies: ${SDK.dependencies.join(", ")}`;
 
-  const initSyncCode = `from graphrec_sdk import GraphRec
+const QUICKSTART = `import os
+from graphrec_sdk import GraphRec, STOREFRONT_KEY_SCOPES
 
-client = GraphRec(
-    base_url="https://api.graphrec.io",   # or http://localhost:8010 for local dev
-    api_key="gr_live_YOUR_STOREFRONT_KEY",
-    timeout=5.0,                         # 5 second HTTP timeout
-    max_retries=3                        # Automatic exponential backoff
-)
+# 1. Storefront backend: an API key (events, recommendations, feedback)
+client = GraphRec(base_url="https://graphrec.example.com", api_key="${C.API_KEY_PREFIX}...")
+recs = client.storefront.recommendations.get(user_id="customer-42", top_n=8)
+for item in recs.items:
+    print(item.position, item.external_product_id)
 
-# Test connectivity
-status = client.storefront.health()
-print(f"GraphRec API Status: {status['status']}")`;
+# 2. Tenant administration: email + password (token renewed before expiry)
+admin = GraphRec(email="admin@shop.example", password="...")
+key = admin.tenant.api_keys.create(name="storefront", scopes=STOREFRONT_KEY_SCOPES)
 
-  const initAsyncCode = `import asyncio
+# 3. Platform operations: the platform administrator token
+ops = GraphRec(access_token=os.environ["PLATFORM_ADMIN_TOKEN"])
+for tenant in ops.platform.tenants.list():
+    print(tenant.slug, tenant.status)`;
+
+const ASYNC = `import asyncio
 from graphrec_sdk import AsyncGraphRec
 
-async def main():
-    async with AsyncGraphRec(
-        base_url="https://api.graphrec.io",
-        api_key="gr_live_YOUR_STOREFRONT_KEY"
-    ) as client:
-        recs = await client.storefront.recommendations.get(
-            user_id="user_123",
-            top_n=5
-        )
-        print(recs)
+async def main() -> None:
+    async with AsyncGraphRec(api_key="${C.API_KEY_PREFIX}...") as client:
+        recs = await client.storefront.recommendations.get(user_id="customer-42", top_n=5)
+        print([item.external_product_id for item in recs.items])
 
 asyncio.run(main())`;
 
-  const catalogSyncCode = `from graphrec_sdk import GraphRec
-from graphrec_sdk.ecommerce import CatalogSync
+const ERRORS = `from graphrec_sdk import GraphRec, NotFoundError, RateLimitError, APIStatusError
 
-client = GraphRec(api_key="gr_live_YOUR_STOREFRONT_KEY")
+client = GraphRec()
+try:
+    product = client.tenant.catalog.get("SKU-404")
+except NotFoundError:
+    product = None
+except RateLimitError as exc:        # retried automatically first; raised when retries run out
+    print("slow down", exc)
+except APIStatusError as exc:        # any other non-2xx response
+    print(exc.status_code, exc)`;
 
-# Generator or list of products
-products = [
-    {
-        "external_id": f"SKU-{i}",
-        "title": f"Summer Product {i}",
-        "price": "29.99",
-        "category": "Apparel",
-        "tags": ["summer", "new"]
-    }
-    for i in range(1000)
-]
+const anchor = (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, "-");
 
-# Sync automatically chunks into batches of 250 to respect payload limits
-sync = CatalogSync(client, chunk_size=250)
-summary = sync.run(products)
+/** Render a docstring: paragraphs, indented code blocks and `inline code`. */
+function DocText({ text }: { text: string }) {
+  if (!text) return null;
+  const blocks = text.split(/\n\s*\n/);
+  return (
+    <>
+      {blocks.map((block, i) => {
+        const lines = block.split("\n");
+        if (lines.every((l) => l.startsWith("    ") || !l.trim())) {
+          return (
+            <pre key={i} className="docs-signature-pre">
+              <code>{lines.map((l) => l.slice(4)).join("\n")}</code>
+            </pre>
+          );
+        }
+        return <p key={i}>{inline(block.replace(/::$/, ":"))}</p>;
+      })}
+    </>
+  );
+}
 
-print(f"Total synced: {summary.total_items}")
-print(f"Batches: {summary.batches_sent}")
-print(f"Duration: {summary.duration_seconds:.2f}s")`;
+function inline(text: string): ReactNode[] {
+  return text.split(/(`[^`]+`)/g).map((part, i) =>
+    part.startsWith("`") && part.endsWith("`") ? <code key={i}>{part.slice(1, -1)}</code> : <Fragment key={i}>{part}</Fragment>
+  );
+}
 
-  const eventTrackerCode = `from graphrec_sdk import GraphRec
-from graphrec_sdk.ecommerce import EventTracker
+function ParamsTable({ params, withDescription }: { params: SdkParam[]; withDescription?: boolean }) {
+  if (!params.length) return null;
+  return (
+    <div className="docs-table-wrapper">
+      <table className="docs-table docs-param-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Required</th>
+            <th>Default</th>
+            {withDescription && <th>Description</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {params.map((p) => (
+            <tr key={p.name}>
+              <td><code>{p.name}</code>{p.kind === "keyword" && <span className="badge badge-neutral" title="Keyword-only">kw</span>}</td>
+              <td><code>{p.type || "Any"}</code></td>
+              <td>
+                {p.required ? <span className="badge badge-warning">Required</span> : <span className="badge badge-neutral">Optional</span>}
+              </td>
+              <td>{p.default !== null ? <code>{p.default}</code> : "—"}</td>
+              {withDescription && <td>{p.description}</td>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
-client = GraphRec(api_key="gr_live_YOUR_STOREFRONT_KEY")
+function MethodCard({ method, highlighted }: { method: SdkMethod; highlighted: boolean }) {
+  const id = anchor(method.call);
+  return (
+    <article id={id} className={`docs-endpoint-card ${highlighted ? "highlighted" : ""}`}>
+      <header className="docs-endpoint-header">
+        <div className="docs-endpoint-title-row">
+          <code className="docs-method-title">.{method.name}()</code>
+          {method.routes.map((r) => (
+            <span key={r.key} className="docs-endpoint-badges">
+              <span className={`docs-method-badge method-${r.method.toLowerCase()}`}>{r.method}</span>
+              <code className="docs-endpoint-path">{r.path}</code>
+              {r.scopes.map((s) => (
+                <span key={s} className="docs-scope-badge" title="Required scope">{s}</span>
+              ))}
+              {r.auth === "none" && <span className="docs-auth-badge auth-public">Public</span>}
+              {r.auth === "bearer" && <span className="docs-auth-badge auth-bearer">User token</span>}
+            </span>
+          ))}
+        </div>
+        <pre className="docs-signature-pre">
+          <code>{method.signature}</code>
+        </pre>
+      </header>
+      <div className="docs-endpoint-body">
+        <div className="docs-sub-section">
+          {method.doc ? (
+            <DocText text={method.doc} />
+          ) : method.routes.length ? (
+            <p>
+              Calls <code>{method.routes.map((r) => `${r.method} ${r.path}`).join(", ")}</code>.
+            </p>
+          ) : null}
+        </div>
+        <div className="docs-sub-section">
+          <h4>Arguments</h4>
+          {method.params.length ? <ParamsTable params={method.params} /> : <p>None.</p>}
+        </div>
+        {method.returns && (
+          <div className="docs-sub-section">
+            <h4>Returns</h4>
+            <p><code>{method.returns}</code></p>
+          </div>
+        )}
+        {method.routes.length > 0 && method.routes.every((r) => r.idempotent) && (
+          <p className="docs-endpoint-summary">
+            Idempotent: the SDK also retries this call after timeouts and dropped connections.
+          </p>
+        )}
+      </div>
+    </article>
+  );
+}
 
-# Thread-safe buffer flushes in background or on exit
-with EventTracker(client, batch_size=50, flush_interval=5.0) as tracker:
-    tracker.view(user_id="usr_88", external_product_id="SKU-100")
-    tracker.click(user_id="usr_88", external_product_id="SKU-100")
-    tracker.add_to_cart(user_id="usr_88", external_product_id="SKU-100", quantity=1)
-    tracker.purchase(user_id="usr_88", external_product_id="SKU-100", order_id="ORD-90210")
-# Context exit automatically flushes any remaining queued events`;
+function matches(m: SdkMethod, q: string) {
+  if (!q) return true;
+  const hay = `${m.call} ${m.signature} ${m.doc} ${m.routes.map((r) => r.path + " " + r.scopes.join(" ")).join(" ")}`.toLowerCase();
+  return q.split(/\s+/).every((t) => hay.includes(t));
+}
+
+function ResourceSection({ res, q, hash }: { res: SdkResource; q: string; hash: string }) {
+  const methods = res.methods.filter((m) => matches(m, q));
+  if (q && !methods.length) return null;
+  return (
+    <div className="docs-sdk-resource">
+      <h3 id={res.id}>
+        <code>{res.path}</code>
+      </h3>
+      <p className="docs-endpoint-summary">
+        <code>{res.className}</code>
+        {res.asyncClass && (
+          <>
+            {" "}· async: <code>{res.asyncClass}</code>
+          </>
+        )}{" "}
+        · {res.methods.length} method{res.methods.length === 1 ? "" : "s"}
+      </p>
+      {res.doc && <DocText text={res.doc} />}
+      {res.ctor && (
+        <pre className="docs-signature-pre">
+          <code>{res.ctor}</code>
+        </pre>
+      )}
+      <div className="docs-sdk-methods-list">
+        {methods.map((m) => (
+          <MethodCard key={m.call} method={m} highlighted={hash === `#${anchor(m.call)}`} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function DocsSdkPage() {
+  const { hash } = useLocation();
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+
+  const hits = useMemo(() => {
+    const all = [
+      ...SDK.clientMethods,
+      ...SDK.namespaces.flatMap((n) => n.resources.flatMap((r) => r.methods)),
+      ...SDK.helpers.flatMap((h) => h.methods),
+    ];
+    return q ? all.filter((m) => matches(m, q)).length : all.length;
+  }, [q]);
+
+  const clientResource: SdkResource = {
+    id: "client-methods",
+    path: "client",
+    title: "client",
+    className: "GraphRec",
+    asyncClass: "AsyncGraphRec",
+    doc: "Service checks and credential helpers on the client itself.",
+    methods: SDK.clientMethods,
+  };
 
   return (
     <div className="docs-page">
@@ -102,247 +241,232 @@ with EventTracker(client, batch_size=50, flush_interval=5.0) as tracker:
         </div>
         <h1>Python SDK Reference</h1>
         <p className="lead">
-          Official, production-ready Python SDK (<code>graphrec-sdk</code>) with synchronous and asynchronous clients,
-          built-in retries, connection pooling, and e-commerce ingestion helpers.
+          <code>{SDK.package}</code> {SDK.version} — synchronous and asynchronous clients for every GraphRec API: {SDK.stats.methods}{" "}
+          methods covering all {SDK.stats.routes} routes, typed models, automatic retries, idempotency keys, bulk chunking and
+          e-commerce helpers.
         </p>
+        <div className="docs-callout docs-callout-info">
+          <div className="docs-callout-title">Generated from the SDK source</div>
+          <p>
+            Signatures, docstrings, routes, scopes, errors and examples on this page are extracted from{" "}
+            <code>sdks/python/src/graphrec_sdk</code> by <code>scripts/build_sdk_docs.py</code>, so they match the code you install.
+          </p>
+        </div>
       </header>
 
-      {/* Installation */}
-      <section id="installation" className="docs-section">
-        <h2>Installation</h2>
-        <p>The SDK supports Python 3.9+ and has minimal third-party dependencies (HTTPX, Pydantic, and Tenacity):</p>
-        <DocsCodeTabs title="Terminal" curl={installCode} />
+      <section className="docs-section">
+        <h2 id="installation">Installation</h2>
+        <p>
+          The SDK lives in the GraphRec repository under <code>sdks/python</code>. It needs Python {SDK.requiresPython} and depends
+          only on {SDK.dependencies.map((d, i) => (
+            <Fragment key={d}>{i > 0 && " and "}<code>{d}</code></Fragment>
+          ))}
+          .
+        </p>
+        <DocsCodeTabs title="Terminal" curl={INSTALL} />
       </section>
 
-      {/* Client Configuration */}
-      <section id="configuration" className="docs-section">
-        <h2>Client Initialization</h2>
+      <section className="docs-section">
+        <h2 id="quickstart">Quickstart</h2>
         <p>
-          Configure the client with your API key and base URL. Both synchronous (<code>GraphRec</code>) and asynchronous (<code>AsyncGraphRec</code>)
-          clients share the same API surface.
+          One client class, three kinds of credential. Resources are grouped by who calls them: <code>client.storefront</code>,{" "}
+          <code>client.tenant</code> and <code>client.platform</code>.
         </p>
+        <DocsCodeTabs title="Three ways to authenticate" python={QUICKSTART} />
+      </section>
 
-        <DocsCodeTabs
-          title="Synchronous Initialization"
-          python={initSyncCode}
-        />
-
-        <DocsCodeTabs
-          title="Asynchronous (async/await) Initialization"
-          python={initAsyncCode}
-        />
-
+      <section className="docs-section">
+        <h2 id="configuration">Client configuration</h2>
+        <p>
+          <code>GraphRec(...)</code> and <code>AsyncGraphRec(...)</code> take the same keyword-only arguments:
+        </p>
+        <ParamsTable params={SDK.clientParams} withDescription />
+        <h3 id="environment">Environment variables</h3>
         <div className="docs-table-wrapper">
           <table className="docs-table">
             <thead>
-              <tr>
-                <th>Parameter</th>
-                <th>Type</th>
-                <th>Default</th>
-                <th>Description</th>
-              </tr>
+              <tr><th>Variable</th><th>Used for</th></tr>
             </thead>
             <tbody>
-              <tr>
-                <td><code>base_url</code></td>
-                <td><code>str</code></td>
-                <td><code>"https://api.graphrec.io"</code></td>
-                <td>Root URL of the GraphRec cluster or local proxy.</td>
-              </tr>
-              <tr>
-                <td><code>api_key</code></td>
-                <td><code>Optional[str]</code></td>
-                <td><code>os.getenv("GRAPHREC_API_KEY")</code></td>
-                <td>Storefront or Tenant secret API key.</td>
-              </tr>
-              <tr>
-                <td><code>bearer_token</code></td>
-                <td><code>Optional[str]</code></td>
-                <td><code>None</code></td>
-                <td>JWT Bearer token for tenant dashboard console sessions.</td>
-              </tr>
-              <tr>
-                <td><code>timeout</code></td>
-                <td><code>float</code></td>
-                <td><code>10.0</code></td>
-                <td>Total HTTP request timeout in seconds.</td>
-              </tr>
-              <tr>
-                <td><code>max_retries</code></td>
-                <td><code>int</code></td>
-                <td><code>3</code></td>
-                <td>Maximum automatic retry attempts for transient 429 and 503 errors.</td>
-              </tr>
+              <tr><td><code>{C.ENV_BASE_URL}</code></td><td><code>base_url</code> (default <code>{C.DEFAULT_BASE_URL}</code>)</td></tr>
+              <tr><td><code>{C.ENV_API_KEY}</code></td><td><code>api_key</code></td></tr>
+              <tr><td><code>{C.ENV_ACCESS_TOKEN}</code></td><td><code>access_token</code> (used when no API key is set)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3 id="behaviour">Built-in behaviour</h3>
+        <ul>
+          <li>
+            <strong>Retries.</strong> Up to <code>{C.DEFAULT_MAX_RETRIES}</code> retries with exponential backoff. Rate limits (429),
+            declared-retryable 503s and failures before the request is sent are retried on every route. Ambiguous failures (read
+            timeouts, dropped connections, 502/504) are retried only on idempotent routes. A server <code>Retry-After</code> of up to{" "}
+            {C.MAX_RETRY_AFTER_SECONDS} s is honoured.
+          </li>
+          <li>
+            <strong>Idempotency.</strong> Events and feedback carry an <code>event_id</code> (generated when you omit it; use{" "}
+            <code>deterministic_id()</code> for replay-safe ids), and bulk upserts send an <code>{C.HEADER_IDEMPOTENCY_KEY}</code>, so a
+            retried request is not applied twice.
+          </li>
+          <li>
+            <strong>Bulk chunking.</strong> Bulk helpers split payloads to stay under {Number(C.DEFAULT_MAX_BODY_BYTES) / 1024} KiB and{" "}
+            {C.DEFAULT_MAX_BATCH_ITEMS} items per request.
+          </li>
+          <li>
+            <strong>Sessions.</strong> With <code>email</code>/<code>password</code> the SDK logs in lazily and renews the access token{" "}
+            {C.TOKEN_EXPIRY_SKEW_SECONDS} s before it expires.
+          </li>
+          <li>
+            <strong>Tracing.</strong> Every error carries the server's <code>{C.HEADER_CORRELATION_ID}</code> for support requests.
+          </li>
+        </ul>
+        <h3 id="async">Async client</h3>
+        <p>
+          <code>AsyncGraphRec</code> exposes the same namespaces and methods; await each call and use <code>async with</code> to close
+          the connection pool.
+        </p>
+        <DocsCodeTabs title="AsyncGraphRec" python={ASYNC} />
+      </section>
+
+      <section className="docs-section">
+        <h2 id="reference">API reference</h2>
+        <div className="docs-grid-3">
+          {SDK.namespaces.map((ns) => (
+            <div key={ns.name} className="docs-card">
+              <h4>
+                <a href={`#${ns.name}`}><code>{ns.path}</code></a>
+              </h4>
+              <p>{ns.doc}</p>
+              <ul>
+                {ns.resources.map((r) => (
+                  <li key={r.id}>
+                    <a href={`#${r.id}`}><code>{r.title}</code></a> ({r.methods.length})
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+        <div className="docs-ref-search-box" style={{ margin: "1.5rem 0" }}>
+          <Icon name="search" size={14} />
+          <input
+            type="search"
+            placeholder="Filter methods by name, path, scope or text…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Filter SDK methods"
+          />
+          <span className="badge badge-neutral" aria-live="polite">{hits} methods</span>
+        </div>
+        <ResourceSection res={clientResource} q={q} hash={hash} />
+      </section>
+
+      {SDK.namespaces.map((ns) => (
+        <section key={ns.name} className="docs-section">
+          <h2 id={ns.name}>
+            <code>{ns.path}</code>
+          </h2>
+          <p>{ns.doc}</p>
+          {ns.resources.map((r) => (
+            <ResourceSection key={r.id} res={r} q={q} hash={hash} />
+          ))}
+        </section>
+      ))}
+
+      <section className="docs-section">
+        <h2 id="ecommerce">E-commerce helpers</h2>
+        <p>
+          <code>graphrec_sdk.ecommerce</code> wraps the raw resources for common shop integrations. Each helper has an{" "}
+          <code>Async…</code> variant for <code>AsyncGraphRec</code>.
+        </p>
+        {SDK.helpers.map((h) => (
+          <ResourceSection key={h.id} res={h} q={q} hash={hash} />
+        ))}
+      </section>
+
+      <section className="docs-section">
+        <h2 id="errors">Errors</h2>
+        <p>
+          Every exception derives from <code>GraphRecError</code>. HTTP failures raise an <code>APIStatusError</code> subclass chosen by
+          the server's error <code>code</code>, falling back to the HTTP status.
+        </p>
+        <DocsCodeTabs title="Handling errors" python={ERRORS} />
+        <div className="docs-table-wrapper">
+          <table className="docs-table">
+            <thead>
+              <tr><th>Exception</th><th>Parent</th><th>HTTP status</th><th>Error codes</th><th>Meaning</th></tr>
+            </thead>
+            <tbody>
+              {SDK.errors.map((e) => (
+                <tr key={e.name} id={`error-${e.name}`}>
+                  <td><code>{e.name}</code></td>
+                  <td><code>{e.base}</code></td>
+                  <td>{e.statuses.length ? e.statuses.join(", ") : "—"}</td>
+                  <td>{e.codes.length ? e.codes.map((c) => <code key={c} style={{ marginRight: 4 }}>{c}</code>) : "—"}</td>
+                  <td>{inline(e.doc)}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
       </section>
 
-      {/* Namespaces Architecture */}
-      <section id="namespaces" className="docs-section">
-        <h2>Client Namespaces</h2>
-        <p>The client organizes operations into 3 hierarchical namespaces according to caller responsibilities:</p>
-
-        <div className="docs-grid-3">
-          <div className="docs-card">
-            <h3 id="storefront">client.storefront</h3>
-            <p>High-throughput, low-latency endpoints optimized for shopper-facing storefronts.</p>
-            <ul>
-              <li><code>.recommendations.get(...)</code></li>
-              <li><code>.recommendations.similar(...)</code></li>
-              <li><code>.events.record(...)</code></li>
-              <li><code>.catalog.get_product(...)</code></li>
-            </ul>
-          </div>
-
-          <div className="docs-card">
-            <h3 id="tenant">client.tenant</h3>
-            <p>Management, MLOps, and catalog administrative endpoints for workspace owners.</p>
-            <ul>
-              <li><code>.catalog.bulk_upsert(...)</code></li>
-              <li><code>.models.train(...)</code></li>
-              <li><code>.models.get_status(...)</code></li>
-              <li><code>.api_keys.create(...)</code></li>
-            </ul>
-          </div>
-
-          <div className="docs-card">
-            <h3 id="platform">client.platform</h3>
-            <p>Cross-tenant administrative endpoints reserved for cluster root operators.</p>
-            <ul>
-              <li><code>.tenants.list(...)</code></li>
-              <li><code>.overview.metrics(...)</code></li>
-              <li><code>.quotas.update(...)</code></li>
-            </ul>
-          </div>
+      <section className="docs-section">
+        <h2 id="types">Enums and scopes</h2>
+        <h3 id="enums">Enums</h3>
+        <div className="docs-table-wrapper">
+          <table className="docs-table">
+            <thead><tr><th>Enum</th><th>Values</th></tr></thead>
+            <tbody>
+              {SDK.enums.map((e) => (
+                <tr key={e.name}>
+                  <td><code>{e.name}</code></td>
+                  <td>{e.values.map((v) => <code key={v} style={{ marginRight: 4 }}>{v}</code>)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <h3 id="scopes">Scope bundles</h3>
+        <p>Pass these to <code>client.tenant.api_keys.create(scopes=…)</code> instead of listing scopes by hand.</p>
+        <div className="docs-table-wrapper">
+          <table className="docs-table">
+            <thead><tr><th>Constant</th><th>Scopes</th></tr></thead>
+            <tbody>
+              {Object.entries(SDK.scopeSets).map(([name, val]) =>
+                Array.isArray(val) ? (
+                  <tr key={name}>
+                    <td><code>{name}</code></td>
+                    <td>{val.map((s) => <code key={s} style={{ marginRight: 4 }}>{s}</code>)}</td>
+                  </tr>
+                ) : (
+                  Object.entries(val).map(([role, list]) => (
+                    <tr key={`${name}-${role}`}>
+                      <td><code>{name}["{role}"]</code></td>
+                      <td>{list.map((s) => <code key={s} style={{ marginRight: 4 }}>{s}</code>)}</td>
+                    </tr>
+                  ))
+                )
+              )}
+            </tbody>
+          </table>
         </div>
       </section>
 
-      {/* E-Commerce Ingestion Helpers */}
-      <section id="ecommerce" className="docs-section">
-        <h2>E-Commerce Ingestion Helpers</h2>
+      <section className="docs-section">
+        <h2 id="examples">Runnable examples</h2>
         <p>
-          The <code>graphrec_sdk.ecommerce</code> module provides high-level abstractions designed for e-commerce catalog syncs
-          and interaction event pipelines:
+          Complete scripts from <code>sdks/python/examples</code>. Point them at your stack with <code>{C.ENV_BASE_URL}</code> and the
+          credential variables above.
         </p>
-
-        <h3>1. CatalogSync</h3>
-        <p>
-          Uploads product catalogs of arbitrary size by batching items into chunks of 250, honoring the 16 KiB HTTP payload limit,
-          and automatically handling rate limiting backoff:
-        </p>
-        <DocsCodeTabs title="CatalogSync Example" python={catalogSyncCode} />
-
-        <h3>2. EventTracker</h3>
-        <p>
-          Thread-safe background event aggregator that records views, clicks, cart modifications, and purchases without slowing down
-          shopper web request threads:
-        </p>
-        <DocsCodeTabs title="EventTracker Example" python={eventTrackerCode} />
-      </section>
-
-      {/* SDK Methods Reference */}
-      <section id="methods" className="docs-section">
-        <h2>SDK Methods Reference</h2>
-        <p>Verified public methods exposed on the <code>GraphRec</code> client:</p>
-
-        <div className="docs-ref-search-box" style={{ marginBottom: "1.5rem" }}>
-          <Icon name="search" size={14} />
-          <input
-            type="search"
-            placeholder="Search SDK methods by name or signature..."
-            value={filterQuery}
-            onChange={(e) => setFilterQuery(e.target.value)}
-            aria-label="Filter SDK methods"
-          />
-        </div>
-
-        <div className="docs-sdk-methods-list">
-          {filteredMethods.map((m) => (
-            <SdkMethodCard
-              key={m.name}
-              method={m}
-              isHighlighted={hash === `#${m.name.replace(/[^a-zA-Z0-9_-]/g, "-")}`}
-            />
-          ))}
-        </div>
+        {SDK.examples.map((ex) => (
+          <details key={ex.file} className="docs-card" style={{ marginBottom: "1rem" }}>
+            <summary>
+              <strong>{ex.title}</strong> <code>{ex.file}</code>
+            </summary>
+            <DocsCodeTabs title={ex.file.split("/").pop()} python={ex.code} />
+          </details>
+        ))}
       </section>
     </div>
-  );
-}
-
-function SdkMethodCard({ method, isHighlighted }: { method: SdkMethodDoc; isHighlighted: boolean }) {
-  const anchorId = method.name.replace(/[^a-zA-Z0-9_-]/g, "-");
-
-  return (
-    <article id={anchorId} className={`docs-endpoint-card ${isHighlighted ? "highlighted" : ""}`}>
-      <header className="docs-endpoint-header">
-        <div className="docs-endpoint-title-row">
-          <code className="docs-method-title">{method.name}</code>
-          <span className="docs-scope-badge">{method.namespace}</span>
-        </div>
-        <p className="docs-endpoint-summary">{method.description}</p>
-        <pre className="docs-signature-pre">
-          <code>{method.signature}</code>
-        </pre>
-      </header>
-
-      <div className="docs-endpoint-body">
-        {method.parameters.length > 0 && (
-          <div className="docs-sub-section">
-            <h4>Arguments</h4>
-            <div className="docs-table-wrapper">
-              <table className="docs-table docs-param-table">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Type</th>
-                    <th>Required</th>
-                    <th>Default</th>
-                    <th>Description</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {method.parameters.map((p) => (
-                    <tr key={p.name}>
-                      <td><code>{p.name}</code></td>
-                      <td><code>{p.type}</code></td>
-                      <td>{p.required ? <span className="badge badge-warning">Required</span> : <span className="badge badge-neutral">Optional</span>}</td>
-                      <td>{p.default ? <code>{p.default}</code> : "—"}</td>
-                      <td>{p.description}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        <div className="docs-sub-section">
-          <h4>Returns</h4>
-          <p><code>{method.returns}</code></p>
-        </div>
-
-        {method.raises.length > 0 && (
-          <div className="docs-sub-section">
-            <h4>Raises</h4>
-            <div className="docs-tag-pills">
-              {method.raises.map((err) => (
-                <span key={err} className="badge badge-danger">
-                  {err}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {method.example && (
-          <div className="docs-sub-section">
-            <h4>Runnable Example</h4>
-            <DocsCodeTabs title="Python" python={method.example} />
-          </div>
-        )}
-      </div>
-    </article>
   );
 }
