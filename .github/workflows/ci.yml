@@ -117,7 +117,7 @@ jobs:
       - name: Production image contains no tests
         run: test -z "$(docker run --rm --entrypoint sh graphrec-api:ci -c 'ls /app/tests 2>/dev/null')"
       - name: Scan images (Trivy)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.28.0
         with:
           image-ref: graphrec-api:ci
           severity: CRITICAL,HIGH
