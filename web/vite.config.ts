@@ -23,6 +23,9 @@ export default defineConfig({
           if (id.includes("node_modules")) {
             return "vendor";
           }
+          if (id.includes("/src/docs/") || id.includes("/pages/docs/")) {
+            return "docs";
+          }
           if (id.includes("/pages/marketing/") || id.includes("/marketing/")) {
             return "marketing";
           }

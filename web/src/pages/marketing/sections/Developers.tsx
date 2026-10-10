@@ -1,4 +1,5 @@
 import { useRef, useState, type KeyboardEvent } from "react";
+import { Link } from "react-router-dom";
 import { Icon } from "../../../ui/icons";
 import { CopyButton } from "../../../ui/primitives";
 import { Section } from "./Section";
@@ -96,6 +97,11 @@ export function Developers() {
         {POINTS.map((point, i) => <li key={i}><Icon name="check" size={16} /><span>{point}</span></li>)}
       </ul>
       <CodeTabs />
+    </div>
+    <div className="mkt-dev-actions" style={{ display: "flex", gap: "12px", marginTop: "24px", flexWrap: "wrap" }}>
+      <Link to="/docs" className="btn btn-primary">Developer Quickstart</Link>
+      <Link to="/docs/reference" className="btn btn-secondary">API Reference (85 Endpoints)</Link>
+      <Link to="/docs/sdk" className="btn btn-secondary">Python SDK Reference</Link>
     </div>
   </Section>;
 }
