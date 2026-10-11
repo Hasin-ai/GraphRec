@@ -96,15 +96,19 @@ def create_app(settings: Optional[Settings] = None, svc: Optional[Services] = No
         correlation_id_var.reset(token)
         return response
 
+    from urllib.parse import urlsplit
+    _c = urlsplit(cfg.reel_covers_base_url) if cfg.reel_covers_base_url else None
+    covers_origin = f" {_c.scheme}://{_c.netloc}" if _c and _c.scheme == "http" else ""
+
     @app.middleware("http")
     async def security_headers_middleware(request: Request, call_next):
         response: Response = await call_next(request)
-        response.headers["Content-Security-Policy"] = (
+        response.headers["Content-Security-Policy"] = (  # img-src also allows the RustFS cover bucket (http in dev)
             "default-src 'self'; "
             "script-src 'self'; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; "
-            "img-src 'self' data: https:; "
+            f"img-src 'self' data: https:{covers_origin}; "
             "connect-src 'self' http: https:; "
             "frame-ancestors 'none';"
         )

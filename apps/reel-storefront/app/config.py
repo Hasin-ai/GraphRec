@@ -30,6 +30,11 @@ class Settings(BaseSettings):
     reel_model_source: str = "checkpoint"
     reel_tenant_name: str = "Reel"
 
+    #: Public base URL of the RustFS bucket holding the film covers, as the *browser* reaches it,
+    #: e.g. http://localhost:9000/reel-covers. Empty = no covers (tiles keep the coloured placeholder).
+    #: The objects are listed in data/covers.json (film id -> object key), written by scripts/upload_covers.py.
+    reel_covers_base_url: str = ""
+
     graphrec_timeout_seconds: float = 5.0
     graphrec_max_retries: int = 1
     top_n: int = 10

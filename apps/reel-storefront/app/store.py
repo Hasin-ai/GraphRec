@@ -41,8 +41,11 @@ ANONYMOUS = Persona("anon", "Anonymous visitor", "No account: session-based reco
 
 
 class Films:
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, covers: Optional[Dict[str, str]] = None) -> None:
         self.items: List[dict] = json.loads(path.read_text(encoding="utf-8"))
+        for f in self.items:
+            if covers and not f.get("posterUrl") and f["id"] in covers:
+                f["posterUrl"] = covers[f["id"]]
         self.by_id: Dict[str, dict] = {f["id"]: f for f in self.items}
         counts: Dict[str, int] = {}
         for f in self.items:

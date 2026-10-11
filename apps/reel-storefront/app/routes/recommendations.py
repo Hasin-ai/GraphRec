@@ -94,6 +94,10 @@ def reason_text(svc: Services, film: dict, item) -> Optional[str]:
     return None
 
 
+# Films kept off the "Popular right now" shelf (Movie 43 (2013)).
+HIDDEN_FROM_POPULAR = {"100083"}
+
+
 @router.post("/recommendations", response_model=Envelope[Union[RecommendationsOut, Unavailable]])
 async def recommend(body: RecommendationIn, ident: Identity = Depends(identity), svc: Services = Depends(services)):
     top_n = svc.settings.top_n
@@ -146,6 +150,8 @@ async def recommend(body: RecommendationIn, ident: Identity = Depends(identity),
     items: List[Ranked] = []
     omitted = 0
     for item in recs.items:
+        if recs.fallback_used and item.external_product_id in HIDDEN_FROM_POPULAR:
+            continue
         film = svc.films.get(item.external_product_id)
         if not film:
             omitted += 1
@@ -154,7 +160,7 @@ async def recommend(body: RecommendationIn, ident: Identity = Depends(identity),
         change = "same" if previous is None else ("new" if before is None else "up" if before > item.position else "down" if before < item.position else "same")
         reason = getattr(item, "reason", None)
         items.append(Ranked(**film, position=item.position, change=change, previous_position=before,
-                            reason=reason, reason_text=reason_text(svc, film, item),
+                            reason=reason, reason_text=None if recs.fallback_used else reason_text(svc, film, item),
                             sources=list(getattr(item, "sources", None) or []), score=getattr(item, "score", None)))
 
     impression = None

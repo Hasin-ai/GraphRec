@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 import httpx
 from graphrec_sdk import AsyncGraphRec
@@ -76,11 +76,22 @@ def build_services(settings: Settings) -> Services:
     return build_local(settings, client)
 
 
+def load_covers(settings: Settings) -> Dict[str, str]:
+    """Film id -> public cover URL in the RustFS bucket (empty when covers are not configured)."""
+
+    base = settings.reel_covers_base_url.rstrip("/")
+    manifest = settings.data_dir / "covers.json"
+    if not base or not manifest.is_file():
+        return {}
+    keys: Dict[str, str] = json.loads(manifest.read_text(encoding="utf-8"))
+    return {film_id: f"{base}/{key}" for film_id, key in keys.items()}
+
+
 def build_local(settings: Settings, client: Any) -> Services:
     storage = SharedState(redis_url=settings.redis_url)
     return Services(
         client=client,
-        films=Films(settings.data_dir / "films.json"),
+        films=Films(settings.data_dir / "films.json", covers=load_covers(settings)),
         shoppers=Shoppers(settings.data_dir / "personas.json"),
         live=LiveLog(settings.state_dir),
         settings=settings,

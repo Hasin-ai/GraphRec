@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { Film, Ranked } from "../types";
 
@@ -14,7 +15,11 @@ export function displayTitle(title: string): string {
 }
 
 export function Poster({ film, large = false }: { film: Film; large?: boolean }) {
-  if (film.posterUrl) return <img className={`poster ${large ? "large" : ""}`} src={film.posterUrl} alt="" loading="lazy" />;
+  const [broken, setBroken] = useState<string | null>(null);
+  // Cover from the RustFS bucket; a missing/unreachable object falls back to the placeholder.
+  if (film.posterUrl && broken !== film.posterUrl)
+    return <img className={`poster ${large ? "large" : ""}`} src={film.posterUrl} alt="" loading="lazy"
+      onError={() => setBroken(film.posterUrl!)} />;
   const hue = HUES[film.genres[0] ?? ""] ?? 210;
   return (
     <div className={`poster placeholder ${large ? "large" : ""}`} style={{ ["--hue" as string]: hue }} aria-hidden>
@@ -48,11 +53,6 @@ export function FilmTile({ film, ranked, requestId, onOpen, watched }: {
       <div className="tile-meta">
         <span className="tile-title">{title}</span>
         <span className="tile-sub">{[film.year, film.genres.slice(0, 2).join(" · ")].filter(Boolean).join(" · ")}</span>
-        {ranked?.reasonText && (
-          <span className={`tile-reason ${ranked.reason ?? ""}`} title={ranked.sources?.length ? `Found by: ${ranked.sources.join(", ")}` : undefined}>
-            {ranked.reasonText}
-          </span>
-        )}
         {tags.length > 0 && (
           <span className="tile-tags" aria-label="Viewer tags">
             {tags.map((t) => <span key={t} className="tag-mini">{t}</span>)}
