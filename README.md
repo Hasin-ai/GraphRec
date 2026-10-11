@@ -1,395 +1,194 @@
+<div align="center">
+
 # GraphRec
 
-![version](https://img.shields.io/badge/version-1.2.0-blue) ![CI](https://github.com/Hasin-ai/GraphRec/actions/workflows/ci.yml/badge.svg)
+**A graph-based, multi-tenant recommendation engine for e-commerce**
 
-**Developer docs:** served by the console at `/docs` (getting started, auth,
-guides, errors & limits, API reference and a Python SDK reference generated
-from the SDK source).
+Plug personalized, session-aware recommendations into any storefront through a simple REST API or Python SDK, powered by Dynamic Graph Neural Networks (DGSR).
 
-**Repository docs:** [Deploy](docs/DEPLOYMENT.md) · [Operate](docs/OPERATIONS.md) ·
-[Security](docs/SECURITY.md) · [API conventions](docs/API.md) ·
-[Performance](docs/PERFORMANCE.md) · [Decisions](docs/DECISIONS.md) ·
-[Requirement traceability](docs/GAP_ANALYSIS.md) · [Changes](CHANGELOG.md)
+![Python](https://img.shields.io/badge/python-3.11+-blue)
+![FastAPI](https://img.shields.io/badge/backend-FastAPI-009688)
+![React](https://img.shields.io/badge/frontend-React-61DAFB)
+![PostgreSQL](https://img.shields.io/badge/db-PostgreSQL-336791)
+![Qdrant](https://img.shields.io/badge/vectors-Qdrant-DC244C)
+![Docker](https://img.shields.io/badge/deploy-Docker%20Compose-2496ED)
 
-GraphRec is a multi-tenant recommendation platform developed as small, working
-vertical slices. The hardened paths are public tenant registration, tenant-user
-sign-in, the protected subscription/quota overview, current usage
-reconciliation, and scoped API-key lifecycle management. A second group of
-domain paths (catalog, events, datasets, training, model versions, deployment
-status, recommendations, and platform administration) supports real DGSR training
-and checkpoint serving, explained per request by the glass-box serving
-pipeline. See [SRS acceptance](SRS_ACCEPTANCE.md) for verified
-workflows, local capacity limits, and remaining requirements.
+[Features](#features) · [Architecture](#architecture) · [Quick start](#quick-start) · [SDK](#python-sdk) · [API](#api-overview) · [Model](#the-model-dgsr)
 
-## Hardened paths
+</div>
 
-- Registration: `http://localhost:5180/register` -> `POST /v1/tenants`
-- Account setup: `http://localhost:5180/setup#token=...` -> `POST /v1/auth/setup-password`
-- Sign-in: `http://localhost:5180/login` -> `POST /v1/auth/login`
-- Usage and subscription: `http://localhost:5180/usage` -> `GET /v1/usage`,
-  `GET /v1/subscription`
-- API keys: `http://localhost:5180/credentials` -> redacted list/detail plus
-  create/rotate/revoke endpoints
-- Durable effects include tenant setup, hashed tenant-scoped refresh sessions,
-  an immutable tenant usage ledger, and versioned HMAC-only API-key verifiers.
-- Isolation uses forced PostgreSQL row-level security on every tenant-owned
-  table; protected reads derive tenancy from a verified bearer or API key and
-  accept no tenant selector.
+---
 
-## Domain scaffold
+## Overview
 
-- Tenant users: `/v1/tenant/users` (administrators invite developers and
-  other administrators; the invitee gets a one-time setup token)
-- Catalog: `/v1/products` (paginated: `limit`, `offset`, `ids`), `/v1/products:bulk-upsert`
-- Events: `/v1/events`, `/v1/events/batches`
-- Datasets: `/v1/datasets/upload` (multipart JSON, CSV records, or a raw
-  `user_id,item_id,time` interaction log), `/v1/datasets/snapshots`
-- Training and models: `/v1/training-jobs`, `/v1/model-versions`
-- Serving: `/v1/recommendations`, `/v1/feedback/*`, `/v1/deployment*`, `/v1/metrics/summary`
-- Platform administration: `/v1/platform/*`, for operator accounts with roles
-  (`POST /v1/platform/auth/login`); `PLATFORM_ADMIN_TOKEN` only bootstraps the first
-  operator in production
-- Plans and billing: `/v1/subscription`, `/v1/subscription/requests` (tenants
-  request a plan; operators approve at `/v1/platform/plan-requests`)
-- Product: public `/v1/meta` (one version for API, console and SDK), `/v1/plans`
-  (live plan limits), `/healthz` (liveness) and `/readyz` (database, Redis and
-  Qdrant, measured live)
+Most small and mid-sized online stores can't afford to build a recommendation system. GraphRec offers one as a service: each store (tenant) sends its catalog and user interactions, and GraphRec returns ranked recommendations that account for **what a user did and when they did it**.
 
-Configuration lives in `graphrec_core/settings.py` and is documented, setting by
-setting, in `.env.example`. With `GRAPHREC_ENV=production` the services refuse
-to start on default, placeholder or short secrets. Decisions and their status are
-in `docs/DECISIONS.md`; requirement traceability is in `docs/GAP_ANALYSIS.md`.
+Under the hood, user–item interactions are modeled as a **dynamic graph**, and a reimplementation of **DGSR** (*Dynamic Graph Neural Networks for Sequential Recommendation*, TKDE 2022) learns embeddings that capture both long-term preferences and short-term intent. Embeddings are served from **Qdrant** for fast similarity retrieval.
 
-Training without an artifact queues real tenant-data training in the Compose
-worker. Synthetic embeddings require explicit `configuration.mode="placeholder"`
-and are refused when `GRAPHREC_ENV=production`.
-Feedback is persisted with tenant ownership and replay validation, and admission
-limits enforce the main plan quotas. Serving status and metrics are
-measured: `/v1/deployment` reports the tenant's active model version and
-`/v1/metrics/summary` aggregates the `serving_requests` ledger. The platform
-runs one API process per deployment, so it has no replica or autoscaling state
-to report and exposes none.
+> Developed as the Software Project Lab III (SPL-3) project at the Institute of Information Technology (IIT), University of Dhaka.
 
-## DGSR serving
+## Features
 
-`graphrec_core/dgsr/` is the DGSR implementation from `dgsr_notebooks/dgsr-beauty.ipynb`
-(config, data, temporal graph sampler, model) plus `serving.py`, which loads a
-checkpoint and encodes a shopper into the Eq. 18 query vector. Two paths share
-one model: a shopper from the training graph is encoded exactly as the notebook's
-`recommend()` does; any other history (a session, a shopper with new events, an
-unknown shopper) becomes a *virtual root* whose neighbourhood is expanded through
-the saved graph (an unknown shopper starts from the mean user embedding and is
-labelled `session`).
+- **Multi-tenant by design** — isolated data, API keys and models per store
+- **Sequential, time-aware recommendations** — powered by a dynamic graph neural network
+- **Three access levels** — storefront integration, tenant admin, and platform admin, each with scoped permissions
+- **Python SDK** — typed client covering the entire API
+- **Vector search** — item/user embeddings stored and queried in Qdrant
+- **Admin dashboard** — React UI for managing tenants, catalogs and monitoring
+- **Demo storefront** — end-to-end e-commerce demo built on the MovieLens dataset
+- **One-command setup** — full stack runs via Docker Compose
 
-A training job with `configuration.pretrained_artifact = "<name>"` imports
-`MODEL_ARTIFACT_ROOT/<name>/` (`best.pt`, `config.json`, `id_maps.json`,
-`interactions.npz`, optional `final_metrics.json`) instead of training: the
-checkpoint's engine, config, data fingerprint and vocabulary are verified, its
-item ids must be the tenant's product ids and its user ids the tenant's event
-user ids (coverage is recorded in the version metrics), and the real item table
-is indexed into Qdrant with dot-product distance. Compose mounts
-`MODEL_ARTIFACT_DIR` (default `./model_artifacts`) at `/artifacts`.
+## Architecture
 
-Serving reads the shopper's events from PostgreSQL (plus
-`context.recent_product_ids`), encodes them, retrieves Top-K from Qdrant with
-the shopper's history excluded, filters to active products and returns the
-version, strategy (`personalized`, `session` or `popular_fallback`) and
-fallback tier. When the Qdrant collection is missing the item table is scored
-in-process so one capability stays ready.
-
-## Glass-box serving pipeline
-
-`graphrec_core/serving/` is the default path for `POST /v1/recommendations` and
-`/session`. Each request runs:
-
-1. **Query** – stored history plus session clicks, encoded by DGSR.
-2. **Retrieval** – four optional, individually timed sources:
-   `dgsr_personalized` (Qdrant ANN, 250 ms budget, circuit breaker with
-   in-memory fallback), `session_neighbors`, `popular_in_category`, `trending`.
-3. **Eligibility** – one query against the servable catalogue for all sources.
-4. **Scoring** – `0.85 × DGSR percentile + 0.05 × popularity percentile + 0.10 × source agreement`.
-5. **Diversity** – MMR re-ranking (default 0.25, per-request `diversity` 0–1),
-   then the tenant's policy rules.
-6. **Guarantee** – short lists are topped up from the shopper's last good list
-   in Redis, then the tenant-popular tier.
-
-Items carry `reason` (`because_you_viewed`, `picked_for_you`,
-`popular_in_category`, `trending`, `recently_recommended`), `sources`,
-`anchor_product_id` and `score`. Set `explain: true` for per-stage counts,
-timings, source status and a per-candidate score breakdown.
-
-Offline replay (`scripts/eval_serving.py`, MovieLens, 3,000 held-out users)
-against a plain DGSR Top-K baseline:
-
-| Metric | DGSR Top-K | Glass-box |
-|---|---|---|
-| Recall@10 | 0.102 | 0.109 |
-| NDCG@10 | 0.054 | 0.057 |
-| Intra-list diversity | 0.60 | 0.68 |
-| Catalogue coverage | 0.28 | 0.26 |
-
-Full results: `docs/serving_eval_movielens.json`.
-
-### Beauty end-to-end run
-
-`tests/e2e/USER_STORIES.md` writes every SRS role as user stories and
-`tests/e2e/beauty_e2e.py` executes them against a live stack with the Amazon
-Beauty log and the notebook's checkpoint (71 clauses: registration, invited
-developer, storefront credential, 394,908-event upload, artifact import,
-activation, rollback, archive, recommendations that match
-`recommendations_user_0.csv`, session and fallback behaviour, P95 latency,
-feedback, tenant isolation, platform operations):
-
-The reference storefront is **Reel** (`apps/reel-storefront`, MovieLens; see its README).
-It shows a reason line on every tile, a diversity slider, a **Pipeline** tab in
-the insight drawer (funnel, source status, candidate scores) and a **Reset
-guest** button that starts an anonymous session over.
-The earlier Facet storefront is archived in `archive/demo-storefront` (D-09).
-
-```bash
-mkdir -p model_artifacts/dgsr_beauty_t4_v2   # best.pt, config.json, id_maps.json, interactions.npz, final_metrics.json
-docker compose up -d --build
-python tests/e2e/beauty_e2e.py --platform-token "$PLATFORM_ADMIN_TOKEN" --write-storefront-env
-cd archive/demo-storefront && python scripts/verify_personalization.py   # archived Facet storefront (D-09)
+```
+            ┌──────────────────┐       ┌──────────────────┐
+            │  Storefront /    │       │  React Admin     │
+            │  Python SDK      │       │  Dashboard       │
+            └────────┬─────────┘       └────────┬─────────┘
+                     │   REST (API key / JWT)   │
+                     └────────────┬─────────────┘
+                                  ▼
+                      ┌──────────────────────┐
+                      │   FastAPI backend    │
+                      │  auth · tenants ·    │
+                      │  events · recs       │
+                      └───┬──────────────┬───┘
+                          │              │
+                ┌─────────▼───┐   ┌──────▼────────┐
+                │ PostgreSQL  │   │    Qdrant     │
+                │ tenants,    │   │  embeddings,  │
+                │ items,      │   │  ANN search   │
+                │ interactions│   └──────▲────────┘
+                └─────────┬───┘          │
+                          │       ┌──────┴────────┐
+                          └──────►│  DGSR model   │
+                                  │ (train/infer) │
+                                  └───────────────┘
 ```
 
-## Account setup
+## Tech stack
 
-Registration creates an *invited* administrator and returns a one-time
-`setup_token` in the `201` response only. The console shows it once as a setup
-link (`/setup#token=…`, kept in the URL fragment so it never reaches a
-server log); `POST /v1/auth/setup-password` takes `{setup_token, password,
-email?}`, activates the account once, and answers every rejection with
-`401 invalid_setup_token`. Tokens expire after
-`ACCOUNT_SETUP_TOKEN_TTL_SECONDS` (24 hours by default), are stored only as a
-SHA-256 hash, and are revoked when a new one is issued. An idempotent
-registration replay never returns the token again; issue a fresh one with:
-
-```bash
-docker compose exec api python -m scripts.issue_account_setup_token admin@example.org
-```
-
-## Permissions
-
-Every tenant route checks the credential's scope and answers `403
-insufficient_scope` when it is missing. `tenant_administrator` holds all
-tenant scopes including `users:write` and `billing:write` (plan requests;
-console only, never delegable to API keys); `tenant_developer` holds `keys:write`,
-`catalog:*`, `events:*` and `training:read`. Access tokens carry the scopes
-granted at login, so sign in again after a role or scope change. API keys are
-limited to the scopes the creating role may delegate (administrators: all 14
-API-key scopes; developers: catalog, events and `recommendations:read`, enough
-to connect a store).
-
-## Local sign-in demonstration
-
-Create a separate local-only demo credential, then sign in through the
-documented endpoint:
-
-```bash
-docker compose --env-file .env.example --profile demo run --rm demo-account
-```
-
-- Email: the `DEMO_LOGIN_EMAIL` value in `.env` (example default:
-  `demo-admin@example.org`)
-- Password: the `DEMO_LOGIN_PASSWORD` value in `.env`
-
-The bootstrap is not a public setup endpoint and must not be enabled on a VPS.
-
-The registration contract intentionally asks only for a business name and
-administrator email; the password is chosen later on the setup page with the
-one-time token.
-
-## Operator console
-
-`web/` is the operator console (React 19, Vite, TypeScript) built from
-the Modernist design prototype kept under `web/design/`. It talks to
-the API through the nginx `/v1/` proxy in Compose, or the Vite dev proxy
-locally. See `web/README.md` for the route map, which prototype
-screens are not backed by the API, and how to run it against a bare uvicorn.
-
-- Tenant realm: `/login`, `/register`, `/setup`, then `/home`, `/credentials`,
-  `/integration`, `/account`, `/products`, `/products/sync`, `/events/submit`,
-  `/submissions/:id`, `/datasets`, `/training`, `/models`, `/usage`,
-  `/service-status`. Navigation and route gates are derived from the scopes
-  the login returns.
-- Platform realm: `/admin/login` (operator accounts; `PLATFORM_ADMIN_TOKEN`
-  bootstraps the first one), then `/admin/status`, `/admin/tenants`,
-  `/admin/plans`, `/admin/plan-requests`, `/admin/audit`.
-- Public: marketing and pricing pages, and the developer docs under `/docs`.
-
-## Plans and plan requests
-
-GraphRec takes no payments. A tenant administrator requests Free demo, Basic or
-Pro (**Usage & Quotas → Change plan**, or **Request** on the pricing page); a
-platform operator approves or rejects it on **Plan requests** with a reason
-that the tenant sees and the audit trail records. Approval activates the plan
-in the same transaction. One request may be pending per tenant; approving a
-plan below current usage needs `acknowledge_below_usage`.
-
-| Who | Endpoint |
+| Layer | Technology |
 |---|---|
-| Tenant | `GET/POST /v1/subscription/requests`, `POST /v1/subscription/requests/{id}:cancel` |
-| Operator | `GET /v1/platform/plan-requests?status=…`, `POST /v1/platform/plan-requests/{id}:approve` / `:reject` |
+| Backend API | FastAPI, Python |
+| Frontend | React |
+| Database | PostgreSQL |
+| Vector store | Qdrant |
+| Model | DGSR (PyTorch) |
+| Deployment | Docker Compose |
 
-## Automation, rules, trends and capacity (XR-F-02/03/04/07/08)
+## Quick start
 
-| Feature | Endpoint | Read scope | Write scope | Console |
-|---|---|---|---|---|
-| Scheduled + event-triggered retraining (XR-F-02/03) | `GET/PUT /v1/retraining-policy` | `training:read` | `training:write` | Training → Automatic retraining |
-| Diversity / freshness rules (XR-F-04) | `GET/PUT /v1/recommendation-policy` | `models:read` | `models:deploy` | Models → Recommendation Rules |
-| Usage trends (XR-F-07) | `GET /v1/usage/trends?granularity=hour\|day\|week&start=&end=&types=` | `usage:read` | – | Usage & Quotas → Usage trends |
-| Serving capacity (XR-F-08) | `GET /v1/deployment/scaling` | `deployments:read` | – (controller) | Service Status → Serving capacity |
+### Prerequisites
 
-All four are tenant-scoped exactly like the rest of the API: the tenant comes
-from the credential, tables use row-level security, and the background
-`scheduler` service discovers work through `SECURITY DEFINER` functions that
-return tenant ids only.
+- Docker and Docker Compose
+- Git
 
-* **Retraining.** One policy per tenant: a fixed interval (minimum
-  `RETRAINING_MIN_INTERVAL_MINUTES`, default 60) and/or a threshold of events
-  accepted since the latest training job started. The `scheduler` service
-  evaluates policies every `SCHEDULER_TICK_SECONDS` and requests training
-  through the normal training path, so cooldown, quota, data sufficiency and
-  one-active-job rules apply (XR-NF-03). Each schedule slot and each event
-  condition uses a deterministic request id, so it can start at most one job.
-  New versions are `eligible`; activation remains manual.
-* **Rules.** Optional category cap and freshness boost
-  (`score = (1-w)·relevance + w·0.5^(age/half_life)`, `w ≤ 0.3`). Rules only
-  reorder eligible, non-excluded products. Each change bumps a `version`, and
-  responses report `applied_rules` and `rules_version` (XR-NF-02).
-* **Trends.** Sums from the append-only usage ledger in UTC buckets (weeks
-  start Monday). Empty buckets are zero. Hourly ranges are capped at 31 days,
-  daily at 366 and weekly at 104 weeks.
-* **Capacity.** Each tenant with an active model has 1 to
-  `maximum_inference_replicas` logical serving units. Each unit is worth
-  `ceil(concurrent_recommendation_requests / maximum_inference_replicas)`
-  concurrent slots, and `require_capacity` enforces them. The controller
-  scales up at once to `ceil(rpm / CAPACITY_TARGET_RPM_PER_REPLICA)` and
-  scales down only after `CAPACITY_SCALE_DOWN_STABILIZATION_SECONDS`. Every
-  change is a `capacity_event`. **Limitation:** there is no orchestrator here,
-  so serving stays in-process. An orchestrator adapter would consume
-  `desired_capacity`.
+### Run the stack
 
-Configuration (environment variables, also listed in `.env.example`):
+```bash
+git clone https://github.com/<your-username>/GraphRec.git
+cd GraphRec
+cp .env.example .env        # edit secrets and ports as needed
+docker compose up -d --build
+```
 
-| Variable | Default | Range | Purpose |
-|---|---|---|---|
-| `TRAINING_COOLDOWN_SECONDS` | 60 | 0–86400 | Minimum gap between training requests per tenant (409 `training_cooldown`) |
-| `RETRAINING_MIN_INTERVAL_MINUTES` | 60 | 1–43200 | Lower bound for a scheduled retraining interval |
-| `SCHEDULER_TICK_SECONDS` | 15 | 1–3600 | How often the scheduler evaluates retraining policies and capacity |
-| `CAPACITY_TARGET_RPM_PER_REPLICA` | 120 | ≥1 | Requests per minute one serving replica is sized for |
-| `CAPACITY_SCALE_DOWN_STABILIZATION_SECONDS` | 120 | 0–86400 | Quiet period before capacity scales down |
+Once running:
 
-Lower values (for example 2 / 10 / 30 / 60) are useful for local testing only;
-do not commit them.
+| Service | URL |
+|---|---|
+| API | http://localhost:8000 |
+| Interactive API docs | http://localhost:8000/docs |
+| Admin dashboard | http://localhost:<frontend-port> |
+| Qdrant | http://localhost:6333 |
 
-## Recommendation admission control (D16)
+### Environment variables
 
-GraphRec now requires **Redis** (`redis:7.4.2-alpine`, the compose service is `redis`). It holds the
-shared recommendation limits, so every API process and replica enforces one limit per tenant.
-Each check is a single atomic Lua call, with no application lock, so concurrent requests are not serialized:
+| Variable | Description |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `QDRANT_URL` | Qdrant endpoint |
+| `JWT_SECRET` | Secret used to sign admin tokens |
+| `<...>` | `<add remaining variables from .env.example>` |
 
-| Limit | Redis structure | Behaviour |
+## Python SDK
+
+```bash
+pip install -e ./sdk
+```
+
+```python
+from graphrec import GraphRecClient
+
+client = GraphRecClient(base_url="http://localhost:8000", api_key="YOUR_TENANT_KEY")
+
+# Send an interaction
+client.events.track(user_id="u_42", item_id="movie_318", event="view")
+
+# Get recommendations
+recs = client.recommendations.for_user("u_42", k=10)
+for r in recs:
+    print(r.item_id, r.score)
+```
+
+The SDK covers all three API surfaces:
+
+- **Storefront** — track events, fetch recommendations
+- **Tenant admin** — manage catalog, API keys, training
+- **Platform admin** — manage tenants and users
+
+## API overview
+
+| Area | Example endpoints | Auth |
 |---|---|---|
-| `requests_per_minute` | sorted set `gr:rl:{tenant}:recs` (exact sliding window) | 429 "The recommendation request rate limit has been reached." with `Retry-After` |
-| `recommendation_requests` (monthly) | counter `gr:q:{tenant}:recommendation_requests:{YYYYMM}`, seeded from the usage ledger | 429 when exhausted; refunded if the request is not served |
-| `concurrent_recommendation_requests` | leased semaphore `gr:slots:{tenant}`; slot count = XR-F-08 `serving_slots` | waits up to `SLOT_WAIT_MS`, then 429 "Concurrent recommendation capacity is in use."; leases expire after `SLOT_LEASE_SECONDS` |
+| Storefront | `POST /events`, `GET /recommendations/{user_id}` | Tenant API key |
+| Tenant admin | `/tenant/items`, `/tenant/keys`, `/tenant/train` | Tenant admin JWT |
+| Platform admin | `/admin/tenants`, `/admin/users` | Platform admin JWT |
 
-Every recommendation response carries `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`.
+Full, always-current reference: **`/docs`** (Swagger UI) on a running instance.
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `REDIS_URL` | `redis://redis:6379/0` | Shared admission store |
-| `REDIS_TIMEOUT_MS` | 30 | Connect and read timeout for each Redis call |
-| `SLOT_WAIT_MS` | 100 | How long a request waits for a free concurrency slot |
-| `SLOT_LEASE_SECONDS` | 30 | Lease length; a crashed request's slot is reclaimed after this |
+## The model: DGSR
 
-**Fail-open.** If Redis errors or times out, recommendations are still served:
+GraphRec uses a from-scratch reimplementation of **DGSR**:
 
-- The first failure opens a circuit breaker. Requests then use a per-process limiter with the same plan
-  limits, so ER-F-09 still holds within each process, and never wait on Redis.
-- A background probe checks Redis every second and switches back on the first successful `PING`.
-- The outage is logged (`admission control: Redis unavailable …`), and `fail_open_total` counts the
-  requests admitted without the shared store.
-- `/v1/deployment`, `/v1/platform/status` and the console's Service Status (Admission control panel)
-  report the store as `degraded` until it recovers.
+1. Interactions become a **dynamic user–item graph**, where every edge carries its timestamp/order.
+2. For each user, a sub-graph of their recent history and related items is sampled.
+3. **Dynamic graph recurrent layers** propagate information along time-ordered edges, capturing both long-term taste and short-term intent.
+4. The resulting embeddings score candidate items; top-K are returned, with Qdrant handling fast retrieval.
 
-Limitations:
+The demo is trained on **MovieLens**.
 
-- While Redis is down, each API replica enforces the limits on its own.
-- The first request after Redis disappears can wait for one connection or name-resolution timeout. This
-  was about 5.5 s for a stopped container in Docker.
+## Project structure
 
-**Plan limits** are data (`pricing_plans.limits`), editable per plan with `PUT /v1/platform/plans/{id}`, and
-tenant overrides (`POST /v1/platform/tenants/{id}/quotas`) still apply on top. Defaults after migration 0031:
-
-| Plan | Concurrent slots | Requests per minute | Max replicas |
-|---|---|---|---|
-| free | 8 | 120 | 1 |
-| basic | 12 | 300 | 2 |
-| pro | 30 | 1,000 | 3 |
-
-## Run locally
-
-```bash
-cp .env.example .env
-docker compose up --build
+```
+GraphRec/
+├── backend/          # FastAPI app (routes, services, models)
+├── frontend/         # React admin dashboard
+├── sdk/              # Python SDK
+├── model/            # DGSR training & inference
+├── demo/             # E-commerce storefront demo
+├── docker-compose.yml
+└── README.md
 ```
 
-Open `http://localhost:5180/register` to create a tenant; the response shows
-the one-time setup link, which activates the administrator at `/setup` and
-signs you in. Returning users sign in at `http://localhost:5180/login`.
-**Usage & Quotas** shows the reconciled current-period usage against plan
-limits; **API Credentials** creates, inspects, rotates and revokes a scoped
-server credential. One-time secrets must be saved before closing their
-confirmation view. The API health check is available at
-`http://localhost:8010/healthz` for local operations only. Both host ports are
-configurable in `.env`.
+## Roadmap
 
-For frontend development without rebuilding the image:
+- [ ] Real-time incremental model updates
+- [ ] A/B testing for recommendation strategies
+- [ ] More recommendation surfaces (similar items, trending)
+- [ ] Published SDK on PyPI
 
-```bash
-cd web
-npm install
-npm run dev        # http://localhost:5173, proxies /v1 to http://localhost:8010
-```
+## Acknowledgements
 
-## Deploy
+- Supervisor: **Dr. Rezvi Shahariar**, Associate Professor, IIT, University of Dhaka
+- DGSR: Zhang et al., *Dynamic Graph Neural Networks for Sequential Recommendation*, IEEE TKDE 2022
+- Dataset: [MovieLens](https://grouplens.org/datasets/movielens/) by GroupLens Research
 
-`docker-compose.prod.yml` and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) cover a
-single-VM deployment. `.github/workflows/cd.yml` deploys every push to `main`
-to a GCP VM over SSH (secrets `VM_HOST`, `VM_USER`, `VM_SSH_KEY`) and rebuilds
-the Compose stack; `ci.yml` runs tests, e2e, `pip-audit`, `npm audit` and Trivy.
+## Author
 
-Set `PUBLIC_ORIGIN` (e.g. `https://graphrec.example.com`) to serve the home
-page, docs and consoles from one domain: page requests made to any other
-address, such as the VM IP, are redirected there. Cloudflare tunnel requests,
-`/v1`, health and asset paths are never redirected. Empty by default.
+**Hasin Ahmed** — BSSE, IIT, University of Dhaka
+<GitHub / LinkedIn links>
 
-## Verify
+## License
 
-```bash
-docker compose --profile test run --rm api-test       # backend unit + integration
-docker compose --profile test run --rm frontend-test  # console unit tests, build, npm audit
-cd web && E2E_BASE_URL=http://localhost:5180 npx playwright test   # browser suite
-```
-
-Current suite: 348 backend, 386 SDK, 28 Reel storefront, 93 web unit and 23
-Playwright tests.
-
-Or, for the console alone: `cd web && npm test -- --run && npm run build`.
-
-`GraphRec_Complete_SRS.md` is the in-repo specification. Integration tests
-require the Compose PostgreSQL database; the unit tests run without it.
-
-## SDKs
-
-The Python SDK (`sdks/python`, `graphrec-sdk` 1.x) covers every API route,
-grouped by audience (`client.storefront`, `client.tenant`, `client.platform`),
-with retries, body-size splitting, e-commerce helpers, `explain` / `diversity`
-on recommendations, and plan requests (`tenant.subscription.request_plan()`,
-`platform.plan_requests.approve()`). Its reference is generated from the source
-and published at `/docs/sdk`. See
-[`sdks/python/README.md`](sdks/python/README.md). It has an end-to-end smoke test
-for the Compose stack and a live integration suite (`tests/integration/test_sdk_live.py`).
+`<MIT / your choice>` — see [LICENSE](LICENSE).
