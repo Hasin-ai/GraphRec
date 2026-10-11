@@ -30,8 +30,10 @@ services:
     environment:
       GRAPHREC_BASE_URL: http://api:8000
       REDIS_URL: redis://redis:6379/0
-      # Browser-visible bucket URL; set it to "" to turn covers off.
-      REEL_COVERS_BASE_URL: ${REEL_COVERS_BASE_URL-http://localhost:${RUSTFS_PORT:-9000}/reel-covers}
+      # "/reel-covers": the storefront serves covers itself from the bucket (works on any host).
+      # A full URL (http://host:9000/reel-covers) sends browsers to RustFS directly; "" turns covers off.
+      REEL_COVERS_BASE_URL: ${REEL_COVERS_BASE_URL-/reel-covers}
+      REEL_COVERS_ORIGIN: http://rustfs:9000/reel-covers
     ports:
       - "${REEL_PORT:-5290}:5290"
     volumes:

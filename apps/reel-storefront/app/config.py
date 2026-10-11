@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     #: e.g. http://localhost:9000/reel-covers. Empty = no covers (tiles keep the coloured placeholder).
     #: The objects are listed in data/covers.json (film id -> object key), written by scripts/upload_covers.py.
     reel_covers_base_url: str = ""
+    #: Where the storefront itself fetches covers when REEL_COVERS_BASE_URL is a path on this site
+    #: (e.g. "/reel-covers"): the bucket URL on the Docker network. Lets covers load without exposing RustFS.
+    reel_covers_origin: str = "http://rustfs:9000/reel-covers"
 
     graphrec_timeout_seconds: float = 5.0
     graphrec_max_retries: int = 1

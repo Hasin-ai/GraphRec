@@ -11,6 +11,7 @@ from typing import AsyncIterator, Optional
 from fastapi import APIRouter, FastAPI, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.background import BackgroundTask
 
 from .config import Settings, get_settings
 from .dependencies import (
@@ -177,6 +178,33 @@ def create_app(settings: Optional[Settings] = None, svc: Optional[Services] = No
                 secure=cfg.reel_cookie_secure,
             )
         return response
+
+    # Film covers, same-origin: /reel-covers/<imdb>.jpg is streamed from the RustFS bucket.
+    if cfg.reel_covers_base_url.startswith("/"):
+        import re as _re
+        import httpx
+        from fastapi.responses import StreamingResponse
+
+        covers_path = cfg.reel_covers_base_url.rstrip("/")
+        covers_http = httpx.AsyncClient(timeout=10.0)
+        cover_name = _re.compile(r"^[0-9]{7,8}\.jpg$")
+
+        @app.get(covers_path + "/{name}", include_in_schema=False)
+        async def cover(name: str):
+            if not cover_name.match(name):
+                return error_response(404, "not_found", "Unknown cover.")
+            try:
+                upstream = await covers_http.send(
+                    covers_http.build_request("GET", f"{cfg.reel_covers_origin.rstrip('/')}/{name}"), stream=True)
+            except httpx.HTTPError:
+                return error_response(502, "covers_unavailable", "Cover storage is unreachable.")
+            if upstream.status_code != 200:
+                await upstream.aclose()
+                return error_response(404, "not_found", "Unknown cover.")
+            return StreamingResponse(
+                upstream.aiter_bytes(), media_type="image/jpeg",
+                headers={"Cache-Control": "public, max-age=604800"},
+                background=BackgroundTask(upstream.aclose))
 
     # Operational Health Endpoints
     @app.get("/healthz", include_in_schema=False)
