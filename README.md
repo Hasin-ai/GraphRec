@@ -6,12 +6,6 @@
 
 Plug personalized, session-aware recommendations into any storefront through a simple REST API or Python SDK, powered by Dynamic Graph Neural Networks (DGSR).
 
-![Python](https://img.shields.io/badge/python-3.11+-blue)
-![FastAPI](https://img.shields.io/badge/backend-FastAPI-009688)
-![React](https://img.shields.io/badge/frontend-React-61DAFB)
-![PostgreSQL](https://img.shields.io/badge/db-PostgreSQL-336791)
-![Qdrant](https://img.shields.io/badge/vectors-Qdrant-DC244C)
-![Docker](https://img.shields.io/badge/deploy-Docker%20Compose-2496ED)
 
 [Features](#features) · [Architecture](#architecture) · [Quick start](#quick-start) · [SDK](#python-sdk) · [API](#api-overview) · [Model](#the-model-dgsr)
 
@@ -187,8 +181,6 @@ GraphRec/
 ## Author
 
 **Hasin Ahmed** — BSSE, IIT, University of Dhaka
-<GitHub / LinkedIn links>
-
 ## License
 
 `<MIT / your choice>` — see [LICENSE](LICENSE).
