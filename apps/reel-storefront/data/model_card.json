@@ -1,0 +1,27 @@
+{
+  "dataset": "MovieLens 32M",
+  "checkpointSha256": "98aa3f2487daf20b8366869cda984802cfb0d47eb48a0f7548a31167222b13e0",
+  "users": 3011,
+  "films": 7951,
+  "interactions": 454196,
+  "embeddingDim": 50,
+  "layers": 2,
+  "recentItems": 20,
+  "itemNeighborLimit": 5,
+  "metrics": [
+    {
+      "protocol": "Sampled: 1 target vs 100 random negatives",
+      "source": "final_metrics.json",
+      "hit10": 0.8313,
+      "ndcg10": 0.5842,
+      "note": "Popularity alone reaches 0.576 Hit@10 on this protocol."
+    },
+    {
+      "protocol": "Full catalogue (~7,803 candidates)",
+      "source": "DGSR_MovieLens_inference_report.md section 5.1",
+      "recall10": 0.1245,
+      "mrr": 0.0582,
+      "note": "Popularity baseline 3.35% Recall@10."
+    }
+  ]
+}

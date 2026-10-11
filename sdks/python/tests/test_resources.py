@@ -32,6 +32,15 @@ class Case:
 BEARER = {"api_key": None, "access_token": "jwt"}
 PLATFORM = {"api_key": None, "access_token": "platform-admin-token-0123456789abcdef"}
 EXPIRES = datetime(2030, 1, 1, tzinfo=timezone.utc)
+PLAN_REQUEST = {
+    "id": fx.UUID_A, "status": "pending", "current_plan_code": "free", "current_plan_name": "Free demo",
+    "requested_plan_code": "basic", "requested_plan_name": "Basic", "message": "Launch week",
+    "decision_reason": None, "created_at": fx.NOW, "decided_at": None,
+}
+PLATFORM_PLAN_REQUEST = {
+    **PLAN_REQUEST, "tenant_id": fx.UUID_B, "tenant_slug": "shop", "tenant_name": "Shop",
+    "requested_plan_id": fx.UUID_B, "active_plan_code": "free",
+}
 
 
 def _eq(expected: Dict[str, Any]) -> Callable[[Any], None]:
@@ -56,6 +65,85 @@ CASES: List[Case] = [
         {"status": "ok"},
         lambda c: c.health(),
         check=lambda r: r == {"status": "ok"},
+    ),
+    Case(
+        "auth.refresh",
+        "/v1/auth/refresh",
+        fx.tokens(),
+        lambda c: c.tenant.auth.refresh(refresh_token="r1"),
+        body=lambda b: b == {"refresh_token": "r1"},
+        check=lambda r: r.access_token == "access-1",
+    ),
+    Case(
+        "health.ready",
+        "/readyz",
+        {"status": "ready", "version": "1.1.0", "checks": {}},
+        lambda c: c.ready(),
+        check=lambda r: r["status"] == "ready",
+    ),
+    Case(
+        "account.status",
+        "/v1/tenant/status",
+        {"tenant_id": fx.UUID_A, "name": "Shop", "status": "suspended", "message": "Suspended.",
+         "restricted_session": True, "created_at": fx.NOW},
+        lambda c: c.tenant.account.status(),
+        check=lambda r: r.status == "suspended" and r.restricted_session,
+        client_kwargs=BEARER,
+    ),
+    Case(
+        "operators.login",
+        "/v1/platform/auth/login",
+        {"access_token": "op-token", "token_type": "Bearer", "expires_in": 3600, "operator_id": fx.UUID_A,
+         "email": "ops@shop.test", "display_name": "Ops", "roles": ["audit"]},
+        lambda c: c.platform.operators.login(email="ops@shop.test", password="pw"),
+        body=lambda b: b == {"email": "ops@shop.test", "password": "pw"},
+        check=lambda r: r.roles == ["audit"],
+    ),
+    Case(
+        "operators.me",
+        "/v1/platform/me",
+        {"operator_id": fx.UUID_A, "email": "ops@shop.test", "roles": ["audit"], "kind": "operator"},
+        lambda c: c.platform.operators.me(),
+        client_kwargs=PLATFORM,
+    ),
+    Case(
+        "operators.list",
+        "/v1/platform/operators",
+        {"items": []},
+        lambda c: c.platform.operators.list(),
+        client_kwargs=PLATFORM,
+    ),
+    Case(
+        "operators.create",
+        "/v1/platform/operators",
+        {"id": fx.UUID_A, "email": "ops@shop.test", "display_name": "Ops", "roles": ["audit"], "status": "active",
+         "created_at": fx.NOW, "last_login_at": None},
+        lambda c: c.platform.operators.create(email="ops@shop.test", display_name="Ops", password="x" * 12, roles=["audit"]),
+        client_kwargs=PLATFORM,
+    ),
+    Case(
+        "operators.update",
+        f"/v1/platform/operators/{fx.UUID_A}",
+        {"id": fx.UUID_A, "email": "ops@shop.test", "display_name": "Ops", "roles": ["audit"], "status": "disabled",
+         "created_at": fx.NOW, "last_login_at": None},
+        lambda c: c.platform.operators.update(fx.UUID_A, status="disabled"),
+        body=lambda b: b == {"status": "disabled"},
+        client_kwargs=PLATFORM,
+    ),
+    Case(
+        "meta.plans",
+        "/v1/plans",
+        {"items": [{"code": "free", "name": "Free", "limits": {"stored_products": 5000}}]},
+        lambda c: c.plans(),
+        check=lambda r: r["items"][0]["code"] == "free",
+    ),
+    Case(
+        "meta.get",
+        "/v1/meta",
+        {"product": "GraphRec", "version": "1.1.0", "environment": "development",
+         "features": {"development_placeholders": True}},
+        lambda c: c.meta(),
+        check=lambda r: r["version"] == "1.1.0",
     ),
     Case(
         "tenants.register",
@@ -275,6 +363,14 @@ CASES: List[Case] = [
         check=lambda r: r.accepted_count == 2 and len(r.batches) == 1,
     ),
     Case(
+        "events.list",
+        "/v1/events",
+        [{"event_id": "e1", "event_type": "view", "user_id": "u1", "external_product_id": "sku-1",
+          "context": {}, "occurred_at": "2026-10-07T00:00:00Z", "created_at": "2026-10-07T00:00:01Z"}],
+        lambda c: c.storefront.events.list(limit=10, user_id="u1"),
+        check=lambda r: len(r) == 1 and r[0].event_id == "e1",
+    ),
+    Case(
         "events.list_batches",
         "/v1/events/batches",
         [fx.event_batch()],
@@ -350,7 +446,7 @@ CASES: List[Case] = [
     ),
     Case(
         "model_versions.rollback",
-        f"/v1/models/{fx.UUID_B}:rollback",
+        f"/v1/model-versions/{fx.UUID_B}:rollback",
         fx.model_version("active"),
         lambda c: c.tenant.model_versions.rollback(fx.UUID_B),
     ),
@@ -548,8 +644,8 @@ CASES: List[Case] = [
             "status": "suspended",
             "created_at": fx.NOW,
         },
-        lambda c: c.platform.tenants.set_status(fx.UUID_A, g.TenantStatus.SUSPENDED),
-        body=_eq({"status": "suspended"}),
+        lambda c: c.platform.tenants.set_status(fx.UUID_A, g.TenantStatus.SUSPENDED, reason="Abuse report"),
+        body=_eq({"status": "suspended", "reason": "Abuse report"}),
         client_kwargs=PLATFORM,
     ),
     Case(
@@ -574,6 +670,56 @@ CASES: List[Case] = [
         {"id": fx.UUID_A, "code": "free", "name": "Free", "limits": {"accepted_events": 100}, "is_active": True},
         lambda c: c.platform.plans.update(fx.UUID_A, name="Free", limits={"accepted_events": 100}, is_active=True),
         body=_eq({"name": "Free", "limits": {"accepted_events": 100}, "is_active": True}),
+        client_kwargs=PLATFORM,
+    ),
+    Case(
+        "subscription.list_requests",
+        "/v1/subscription/requests",
+        {"items": [PLAN_REQUEST], "pending": PLAN_REQUEST},
+        lambda c: c.tenant.subscription.list_requests(),
+        check=lambda r: r.pending is not None and r.pending.is_pending and r.items[0].requested_plan_code == "basic",
+    ),
+    Case(
+        "subscription.request_plan",
+        "/v1/subscription/requests",
+        PLAN_REQUEST,
+        lambda c: c.tenant.subscription.request_plan("basic", message=" Launch week "),
+        body=_eq({"plan_code": "basic", "message": "Launch week"}),
+        check=lambda r: r.status == "pending",
+        client_kwargs=BEARER,
+    ),
+    Case(
+        "subscription.cancel_request",
+        f"/v1/subscription/requests/{fx.UUID_A}:cancel",
+        {**PLAN_REQUEST, "status": "cancelled", "decided_at": fx.NOW},
+        lambda c: c.tenant.subscription.cancel_request(fx.UUID_A),
+        check=lambda r: r.status == "cancelled",
+        client_kwargs=BEARER,
+    ),
+    Case(
+        "platform.list_plan_requests",
+        "/v1/platform/plan-requests",
+        {"items": [PLATFORM_PLAN_REQUEST], "pending_count": 1},
+        lambda c: c.platform.plan_requests.list(status="pending"),
+        check=lambda r: r.pending_count == 1 and r.items[0].tenant_slug == "shop",
+        client_kwargs=PLATFORM,
+    ),
+    Case(
+        "platform.approve_plan_request",
+        f"/v1/platform/plan-requests/{fx.UUID_A}:approve",
+        {"request": {**PLATFORM_PLAN_REQUEST, "status": "approved", "decided_at": fx.NOW}, "warnings": []},
+        lambda c: c.platform.plan_requests.approve(fx.UUID_A, reason="Approved for launch"),
+        body=_eq({"reason": "Approved for launch"}),
+        check=lambda r: r.request.status == "approved",
+        client_kwargs=PLATFORM,
+    ),
+    Case(
+        "platform.reject_plan_request",
+        f"/v1/platform/plan-requests/{fx.UUID_A}:reject",
+        {"request": {**PLATFORM_PLAN_REQUEST, "status": "rejected", "decided_at": fx.NOW}, "warnings": []},
+        lambda c: c.platform.plan_requests.reject(fx.UUID_A, reason="Start with Basic"),
+        body=_eq({"reason": "Start with Basic"}),
+        check=lambda r: r.request.status == "rejected",
         client_kwargs=PLATFORM,
     ),
     Case(
@@ -662,6 +808,51 @@ CASES: List[Case] = [
         lambda c: c.tenant.auth.logout(),
         check=lambda r: r is None,
         client_kwargs=BEARER,
+    ),
+    Case(
+        "tenant_users.get",
+        f"/v1/tenant/users/{fx.UUID_A}",
+        fx.tenant_user(),
+        lambda c: c.tenant.users.get(fx.UUID_A),
+        check=lambda r: str(r.id) == fx.UUID_A,
+        client_kwargs=BEARER,
+    ),
+    Case(
+        "tenant_users.update",
+        f"/v1/tenant/users/{fx.UUID_A}",
+        fx.tenant_user(status="locked"),
+        lambda c: c.tenant.users.update(fx.UUID_A, status="locked", reason="Left the team"),
+        body=lambda b: b == {"status": "locked", "reason": "Left the team"},
+        check=lambda r: r.status == "locked",
+        client_kwargs=BEARER,
+    ),
+    Case(
+        "tenant_users.resend_invitation",
+        f"/v1/tenant/users/{fx.UUID_A}/invitation:resend",
+        fx.tenant_user(invited=True),
+        lambda c: c.tenant.users.resend_invitation(fx.UUID_A),
+        check=lambda r: bool(r.setup_token),
+        client_kwargs=BEARER,
+    ),
+    Case(
+        "audit.list",
+        "/v1/audit",
+        {"items": [{"id": fx.UUID_A, "occurred_at": fx.NOW, "action_type": "tenant_user_updated",
+                    "resource_type": "tenant_user", "outcome": "success", "actor_type": "platform_operator",
+                    "reason": "Pilot"}], "next_before": None},
+        lambda c: c.tenant.audit.list(action="tenant_user_updated"),
+        check=lambda r: r.items[0].actor_reference is None and r.items[0].reason == "Pilot",
+        client_kwargs=BEARER,
+    ),
+    Case(
+        "platform.list_usage",
+        "/v1/platform/usage",
+        {"items": [{"tenant_id": fx.UUID_A, "name": "Shop", "status": "active", "plan_code": "free",
+                    "dimensions": [{"type": "stored_products", "used": 3, "limit": 1000}]},
+                   {"tenant_id": fx.UUID_B, "name": "Other", "status": "active", "unavailable": True}]},
+        lambda c: c.platform.list_usage(),
+        check=lambda r: r.items[0].dimensions[0].used == 3 and r.items[1].unavailable,
+        client_kwargs=PLATFORM,
     ),
     Case(
         "tenant_users.revoke_invitation",
@@ -1015,8 +1206,9 @@ def test_required_scopes() -> None:
         for route in g.ROUTES.values()
         if route.auth != "none"
         and not route.key.startswith("platform.")
-        # Logout only needs a signed-in user, whatever their scopes.
-        and route.key != "auth.logout"
+        # Logout and the workspace status only need a signed-in user, whatever their scopes.
+        and route.key not in {"auth.logout", "account.status"}
+        and not route.key.startswith("operators.")
     ]
     assert tenant_routes and all(route.scope_enforced for route in tenant_routes)
     # A role delegates API-key-compatible scopes only. It need not hold every
@@ -1052,6 +1244,19 @@ def test_usage_trends_query(api: MockAPI, sleeps: List[float]) -> None:
             client.tenant.usage.trends(granularity="month")
         with pytest.raises(g.InputValidationError):
             client.tenant.usage.trends(start=datetime(2026, 9, 2), end=datetime(2026, 9, 1))
+
+
+def test_uc_24_usage_period_query(api: MockAPI, sleeps: List[float]) -> None:
+    api.on("GET", "/v1/usage", {"period_start": fx.NOW, "period_end": "2026-10-01T00:00:00Z",
+                                "reset_at": "2026-10-01T00:00:00Z", "dimensions": [], "last_reconciled_at": fx.NOW,
+                                "project_defaults": False, "current_period": False})
+    with make_client(api, sleeps, **BEARER) as client:
+        assert client.tenant.usage.get(period="2026-08").current_period is False
+        assert api.last().request.url.params["period"] == "2026-08"
+        client.tenant.usage.get()
+        assert "period" not in api.last().request.url.params
+        with pytest.raises(g.InputValidationError):
+            client.tenant.usage.get(period="last-month")
 
 
 def test_scaling_limit_is_validated(api: MockAPI, sleeps: List[float]) -> None:

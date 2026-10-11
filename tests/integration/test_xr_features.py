@@ -1,7 +1,6 @@
 """API and isolation tests for XR-F-02/03 (retraining), XR-F-04 (rules),
 XR-F-07 (usage trends) and XR-F-08 (serving capacity)."""
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
@@ -86,6 +85,7 @@ def test_retraining_policy_permissions_validation_and_isolation(client):
 
 
 def test_schedule_fires_once_per_slot_and_not_while_training(client):
+    """XR-F-02."""
     tenant, admin = provision(client)
     operator(client, tenant, training_jobs=5)
     seed_trainable(client, admin)
@@ -111,6 +111,7 @@ def test_schedule_fires_once_per_slot_and_not_while_training(client):
 
 
 def test_event_trigger_fires_exactly_once_per_condition(client):
+    """XR-F-03."""
     tenant, admin = provision(client)
     operator(client, tenant, training_jobs=5)
     seed_trainable(client, admin)
@@ -135,6 +136,7 @@ def test_event_trigger_fires_exactly_once_per_condition(client):
 
 # ---- XR-F-04 -------------------------------------------------------------
 def test_recommendation_rules_change_output_respect_exclusions_and_isolation(client):
+    """XR-F-04 / XR-NF-02."""
     tenant, admin = provision(client)
     _, other = provision(client)
     dev = developer(client, tenant)
@@ -167,6 +169,7 @@ def test_recommendation_rules_change_output_respect_exclusions_and_isolation(cli
 
 # ---- XR-F-07 -------------------------------------------------------------
 def test_usage_trends_match_ledger_and_are_isolated(client):
+    """XR-F-07."""
     tenant, admin = provision(client)
     _, other = provision(client)
     seed_trainable(client, admin)
@@ -190,6 +193,7 @@ def test_usage_trends_match_ledger_and_are_isolated(client):
 
 # ---- XR-F-08 -------------------------------------------------------------
 def test_capacity_scales_with_load_is_observable_and_isolated(client, monkeypatch):
+    """XR-F-08."""
     tenant, admin = provision(client)
     _, other = provision(client)
     dev = developer(client, tenant)
@@ -223,3 +227,96 @@ def test_capacity_scales_with_load_is_observable_and_isolated(client, monkeypatc
     assert client.get('/v1/deployment/scaling', headers=dev).status_code == 403   # no deployments:read
     foreign = client.get('/v1/deployment/scaling', headers=other).json()
     assert foreign['managed'] is False and foreign['events'] == []
+
+
+# ---- XR-NF-03: scheduled retraining goes through the same gates as manual training --
+def _due_schedule(client, admin, tenant):
+    body = {'schedule_enabled': True, 'interval_minutes': get_settings().retraining_min_interval_minutes,
+            'event_trigger_enabled': False, 'event_threshold': 1000, 'epochs': 1}
+    assert client.put('/v1/retraining-policy', json=body, headers=admin).status_code == 200
+    tid = UUID(tenant)
+    with SessionLocal() as db, db.begin():
+        set_local_tenant(db, tid)
+        db.execute(update(RetrainingPolicy).where(RetrainingPolicy.tenant_id == tid)
+                   .values(next_run_at=datetime.now(timezone.utc) - timedelta(seconds=5)))
+    return tid
+
+
+def _jobs(tid):
+    with SessionLocal() as db, db.begin():
+        set_local_tenant(db, tid)
+        return db.scalar(select(func.count(TrainingJob.id)).where(TrainingJob.tenant_id == tid))
+
+
+def test_xr_nf_03_scheduled_retraining_respects_the_training_cooldown(client, monkeypatch):
+    monkeypatch.setattr(get_settings(), 'training_cooldown_seconds', 3600)
+    tenant, admin = provision(client)
+    operator(client, tenant, training_jobs=5)
+    seed_trainable(client, admin)
+    tid = UUID(tenant)
+    with SessionLocal() as db, db.begin():  # a DGSR job finished a moment ago
+        set_local_tenant(db, tid)
+        now = datetime.now(timezone.utc)
+        db.add(TrainingJob(id=uuid4(), tenant_id=tid, model_type='dgsr', status='succeeded', configuration={},
+                           created_at=now - timedelta(minutes=2), completed_at=now - timedelta(seconds=30)))
+    _due_schedule(client, admin, tenant)
+    before = _jobs(tid)
+    with SessionLocal() as db:
+        set_local_tenant(db, tid)
+        decision = RetrainingService(db).evaluate(tid)
+    assert decision.trigger is None and decision.reason == 'training_cooldown'
+    assert _jobs(tid) == before
+    policy = client.get('/v1/retraining-policy', headers=admin).json()
+    assert policy['last_outcome'] == 'blocked:training_cooldown'
+    # The missed slot is skipped, not retried on every tick.
+    assert datetime.fromisoformat(policy['next_run_at']) > datetime.now(timezone.utc)
+    audit = client.get('/v1/audit', params={'action': 'retraining_triggered'}, headers=admin).json()['items']
+    assert audit and audit[0]['outcome'] == 'failed'
+
+
+def test_xr_nf_03_scheduled_retraining_respects_the_plan_training_quota(client, monkeypatch):
+    monkeypatch.setattr(get_settings(), 'training_cooldown_seconds', 0)
+    tenant, admin = provision(client)
+    operator(client, tenant, training_jobs=0)
+    seed_trainable(client, admin)
+    tid = _due_schedule(client, admin, tenant)
+    with SessionLocal() as db:
+        set_local_tenant(db, tid)
+        decision = RetrainingService(db).evaluate(tid)
+    assert decision.trigger is None and decision.reason == 'quota_exceeded'
+    assert _jobs(tid) == 0
+    assert client.get('/v1/retraining-policy', headers=admin).json()['last_outcome'] == 'blocked:quota_exceeded'
+
+
+def test_xr_nf_01_capacity_follows_the_active_version_and_stays_in_its_tenant(client, monkeypatch):
+    """XR-NF-01: scaling is recorded against the active version; switching versions keeps the
+    scaled capacity bound to the new active version; another tenant's capacity is untouched."""
+    tenant, admin = provision(client)
+    other_tenant, other = provision(client)
+    operator(client, tenant, training_jobs=5, maximum_inference_replicas=3, concurrent_recommendation_requests=9)
+    client.put('/v1/products/movie', json={'external_id': 'movie', 'title': 'Movie'}, headers=admin)
+    first = client.post('/v1/training-jobs', json={'request_id': 'cap-1', 'configuration': {'mode': 'placeholder'}}, headers=admin).json()['model_version_id']
+    assert client.post(f'/v1/model-versions/{first}:activate', headers=admin).status_code == 200
+    monkeypatch.setattr(get_settings(), 'capacity_target_rpm_per_replica', 10)
+    monkeypatch.setattr(get_settings(), 'training_cooldown_seconds', 0)
+    tid, now = UUID(tenant), datetime.now(timezone.utc)
+    with SessionLocal() as db, db.begin():
+        set_local_tenant(db, tid)
+        for i in range(25):
+            db.add(ServingRequest(id=uuid4(), tenant_id=tid, model_version_id=UUID(first), strategy='popular_fallback',
+                                  outcome='served', fallback_used=True, item_count=1, latency_ms=5,
+                                  occurred_at=now - timedelta(seconds=i)))
+    with SessionLocal() as db:
+        set_local_tenant(db, tid)
+        assert evaluate_capacity(db, tid).target == 3
+    with SessionLocal() as db, db.begin():
+        set_local_tenant(db, tid)
+        event = db.scalars(select(CapacityEvent).where(CapacityEvent.tenant_id == tid)
+                           .order_by(CapacityEvent.occurred_at.desc())).first()
+        assert str(event.model_version_id) == first and event.to_capacity == 3
+    second = client.post('/v1/training-jobs', json={'request_id': 'cap-2', 'configuration': {'mode': 'placeholder'}}, headers=admin).json()['model_version_id']
+    assert client.post(f'/v1/model-versions/{second}:activate', headers=admin).status_code == 200
+    deployment = client.get('/v1/deployment', headers=admin).json()
+    assert deployment['active_model_version_id'] == second and deployment['ready_capacity'] == 3
+    foreign = client.get('/v1/deployment', headers=other).json()
+    assert foreign['active_model_version_id'] is None and foreign['ready_capacity'] == 0

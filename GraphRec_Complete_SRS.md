@@ -233,7 +233,7 @@ GraphRec separates offline and online responsibilities. Offline work prepares da
 
 ### Provisional Demonstration Plan Limits
 
-The following values are project defaults for testing and demonstration, not commercial commitments.
+The following values are project defaults for testing and demonstration, not commercial commitments. Migration `0031_free_plan_serving_limits` later set Free to 120 requests per minute and 8 concurrent requests; operators can change any plan at runtime, and the live values are served by `GET /v1/plans`.
 
 | Limit | Free | Basic | Pro |
 |---|---:|---:|---:|

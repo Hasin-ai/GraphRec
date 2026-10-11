@@ -10,23 +10,38 @@ from graphrec_core.auth.principal import AuthenticatedPrincipal, authenticated_p
 from graphrec_core.auth.service import AuthenticationService
 from graphrec_core.database.session import get_db
 from graphrec_core.errors import ApiError
-from graphrec_core.registration.rate_limit import RegistrationRateLimiter
-from graphrec_core.schemas.auth import AuthTokenPair, LoginRequest, SetupPasswordRequest, RecoverPasswordRequest
+from graphrec_core.registration.rate_limit import SharedRateLimiter
+from graphrec_core.schemas.auth import (
+    AuthTokenPair,
+    LoginRequest,
+    RecoverPasswordRequest,
+    RecoverPasswordResponse,
+    RefreshRequest,
+    SetupPasswordRequest,
+)
 from graphrec_core.settings import Settings, get_settings
 
 router = APIRouter(prefix="/v1/auth", tags=["authentication"])
 settings = get_settings()
-login_limiter = RegistrationRateLimiter(
+login_limiter = SharedRateLimiter(
+    name="login",
     limit=settings.login_rate_limit,
     window_seconds=settings.login_rate_window_seconds,
 )
 # Setup tokens are unguessable, but the public endpoint still needs a per-source
 # ceiling so it cannot be used to probe tokens or burn password-hashing CPU.
-setup_limiter = RegistrationRateLimiter(
+setup_limiter = SharedRateLimiter(
+    name="setup",
     limit=settings.login_rate_limit,
     window_seconds=settings.login_rate_window_seconds,
 )
-recovery_limiter = RegistrationRateLimiter(
+refresh_limiter = SharedRateLimiter(
+    name="refresh",
+    limit=max(settings.login_rate_limit * 4, 30),
+    window_seconds=settings.login_rate_window_seconds,
+)
+recovery_limiter = SharedRateLimiter(
+    name="recovery",
     limit=settings.login_rate_limit,
     window_seconds=settings.login_rate_window_seconds,
 )
@@ -101,7 +116,7 @@ def setup_password(
     )
 
 
-@router.post("/recover-password")
+@router.post("/recover-password", response_model=RecoverPasswordResponse)
 def recover_password(
     payload: RecoverPasswordRequest,
     request: Request,
@@ -118,6 +133,29 @@ def recover_password(
                        retryable=True, retry_after_seconds=retry_after)
     service.recover_password(payload, correlation_id=request.state.correlation_id, source=source)
     return {"status": "completed"}
+
+
+@router.post("/refresh", response_model=AuthTokenPair)
+def refresh_session(
+    payload: RefreshRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    app_settings: Settings = Depends(get_settings),
+) -> AuthTokenPair:
+    """Exchange a refresh token for a new token pair (A-05).
+
+    Each refresh token works once and is replaced by the one returned here. The
+    sign-in's absolute lifetime is not extended. Presenting a token that was
+    already rotated signs the user out everywhere.
+    """
+    source = request.client.host if request.client else "unknown"
+    retry_after = refresh_limiter.check(f"source:{source}")
+    if retry_after is not None:
+        raise ApiError(429, "rate_limit_exceeded", "Session refresh limit exceeded",
+                       retryable=True, retry_after_seconds=retry_after)
+    return AuthenticationService(db, app_settings).refresh(
+        payload.refresh_token, correlation_id=request.state.correlation_id, source=source,
+    )
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

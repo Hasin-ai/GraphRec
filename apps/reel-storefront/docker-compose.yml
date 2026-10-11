@@ -1,0 +1,101 @@
+# Reel storefront, run separately from the GraphRec stack and joined to its network.
+#
+#   # 1. GraphRec stack (repository root)
+#   docker compose up -d --build
+#   # 2. one-off: tenant, catalogue, persona histories, imported checkpoint -> apps/reel-storefront/.env
+#   docker compose -f apps/reel-storefront/docker-compose.yml --env-file .env run --rm reel-bootstrap
+#   # 3. storefront on http://localhost:5290
+#   docker compose -f apps/reel-storefront/docker-compose.yml up -d --build reel
+#   # 4. optional: film covers in a RustFS bucket (console http://localhost:9001)
+#   docker compose -f apps/reel-storefront/docker-compose.yml up -d rustfs
+#   docker compose -f apps/reel-storefront/docker-compose.yml run --rm reel-covers
+#   docker compose -f apps/reel-storefront/docker-compose.yml up -d --build reel   # picks up data/covers.json
+#
+# Run the commands from the repository root. If the GraphRec project has another
+# name than the folder "graphrec", set GRAPHREC_NETWORK (see `docker network ls`).
+name: reel
+
+x-image: &image
+  build:
+    context: ../..
+    dockerfile: apps/reel-storefront/Dockerfile
+  image: graphrec/reel-storefront:local
+
+services:
+  reel:
+    <<: *image
+    env_file:
+      - path: ./.env
+        required: true
+    environment:
+      GRAPHREC_BASE_URL: http://api:8000
+      REDIS_URL: redis://redis:6379/0
+      # "/reel-covers": the storefront serves covers itself from the bucket (works on any host).
+      # A full URL (http://host:9000/reel-covers) sends browsers to RustFS directly; "" turns covers off.
+      REEL_COVERS_BASE_URL: ${REEL_COVERS_BASE_URL-/reel-covers}
+      REEL_COVERS_ORIGIN: http://rustfs:9000/reel-covers
+    ports:
+      - "${REEL_PORT:-5290}:5290"
+    volumes:
+      - reel_state:/app/state
+    networks: [graphrec]
+    restart: unless-stopped
+
+  reel-bootstrap:
+    <<: *image
+    profiles: [setup]
+    user: root   # writes /out/.env on the host bind mount
+    command:
+      - python
+      - scripts/bootstrap_reel.py
+      - --base-url=http://api:8000
+      - --env-file=/out/.env
+    environment:
+      # Empty unless you pass --env-file .env; the script itself stops with a clear message.
+      PLATFORM_ADMIN_TOKEN: ${PLATFORM_ADMIN_TOKEN:-}
+    volumes:
+      - ./:/out
+      - reel_state:/app/state
+    networks: [graphrec]
+
+  rustfs:
+    image: rustfs/rustfs:latest
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-rustfsadmin}
+      RUSTFS_CONSOLE_ENABLE: "true"
+    ports:
+      - "${RUSTFS_PORT:-9000}:9000"          # S3 API (covers are served from here)
+      - "${RUSTFS_CONSOLE_PORT:-9001}:9001"  # web console
+    volumes:
+      - rustfs_data:/data
+    networks: [graphrec]
+    restart: unless-stopped
+
+  reel-covers:
+    <<: *image
+    profiles: [setup]
+    user: root   # writes data/covers.json on the host bind mount
+    depends_on: [rustfs]
+    command:
+      - python
+      - scripts/upload_covers.py
+      - --covers-dir=/covers
+      - --endpoint=http://rustfs:9000
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-rustfsadmin}
+    volumes:
+      - ${REEL_COVERS_DIR:-../../covers/covers}:/covers:ro
+      - ./data:/app/data
+      - ./scripts:/app/scripts:ro
+    networks: [graphrec]
+
+volumes:
+  reel_state:
+  rustfs_data:
+
+networks:
+  graphrec:
+    external: true
+    name: ${GRAPHREC_NETWORK:-graphrec_default}

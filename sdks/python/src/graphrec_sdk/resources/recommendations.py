@@ -28,6 +28,8 @@ def _recommendation_body(
     request_id: Optional[str] = None,
     fallback_allowed: Optional[bool] = None,
     session: Optional[Dict[str, Any]] = None,
+    explain: Optional[bool] = None,
+    diversity: Optional[float] = None,
 ) -> Dict[str, Any]:
     if isinstance(top_n, bool) or not isinstance(top_n, int) or not 1 <= top_n <= MAX_TOP_N:
         raise InputValidationError(f"top_n must be an integer between 1 and {MAX_TOP_N}")
@@ -41,6 +43,12 @@ def _recommendation_body(
         body["request_id"] = request_id
     if fallback_allowed is not None:
         body["fallback_allowed"] = fallback_allowed
+    if explain:
+        body["explain"] = True
+    if diversity is not None:
+        if isinstance(diversity, bool) or not 0 <= float(diversity) <= 1:
+            raise InputValidationError("diversity must be between 0 and 1")
+        body["diversity"] = float(diversity)
     if exclude_product_ids:
         unique = list(dict.fromkeys(str(pid) for pid in exclude_product_ids))
         if len(unique) > MAX_EXCLUSIONS:
@@ -143,6 +151,8 @@ class RecommendationsResource(SyncResource):
         exclude_product_ids: Optional[Sequence[str]] = None,
         request_id: Optional[str] = None,
         fallback_allowed: Optional[bool] = None,
+        explain: Optional[bool] = None,
+        diversity: Optional[float] = None,
     ) -> Recommendations:
         """Recommendations for an identified customer (``POST /v1/recommendations``).
 
@@ -162,6 +172,8 @@ class RecommendationsResource(SyncResource):
                     exclude_product_ids=exclude_product_ids,
                     request_id=request_id,
                     fallback_allowed=fallback_allowed,
+                    explain=explain,
+                    diversity=diversity,
                 ),
                 cast_to=Recommendations,
             ),
@@ -178,6 +190,8 @@ class RecommendationsResource(SyncResource):
         exclude_product_ids: Optional[Sequence[str]] = None,
         request_id: Optional[str] = None,
         fallback_allowed: Optional[bool] = None,
+        explain: Optional[bool] = None,
+        diversity: Optional[float] = None,
     ) -> Recommendations:
         """Session-aware recommendations for anonymous shoppers.
 
@@ -197,6 +211,8 @@ class RecommendationsResource(SyncResource):
                     exclude_product_ids=exclude_product_ids,
                     request_id=request_id,
                     fallback_allowed=fallback_allowed,
+                    explain=explain,
+                    diversity=diversity,
                     session=_session_context(session_id, recent_product_ids),
                 ),
                 cast_to=Recommendations,
@@ -214,6 +230,8 @@ class AsyncRecommendationsResource(AsyncResource):
         exclude_product_ids: Optional[Sequence[str]] = None,
         request_id: Optional[str] = None,
         fallback_allowed: Optional[bool] = None,
+        explain: Optional[bool] = None,
+        diversity: Optional[float] = None,
     ) -> Recommendations:
         """Async variant of :meth:`RecommendationsResource.get`."""
 
@@ -228,6 +246,8 @@ class AsyncRecommendationsResource(AsyncResource):
                     exclude_product_ids=exclude_product_ids,
                     request_id=request_id,
                     fallback_allowed=fallback_allowed,
+                    explain=explain,
+                    diversity=diversity,
                 ),
                 cast_to=Recommendations,
             ),
@@ -244,6 +264,8 @@ class AsyncRecommendationsResource(AsyncResource):
         exclude_product_ids: Optional[Sequence[str]] = None,
         request_id: Optional[str] = None,
         fallback_allowed: Optional[bool] = None,
+        explain: Optional[bool] = None,
+        diversity: Optional[float] = None,
     ) -> Recommendations:
         """Async variant of :meth:`RecommendationsResource.for_session`."""
 
@@ -258,6 +280,8 @@ class AsyncRecommendationsResource(AsyncResource):
                     exclude_product_ids=exclude_product_ids,
                     request_id=request_id,
                     fallback_allowed=fallback_allowed,
+                    explain=explain,
+                    diversity=diversity,
                     session=_session_context(session_id, recent_product_ids),
                 ),
                 cast_to=Recommendations,

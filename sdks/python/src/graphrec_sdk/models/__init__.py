@@ -3,7 +3,15 @@
 from ._base import GraphRecModel, InputModel, ItemList
 from .api_keys import ApiKey, ApiKeyList, ApiKeyWithSecret
 from .auth import AuthTokenPair, TenantRegistration
-from .billing import Subscription, UsageDimension, UsageSummary, UsageTrend, UsageTrendBucket
+from .billing import (
+    PlanChangeRequest,
+    PlanChangeRequestList,
+    Subscription,
+    UsageDimension,
+    UsageSummary,
+    UsageTrend,
+    UsageTrendBucket,
+)
 from .catalog import (
     BulkUpsertFailure,
     CatalogSync,
@@ -16,12 +24,15 @@ from .datasets import DatasetSnapshot, DatasetSnapshotList, DatasetUploadResult
 from .events import (
     EventBatch,
     EventBatchList,
+    EventRecord,
+    EventRecordList,
     EventBatchResult,
     EventInput,
     EventItemOutcome,
     EventReceipt,
 )
 from .ml import ModelVersion, ModelVersionList, TrainingJob, TrainingJobList
+from .operators import Operator, OperatorList, OperatorMe, OperatorSession
 from .platform import (
     AuditRecord,
     AuditRecordList,
@@ -31,6 +42,9 @@ from .platform import (
     PlatformStatus,
     PlatformTenant,
     PlatformTenantList,
+    PlanRequestDecision,
+    PlatformPlanRequest,
+    PlatformPlanRequestList,
     PricingPlan,
     PricingPlanList,
     QuotaOverride,
@@ -55,6 +69,15 @@ from .serving import (
 from .tenant_users import TenantUser, TenantUserInvitation, TenantUserList
 
 __all__ = [
+    "PlanChangeRequest",
+    "PlanChangeRequestList",
+    "PlanRequestDecision",
+    "PlatformPlanRequest",
+    "PlatformPlanRequestList",
+    "Operator",
+    "OperatorList",
+    "OperatorMe",
+    "OperatorSession",
     "ApiKey",
     "ApiKeyList",
     "ApiKeyWithSecret",
@@ -70,6 +93,8 @@ __all__ = [
     "DeploymentStatus",
     "EventBatch",
     "EventBatchList",
+    "EventRecord",
+    "EventRecordList",
     "EventBatchResult",
     "EventInput",
     "EventItemOutcome",

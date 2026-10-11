@@ -148,3 +148,12 @@ def test_serving_slots_follow_ready_capacity():
     limits = {"concurrent_recommendation_requests": 12, "maximum_inference_replicas": 2}
     assert serving_slots(limits, 1) == 6 and serving_slots(limits, 2) == 12 and serving_slots(limits, 5) == 12
     assert serving_slots({"concurrent_recommendation_requests": 4, "maximum_inference_replicas": 1}, 1) == 4
+
+
+def test_xr_f_06_training_budget_is_the_smaller_of_plan_and_worker_cap():
+    """D-11: maximum_training_duration_minutes is enforced, capped by the local worker budget."""
+    from graphrec_core.dgsr.worker import LOCAL_TRAINING_BUDGET_SECONDS, training_budget_seconds
+    assert training_budget_seconds(None) == LOCAL_TRAINING_BUDGET_SECONDS
+    assert training_budget_seconds(30) == LOCAL_TRAINING_BUDGET_SECONDS
+    assert training_budget_seconds(1) == 60
+    assert training_budget_seconds(0) == 1

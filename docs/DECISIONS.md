@@ -1,0 +1,135 @@
+# Decisions
+
+Each entry records a choice made while taking GraphRec from vertical slices to one product, why it was made, and whether it still needs the owner's sign-off. Anomaly numbers (A-xx) and decision numbers (D-xx) refer to `docs/GAP_ANALYSIS.md`.
+
+Status values: **Decided** (made under the ground rules, reversible), **Needs sign-off** (product-defining or irreversible; not implemented until approved), **Deferred** (out of scope for now, with the reason).
+
+---
+
+## D-01 Preserve uncommitted work before Phase 2 — Decided (2026-10-07)
+
+The working tree held 49 uncommitted files (marketing site, playground, `GET /v1/events`, `apps/reel-storefront/`, auth and event changes). They were committed unchanged as `chore: snapshot in-progress work before Phase 2` on branch `phase2/anomaly-fixes`, and every Phase 2 fix is a separate commit on top. Nothing was discarded; `main` is untouched.
+
+## D-03 Refresh tokens: rotation with reuse detection — Decided (2026-10-07)
+
+Login already issued refresh tokens that nothing accepted (A-05). Removing them would have kept the 15-minute forced sign-out, so rotation was completed instead:
+
+- `POST /v1/auth/refresh` accepts a refresh token once and returns a new pair (migration `0032`).
+- A rotated session keeps the original absolute expiry (`REFRESH_TOKEN_TTL_SECONDS`), so refreshing never extends a sign-in.
+- Presenting an already-rotated token is treated as theft: every session of that user is revoked (refresh sessions and, through `auth_epoch`, outstanding access tokens) and a `refresh_token_reuse` security event is recorded.
+- The console refreshes 30 seconds before expiry and once on `token_expired`, in a single flight, because a second use of the same token would sign the user out.
+
+This completes the existing auth model rather than changing it.
+
+## D-06 Development-only fakes — Decided (2026-10-07)
+
+Placeholder training (random embeddings served with a zero query vector) and `POST /v1/model-versions` (tenant-asserted metrics) stay available for local development and tests, but `GRAPHREC_ENV=production` refuses them, refuses to activate or serve non-DGSR versions, and the console hides the placeholder option. Fake `rustfs://` URIs became honest `placeholder://` / `unregistered://` markers.
+
+## D-08 Rename `frontend_02/` to `web/` — Done (2026-10-08)
+
+Done as one mechanical commit in Phase 3 (Compose, Dockerfiles, CI, Playwright, READMEs, SDK docs, tests). Historical entries in `CHANGELOG.md` and `docs/GAP_ANALYSIS.md` keep the old path.
+
+## D-14 XR-F-04 brand and seasonality — Decided (2026-10-07)
+
+The SRS says "diversity, category, brand, freshness, **or** seasonality rules". Diversity, category caps and freshness are implemented, bounded and versioned (XR-NF-02). Brand and seasonality are not added.
+
+## Rate limits shared through Redis, never failing open — Decided (2026-10-07)
+
+Authentication, registration, API-key, subscription and usage limits moved from per-process memory to the Redis sliding window already used for recommendation admission (A-01). When Redis is unavailable they fall back to a bounded per-process window with the same limit: limits degrade to per-process, not to unlimited. Recommendation admission keeps its documented fail-open behaviour (D16), because refusing all traffic when Redis is down would contradict NR-NF-08.
+
+The real client address comes from `X-Forwarded-For` only when the request arrives from a proxy listed in `FORWARDED_ALLOW_IPS`. Compose binds the API port to `127.0.0.1` and trusts nginx; a deployment that publishes the API port must not use `*`.
+
+## Audit reasons through a database trigger — Decided (2026-10-07)
+
+ER-F-11 needs the reason for credential, activation, rollback, quota, plan and operator actions. Most of those audit rows are written inside SECURITY DEFINER SQL functions. Rather than replace each function, migration `0034` adds a `BEFORE INSERT` trigger on `audit_logs` that copies the transaction-local setting `app.audit_reason` into `redacted_details.justification`. (`reason` already holds machine causes such as `model_not_ready`.) The same mechanism reserves `app.audit_actor` for operator identities (D-04). A tenant status change requires a reason (UC-27); the other actions accept an optional one and the console asks for it.
+
+## One product version — Decided (2026-10-07)
+
+`VERSION` at the repository root (now `1.1.0`) is the single version of the API, the console build and the Python SDK. A test fails when any of them drift. `1.1.0` follows the already released SDK `1.0.0` and its additive changes (`events.list`, `auth.refresh`, `meta`, `ready`, `plans`).
+
+## Logical serving capacity is labelled as such — Decided (2026-10-07)
+
+The console's Service Status page now states that serving capacity is logical: each unit adds concurrent recommendation slots enforced by every API process, and no separate serving instance is started. Real replica scaling is decision D-07 below.
+
+## Unmeasured usage is flagged, not zero — Decided (2026-10-07)
+
+`replica_runtime_minutes` was always reported as `0`, because nothing records it. Usage dimensions now carry `measured`; this one is `false` and the consoles show "Not measured yet". `inference_replicas` now reports the tenant's current ready serving units instead of a ledger sum that nothing wrote.
+
+## Recommendation provenance — Decided (2026-10-07)
+
+`model_version_id` in a recommendation response is the version that produced the ranking, and is `null` when a fallback served it. The new `active_model_version_id` reports the active version. Customers are created only from accepted interactions; a recommendation for an unknown identifier links to no customer.
+
+## Recent popularity — Decided (2026-10-07)
+
+The cold-start fallback counts interactions in a window (`FALLBACK_POPULARITY_WINDOW_DAYS`, default 30) that ends at the tenant's latest interaction rather than at the current time. Backfilled history therefore stays usable, and the aggregation is bounded by the existing `(tenant_id, occurred_at)` index.
+
+---
+
+## Decided with the owner (2026-10-08)
+
+| # | Decision | Outcome |
+|---|---|---|
+| D-02 | Marketing site spec | The marketing site is already built and synced with the console; the in-progress pages are the spec. No separate prompt file is needed. |
+| D-04 | Operator accounts with roles | **Approved.** Implemented: see "Operator accounts" below. |
+| D-05 | Email delivery | **Not approved.** No email transport is added. Setup and invitation links stay on screen; recovery stays operator-issued. Production readiness §6 "Email" is therefore recorded as not delivered by owner decision. |
+| D-07 | Real per-tenant serving replicas | **Deferral approved.** XR-F-08 is met with logical per-tenant serving capacity (concurrency slots that scale with measured demand, consistent across API processes and bound to the active version); the console says so. |
+| D-09 | Reference storefront | **`apps/reel-storefront`**, after its bugs are fixed. `apps/demo-storefront` (Facet) moves to `archive/`. |
+| D-10 | Production target | **Single-host Compose with Caddy** (automatic TLS). |
+| D-11 | Plan-limit semantics | **Approved.** Migration `0035`: Pro `concurrent_training_jobs` = 1; `queued_messages` removed; `active_model_versions` counts retained (non-archived) versions and is enforced when a version is created; `maximum_training_duration_minutes` is enforced by the worker, capped by its 180-second local budget. |
+| D-12 | Stray material | No answer: files are left where they are. |
+| D-13 | Suspended tenants | **Approved.** A restricted session that can only read the tenant's status. |
+
+## Operator accounts (D-04) — Implemented 2026-10-08
+
+- Migration `0036` adds `platform_operators` (email, name, argon2 password hash, roles, status, `auth_epoch`). Operators are disabled, never deleted, so audit attribution keeps resolving.
+- Roles: `platform` (tenant status, recovery), `plan_management` (plans, assignment, quota overrides), `monitoring` (status, failures, usage), `audit` (audit history), `operator_admin` (operators). Every platform route declares its roles in `graphrec_core/auth/platform.py:ROUTE_ROLES`; a route missing from the map is refused, and a test fails if one is added without an entry.
+- `POST /v1/platform/auth/login` returns a 1-hour bearer token (`OPERATOR_TOKEN_TTL_SECONDS`) for the `graphrec-platform` audience. Roles and status are re-read on every request; a role, status or password change ends the operator's sessions.
+- Every audit row written during an operator request carries the operator id (`app.audit_actor`, migration `0034` trigger). Sign-ins, failures and operator changes are security events.
+- `PLATFORM_ADMIN_TOKEN` is the bootstrap credential. In development it still works everywhere (local tooling, tests). In production it can only create operators, and only while no active operator exists. `scripts/create_operator.py` creates one from the command line.
+
+## Phase 3–4 decisions (2026-10-08)
+
+### D-15 Load testing without a new dependency — Decided
+`scripts/load_test.py` drives closed-loop virtual shoppers with `httpx` (already used by the SDK and tests) instead of adding Locust or k6. It provisions its own tenant, can train a model first, and writes a JSON report. Results and the supported load are in `docs/PERFORMANCE.md`.
+
+### D-17 Tenant audit trail hides operator identity — Decided
+`GET /v1/audit` shows a tenant its own audit rows. Platform operators appear as "GraphRec operator" with the reason they gave; their identity stays in the platform audit view. Members and API keys of the tenant are shown by id. Rationale: non-disclosure towards tenants, while ER-F-11 attribution is kept on the platform side.
+
+### D-18 Past usage periods keep inventory as current values — Decided
+`GET /v1/usage?period=YYYY-MM` (UC-24, up to 24 months back) sums the ledger for that month. Inventory dimensions (stored products, retained versions, storage, replicas) have no history, so they are returned with `scope: "current"` and the console labels them, instead of presenting today's value as historical.
+
+### D-19 Common evaluation set for version comparison — Decided
+XR-F-10: at the end of each training run the candidate, the version active at that moment and a popularity baseline are scored on the candidate's held-out test examples (stored as `common_evaluation.json`, at most 500 examples) through the serving encoder. An example whose target a version does not know counts as a miss for that version, so every column has the same denominator. If the active version cannot be loaded, the comparison says so instead of inventing numbers.
+
+### D-20 Members' changes and the last administrator — Decided
+UC-27: administrators change roles, lock, unlock and disable members (disable is final; pending invitations are resent or revoked, not edited). You cannot change your own account here, and the last active administrator cannot be demoted, locked or disabled. Any change ends the member's sessions.
+
+## Phase 5 decisions (2026-10-08)
+
+### D-21 Retention windows — Decided
+`scripts/retention.py` (owner connection, batched deletes, `--dry-run`) removes operational rows past these windows: serving request metrics and capacity decisions 90 days; recommendation records, results and feedback 180 days; ended sign-ins, spent setup and recovery tokens and registration idempotency records 30 days; security events 1 year; the usage ledger 25 months (UC-24 reads 24). Never trimmed by time: catalogs, interaction histories, snapshots, model versions and the append-only audit log, which follow the tenant's lifecycle. Run it daily (`docs/OPERATIONS.md`).
+
+### D-22 Metrics without a client library — Decided
+`/metrics` writes the Prometheus text format itself and sums counters across API processes through the existing Redis, instead of adding `prometheus_client` (its multi-process mode needs a shared directory per host). Labels are route templates, so tenant or product ids never become label values. The endpoint needs `METRICS_TOKEN`; in production it is off without one, and Caddy refuses it publicly.
+
+### D-23 Production topology — Decided
+`docker-compose.prod.yml` overlays the base file: `GRAPHREC_ENV=production` everywhere, no published ports except Caddy's 80/443 (automatic TLS for `GRAPHREC_DOMAIN`), HSTS at the edge. Backups (`scripts/backup.sh`) cover PostgreSQL (custom-format dump, RLS policies included), Qdrant snapshots, trained models and certificates; Redis holds only short-lived limiter state and is not backed up. Requires Docker Compose 2.24 or newer (`!reset`).
+
+### D-24 Marketing claims match the product — Decided
+The tagline said recommendations "learn from every interaction". The model does not learn online: a new event changes the shopper's history, which the active version reads on the next request, and learning happens when a training run (manual or scheduled) produces a new version. The tagline is now "Recommendations that follow every interaction." Other claims were checked against the code: row-level security, scoped HMAC-stored keys, roles and the operator realm, rules with `applied_rules`, rollback, cold-start fallback; the console preview is captioned as sample values. Plan limits on the pricing page come live from `GET /v1/plans`.
+
+## Needs your sign-off (historical: answered above)
+
+| # | Decision | Recommendation | Why it is waiting |
+|---|---|---|---|
+| D-02 | Source for the public marketing site | Send `web/LANDING_PAGE_PROMPT.md`. It is not in the repository; the in-progress marketing pages are the only spec today | The file is missing |
+| D-04 | Operator accounts with roles (`platform`, `plan_management`, `monitoring`, `audit`), argon2 passwords, audit attribution; `PLATFORM_ADMIN_TOKEN` kept only to create the first operator | Approve | Changes the auth model |
+| D-05 | Email delivery: SMTP through stdlib `smtplib` plus a development outbox; self-service password recovery | Approve | Adds an outbound integration and changes the recovery flow |
+| D-07 | Defer real per-tenant serving replicas; keep logical per-tenant slot capacity (now labelled in the UI) | Approve the deferral | Deferring an SRS requirement (XR-F-08) |
+| D-09 | Which storefront is the reference client: `apps/demo-storefront` (Facet) or `apps/reel-storefront` | Keep one behind `--profile demo` | Deleting an app |
+| D-10 | Production target: single-host Compose with Caddy (automatic TLS), or Kubernetes/Helm; and the domain | Compose with Caddy | Product-defining |
+| D-11 | Plan-limit semantics: `active_model_versions` counts non-archived retained versions; Pro `concurrent_training_jobs` becomes 1 (BRULE-06, one worker); `maximum_training_duration_minutes` is enforced; `queued_messages` is removed or enforced | Approve | Changes plan limits |
+| D-12 | Stray material: move `Claude outputs/`, root `qa_*` scripts and `.env.bak-qa` to an ignored `archive/`; keep `Palette and form specs/` as `docs/design-reference/`; remove build output | Approve | Deleting or moving your files |
+| D-13 | Suspended tenants: allow a restricted sign-in that sees only `/account/tenant-status` | Approve | Changes what a suspended tenant can do |
+| D-15 | Run the real Compose stack: allow Docker in this session, or run it on your machine | Either | Tooling access |
+| D-16 | CI on GitHub Actions | Approve | Needs the repository on GitHub |

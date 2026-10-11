@@ -51,8 +51,9 @@ def error_response(
 async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
     principal = getattr(request.state, 'authenticated_principal', None)
     if principal is not None and exc.status_code in {403, 404, 409, 422, 429, 503}:
-        await run_in_threadpool(_record_tenant_denial, principal, correlation_id_for(request), exc.code,
-                                getattr(request.scope.get('route'), 'path', 'unknown'))
+        route = getattr(request.scope.get('route'), 'path', 'unknown')
+        if _denial_audit_admitted(principal, exc.code, route):
+            await run_in_threadpool(_record_tenant_denial, principal, correlation_id_for(request), exc.code, route)
     return error_response(
         correlation_id=correlation_id_for(request),
         status_code=exc.status_code,
@@ -63,6 +64,18 @@ async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
         details=exc.details,
         extra_headers=getattr(exc, "headers", None),
     )
+
+
+#: A-18: at most this many identical denial audits (same credential, reason and
+#: route) per minute, so a client hammering a 429 cannot turn each rejected
+#: request into a database write. The first ones are always recorded.
+DENIAL_AUDITS_PER_MINUTE = 5
+
+
+def _denial_audit_admitted(principal, reason: str, route: str) -> bool:
+    from graphrec_core.usage.admission import get_admission
+    subject = f"{principal.tenant_id}:{principal.actor_reference}:{reason}:{route}"
+    return get_admission().check_window("denial_audit", subject, DENIAL_AUDITS_PER_MINUTE, 60) is None
 
 
 def _record_tenant_denial(principal, correlation_id, reason, route):
@@ -141,9 +154,34 @@ async def http_error_handler(request: Request, exc: StarletteHTTPException) -> J
             code="resource_not_found",
             message="The requested resource was not found",
         )
+    if exc.status_code == 405:
+        return error_response(
+            correlation_id=correlation_id_for(request),
+            status_code=405,
+            code="method_not_allowed",
+            message="This method is not supported for the requested resource",
+            extra_headers=dict(exc.headers or {}),
+        )
     return error_response(
         correlation_id=correlation_id_for(request),
         status_code=400,
         code="malformed_request",
         message="The request could not be processed",
+    )
+
+
+async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    """A-03 / NR-NF-06: an unexpected failure still returns the error envelope with a
+    traceable correlation id, and never the exception text (it may hold data)."""
+    correlation_id = correlation_id_for(request)
+    logging.getLogger("graphrec.api").error(
+        "Unhandled error on %s %s (correlation %s)", request.method, request.url.path, correlation_id,
+        exc_info=exc,
+    )
+    return error_response(
+        correlation_id=correlation_id,
+        status_code=500,
+        code="internal_error",
+        message="An unexpected error occurred. Quote the correlation id when reporting it.",
+        retryable=True,
     )

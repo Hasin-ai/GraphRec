@@ -112,3 +112,20 @@ def test_last_used_is_recorded_for_read_only_catalog_calls(client):
     assert client.get('/v1/products?limit=1', headers={**JSON, 'Authorization': f"ApiKey {key['secret']}"}).status_code == 200
     listed = client.get(f"/v1/api-keys/{key['id']}", headers=admin).json()
     assert listed['last_used_at'] is not None
+
+
+# ---- E2E 2026-10-04: single events were invisible in the console ----------
+def test_single_events_are_listed_newest_first_and_filterable(client):
+    _, _, _, admin = provision(client)
+    product = {'external_id': 'film-1', 'title': 'Film 1'}
+    assert client.post('/v1/products:bulk-upsert', json={'products': [product]}, headers=admin).status_code < 300
+    for n, user in enumerate(['shopper-a', 'shopper-b', 'shopper-a']):
+        sent = client.post('/v1/events', json={'event_id': f'ev-{n}', 'event_type': 'rating', 'user_id': user,
+                           'external_product_id': 'film-1'}, headers=admin)
+        assert sent.status_code < 300, sent.text
+    listed = client.get('/v1/events?limit=10', headers=admin)
+    assert listed.status_code == 200, listed.text
+    assert [e['event_id'] for e in listed.json()] == ['ev-2', 'ev-1', 'ev-0']
+    mine = client.get('/v1/events?user_id=shopper-a', headers=admin).json()
+    assert [e['event_id'] for e in mine] == ['ev-2', 'ev-0']
+    assert all(e['external_product_id'] == 'film-1' and e['event_type'] == 'rating' for e in mine)

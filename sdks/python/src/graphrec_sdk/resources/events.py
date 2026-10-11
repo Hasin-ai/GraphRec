@@ -15,6 +15,8 @@ from ..models.events import (
     EventBatchResult,
     EventInput,
     EventReceipt,
+    EventRecord,
+    EventRecordList,
 )
 from ._base import AsyncResource, SyncResource
 
@@ -118,6 +120,26 @@ class Events(SyncResource):
             batches.append(cast(EventBatch, batch))
         return EventBatchResult.from_batches(batches)
 
+    def list(
+        self,
+        *,
+        limit: int = 50,
+        user_id: Optional[str] = None,
+        event_type: Union[EventType, str, None] = None,
+        product_id: Optional[str] = None,
+    ) -> EventRecordList:
+        """Recently received events, newest first (``GET /v1/events``), optionally filtered."""
+
+        query: Dict[str, object] = {"limit": limit}
+        if user_id is not None:
+            query["user_id"] = user_id
+        if event_type is not None:
+            query["event_type"] = event_type.value if isinstance(event_type, EventType) else event_type
+        if product_id is not None:
+            query["external_product_id"] = product_id
+        items = self._client.request("events.list", query=query, cast_to=List[EventRecord])
+        return EventRecordList(items=items)
+
     def list_batches(self) -> EventBatchList:
         """Submitted batches, newest first (``GET /v1/events/batches``)."""
 
@@ -189,6 +211,26 @@ class AsyncEvents(AsyncResource):
                 raise
             batches.append(cast(EventBatch, batch))
         return EventBatchResult.from_batches(batches)
+
+    async def list(
+        self,
+        *,
+        limit: int = 50,
+        user_id: Optional[str] = None,
+        event_type: Union[EventType, str, None] = None,
+        product_id: Optional[str] = None,
+    ) -> EventRecordList:
+        """Async variant of :meth:`Events.list`."""
+
+        query: Dict[str, object] = {"limit": limit}
+        if user_id is not None:
+            query["user_id"] = user_id
+        if event_type is not None:
+            query["event_type"] = event_type.value if isinstance(event_type, EventType) else event_type
+        if product_id is not None:
+            query["external_product_id"] = product_id
+        items = await self._client.request("events.list", query=query, cast_to=List[EventRecord])
+        return EventRecordList(items=items)
 
     async def list_batches(self) -> EventBatchList:
         """Async variant of :meth:`Events.list_batches`."""

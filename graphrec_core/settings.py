@@ -2,14 +2,35 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field, field_validator
+from typing import Literal
+
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    # ``development`` keeps local defaults and development-only features
+    # (placeholder training, manual model registration). ``production`` refuses
+    # to start with default, placeholder or short secrets (A-10).
+    graphrec_env: Literal["development", "production"] = "development"
+    # ER-NF-09: "json" (one JSON object per line, with correlation ids) or "text".
+    # Unset: json in production, text in development.
+    log_format: Literal["json", "text"] | None = None
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    # Bearer token for GET /metrics. Unset: /metrics is open in development and
+    # disabled (404) in production.
+    metrics_token: str | None = None
+
     database_url: str = "postgresql+psycopg://graphrec_app:graphrec_app_local_only@localhost:5432/graphrec"
+    # Connection pool sized for uvicorn's 40-thread sync pool per process.
+    db_pool_size: int = Field(default=10, ge=1, le=200)
+    db_max_overflow: int = Field(default=20, ge=0, le=400)
+    db_pool_timeout_seconds: int = Field(default=10, ge=1, le=120)
+    db_connect_timeout_seconds: int = Field(default=5, ge=1, le=60)
+    # Applied to every connection; the worker's long snapshot reads stay well below it.
+    db_statement_timeout_ms: int = Field(default=30_000, ge=100, le=3_600_000)
     audit_hash_secret: str = Field(default="local-development-only", min_length=16)
     jwt_signing_secret: str = Field(default="local-jwt-development-secret-change-me", min_length=32)
     access_token_ttl_seconds: int = Field(default=900, ge=60, le=3_600)
@@ -56,7 +77,15 @@ class Settings(BaseSettings):
     redis_timeout_ms: int = Field(default=30, ge=5, le=1_000)
     slot_wait_ms: int = Field(default=100, ge=0, le=5_000)
     slot_lease_seconds: int = Field(default=30, ge=1, le=600)
-    # Shared secret for /v1/platform routes; unset disables platform administration.
+    # A-01: proxies whose X-Forwarded-For is trusted for the client address used by
+    # per-source limits. Comma-separated IPs/CIDRs, or "*" when the API is reachable
+    # only through the bundled nginx (never publish the API port with "*").
+    forwarded_allow_ips: str = "127.0.0.1"
+    # D-04: lifetime of an operator's bearer token (operators sign in again after it).
+    operator_token_ttl_seconds: int = Field(default=3_600, ge=300, le=43_200)
+    # Bootstrap secret for /v1/platform. Development: a full-role credential for local
+    # tooling. Production: only creates the first operator, then opens nothing.
+    # Unset disables it entirely.
     platform_admin_token: str | None = None
 
     # Qdrant vector store
@@ -64,12 +93,22 @@ class Settings(BaseSettings):
     qdrant_collection_prefix: str = Field(default="graphrec")
     qdrant_embedding_dim: int = Field(default=128, ge=16, le=4096)
     qdrant_top_k: int = Field(default=100, ge=1, le=1000)
+    # XR-F-09 / A-19: cold-start popularity counts interactions from this many days
+    # before the tenant's most recent interaction (backfilled history stays usable).
+    fallback_popularity_window_days: int = Field(default=30, ge=1, le=3_650)
+    # Bound on every Qdrant call; serving falls back to in-process scoring on timeout.
+    qdrant_timeout_seconds: float = Field(default=5.0, ge=0.1, le=60)
 
     # DGSR model artifacts. A training job with ``configuration.pretrained_artifact``
     # imports ``<model_artifact_root>/<name>/`` (best.pt, config.json, id_maps.json,
     # interactions.npz) instead of training; unset disables imports.
     model_artifact_root: str | None = None
     generated_model_root: str = "/app/generated_artifacts"
+
+    @field_validator("log_format", "metrics_token", mode="before")
+    @classmethod
+    def _blank_means_unset(cls, value: object) -> object:
+        return None if isinstance(value, str) and not value.strip() else value
 
     @field_validator("platform_admin_token", mode="before")
     @classmethod
@@ -91,6 +130,45 @@ class Settings(BaseSettings):
                 "secret still uses the .env.example placeholder; generate a random value"
             )
         return value
+
+
+    @property
+    def is_production(self) -> bool:
+        return self.graphrec_env == "production"
+
+    @property
+    def effective_log_format(self) -> str:
+        return self.log_format or ("json" if self.is_production else "text")
+
+    @model_validator(mode="after")
+    def _production_requires_strong_secrets(self) -> "Settings":
+        if not self.is_production:
+            return self
+        problems: list[str] = []
+        defaults = {name: field.default for name, field in type(self).model_fields.items()}
+        for name in ("jwt_signing_secret", "audit_hash_secret", "api_key_hmac_pepper"):
+            value = getattr(self, name)
+            if value == defaults[name] or _looks_like_placeholder(value) or len(value) < 32:
+                problems.append(f"{name.upper()} must be a unique random value of at least 32 characters")
+        if self.platform_admin_token is not None and _looks_like_placeholder(self.platform_admin_token):
+            problems.append("PLATFORM_ADMIN_TOKEN must not be a placeholder")
+        if self.database_url == defaults["database_url"] or "local_only" in self.database_url:
+            problems.append("DATABASE_URL must not use the development default or local-only passwords")
+        if self.metrics_token is not None and (len(self.metrics_token) < 32 or _looks_like_placeholder(self.metrics_token)):
+            problems.append("METRICS_TOKEN must be a random value of at least 32 characters")
+        if not self.redis_url:
+            problems.append("REDIS_URL is required in production (shared rate limits and admission control)")
+        if problems:
+            raise ValueError("Refusing to start in production: " + "; ".join(problems))
+        return self
+
+
+_PLACEHOLDER_MARKERS = ("replace-with", "change-me", "changeme", "local-development", "local-only", "example")
+
+
+def _looks_like_placeholder(value: str) -> bool:
+    lowered = value.lower()
+    return any(marker in lowered for marker in _PLACEHOLDER_MARKERS)
 
 
 @lru_cache

@@ -39,6 +39,7 @@ DOMAIN_ROUTES: list[tuple[str, str, object, set[str]]] = [
     ("POST", "/v1/events", EVENT, {"events:write"}),
     ("POST", "/v1/events/batches", {"events": [{**EVENT, "event_id": "e-2"}]}, {"events:write"}),
     ("GET", "/v1/events/batches", None, {"events:read"}),
+    ("GET", "/v1/events", None, {"events:read"}),
     ("GET", f"/v1/events/batches/{MISSING}", None, {"events:read"}),
     ("POST", "/v1/datasets/snapshots", {}, {"training:write"}),
     ("GET", "/v1/datasets/snapshots", None, {"training:read"}),
@@ -119,6 +120,7 @@ def create_api_key(client: TestClient, token: str, scopes: list[str]) -> str:
 
 @pytest.mark.parametrize("role", ["tenant_administrator", "tenant_developer"])
 def test_bearer_tokens_only_reach_routes_their_role_grants(client: TestClient, role: str) -> None:
+    """ER-F-12."""
     _, token = provision(client, role)
     granted = set(ROLE_SCOPES[role])
     headers = {"Authorization": f"Bearer {token}", **JSON}

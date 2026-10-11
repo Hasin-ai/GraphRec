@@ -9,7 +9,7 @@ from graphrec_core.api_keys.service import ApiKeyService
 from graphrec_core.auth.principal import AuthenticatedPrincipal, authenticated_principal
 from graphrec_core.database.session import get_db
 from graphrec_core.errors import ApiError
-from graphrec_core.registration.rate_limit import RegistrationRateLimiter
+from graphrec_core.registration.rate_limit import SharedRateLimiter
 from graphrec_core.schemas.api_keys import (
     ApiKeyCreateRequest,
     ApiKeyListResponse,
@@ -21,7 +21,8 @@ from graphrec_core.settings import get_settings
 
 router = APIRouter(prefix="/v1/api-keys", tags=["api-keys"])
 settings = get_settings()
-api_key_limiter = RegistrationRateLimiter(
+api_key_limiter = SharedRateLimiter(
+    name="api_key",
     limit=settings.api_key_rate_limit,
     window_seconds=settings.api_key_rate_window_seconds,
 )

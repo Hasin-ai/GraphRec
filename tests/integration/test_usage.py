@@ -168,7 +168,9 @@ def test_zero_usage_returns_all_dimensions_calendar_period_and_access_log(
         "dimensions",
         "last_reconciled_at",
         "project_defaults",
+        "current_period",
     }
+    assert body["current_period"] is True
     dimensions = dimensions_by_type(body)
     assert set(dimensions) == USAGE_TYPES
     assert all(item["used"] == 0 for item in dimensions.values())
@@ -206,6 +208,7 @@ def test_zero_usage_returns_all_dimensions_calendar_period_and_access_log(
 def test_durable_ledger_reconciles_used_remaining_and_informational_values(
     client: TestClient,
 ) -> None:
+    """ER-F-08."""
     tenant_id, _, email, password = provision_user(client)
     add_usage(tenant_id, "accepted_events", Decimal("100"))
     add_usage(tenant_id, "accepted_events", Decimal("25"))
@@ -223,6 +226,8 @@ def test_durable_ledger_reconciles_used_remaining_and_informational_values(
         "limit": 50_000,
         "remaining": 49_875,
         "unit": "count",
+        "measured": True,
+        "scope": "period",
     }
     assert dimensions["training_cpu_seconds"]["used"] == 12.5
     assert dimensions["training_cpu_seconds"]["limit"] is None
@@ -312,18 +317,21 @@ def test_usage_requires_valid_credential_and_scope(client: TestClient) -> None:
     assert denied.json()["error"]["code"] == "insufficient_scope"
 
 
-def test_usage_rejects_public_period_or_tenant_selectors(client: TestClient) -> None:
+def test_usage_rejects_tenant_selectors_and_malformed_periods(client: TestClient) -> None:
+    # NR-NF-02: the tenant comes from the credential; UC-24 periods are YYYY-MM only.
     _, _, email, password = provision_user(client)
     token = login_token(client, email, password)
 
-    response = get_usage(client, token, f"?tenant_id={uuid4()}&period=previous")
+    response = get_usage(client, token, f"?tenant_id={uuid4()}&scope=all")
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "validation_failed"
     assert response.json()["error"]["details"]["fields"] == [
-        {"field": "period", "message": "Unexpected query parameter"},
+        {"field": "scope", "message": "Unexpected query parameter"},
         {"field": "tenant_id", "message": "Unexpected query parameter"},
     ]
+    malformed = get_usage(client, token, "?period=previous")
+    assert malformed.status_code == 422 and malformed.json()["error"]["code"] == "validation_failed"
 
 
 def test_usage_read_limit_returns_retry_guidance(client: TestClient) -> None:
@@ -342,3 +350,15 @@ def test_usage_read_limit_returns_retry_guidance(client: TestClient) -> None:
     assert limited.json()["error"]["code"] == "rate_limit_exceeded"
     assert limited.json()["error"]["retryable"] is True
     assert int(limited.headers["retry-after"]) >= 1
+
+
+def test_nr_f_15_unmeasured_dimensions_are_flagged_and_replicas_reflect_serving(client):
+    """A measurement GraphRec does not take is flagged, never shown as a zero."""
+    from tests.integration.test_srs_acceptance import provision
+
+    _, headers = provision(client)
+    body = client.get("/v1/usage", headers=headers).json()
+    by_type = {d["type"]: d for d in body["dimensions"]}
+    assert by_type["replica_runtime_minutes"]["measured"] is False
+    assert all(d["measured"] for t, d in by_type.items() if t != "replica_runtime_minutes")
+    assert by_type["inference_replicas"]["used"] == 0  # nothing active yet

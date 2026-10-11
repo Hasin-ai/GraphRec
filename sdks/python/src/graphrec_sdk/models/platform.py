@@ -9,6 +9,9 @@ from pydantic import Field
 from ._base import GraphRecModel, ItemList
 
 __all__ = [
+    "PlanRequestDecision",
+    "PlatformPlanRequest",
+    "PlatformPlanRequestList",
     "AuditRecord",
     "AuditRecordList",
     "LimitConflict",
@@ -96,14 +99,20 @@ class AuditRecord(GraphRecModel):
     id: UUID
     tenant_id: UUID
     actor_type: str
+    actor_reference: Optional[UUID] = None
     action_type: str
     resource_type: str
+    resource_reference: Optional[UUID] = None
     outcome: str
+    correlation_reference: Optional[UUID] = None
+    #: The reason given for the action, if any (ER-F-11).
+    reason: Optional[str] = None
     occurred_at: datetime
 
 
 class AuditRecordList(ItemList[AuditRecord]):
-    pass
+    #: Cursor for the next (older) page; pass to ``list_audit_logs(before=...)``.
+    next_before: Optional[datetime] = None
 
 
 class RecoveryToken(GraphRecModel):
@@ -124,3 +133,60 @@ class PlatformStatus(GraphRecModel):
     deployments: Optional[Any] = None
     rate_limiter: Optional[Dict[str, Any]] = None
     timestamp: datetime
+
+
+class PlatformUsageDimension(GraphRecModel):
+    type: str
+    used: float
+    limit: Optional[int] = None
+    measured: bool = True
+
+
+class PlatformTenantUsage(GraphRecModel):
+    tenant_id: UUID
+    name: str
+    status: str
+    plan_code: Optional[str] = None
+    period_start: Optional[datetime] = None
+    dimensions: List[PlatformUsageDimension] = []
+    #: True when this tenant's usage could not be read (never reported as zero).
+    unavailable: bool = False
+
+
+class PlatformUsageList(GraphRecModel):
+    items: List[PlatformTenantUsage]
+
+
+class PlatformPlanRequest(GraphRecModel):
+    """A tenant's plan change request as an operator sees it."""
+
+    id: UUID
+    status: str
+    tenant_id: UUID
+    tenant_slug: str
+    tenant_name: str
+    current_plan_code: str
+    current_plan_name: str
+    requested_plan_id: UUID
+    requested_plan_code: str
+    requested_plan_name: str
+    #: The tenant's plan right now.
+    active_plan_code: Optional[str] = None
+    message: Optional[str] = None
+    requested_by: Optional[str] = None
+    decision_reason: Optional[str] = None
+    decided_by: Optional[UUID] = None
+    decided_by_email: Optional[str] = None
+    created_at: datetime
+    decided_at: Optional[datetime] = None
+
+
+class PlatformPlanRequestList(GraphRecModel):
+    items: List[PlatformPlanRequest] = Field(default_factory=list)
+    pending_count: int = 0
+
+
+class PlanRequestDecision(GraphRecModel):
+    request: PlatformPlanRequest
+    #: Inventory limits the approved plan puts the tenant over (acknowledged).
+    warnings: List[LimitConflict] = Field(default_factory=list)

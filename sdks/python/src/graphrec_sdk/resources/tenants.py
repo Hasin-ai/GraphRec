@@ -104,6 +104,19 @@ class Authentication(SyncResource):
             ),
         )
 
+    def refresh(self, *, refresh_token: str) -> AuthTokenPair:
+        """Exchange a refresh token for a new pair (``POST /v1/auth/refresh``).
+
+        Refresh tokens are single-use: store the returned ``refresh_token`` and
+        discard the old one. Presenting an already-used token signs the user out
+        of every session.
+        """
+
+        return cast(
+            AuthTokenPair,
+            self._client.request("auth.refresh", json={"refresh_token": refresh_token}, cast_to=AuthTokenPair),
+        )
+
     def logout(self) -> None:
         """End every session of the signed-in user (``POST /v1/auth/logout``, bearer only).
 
@@ -171,6 +184,14 @@ class AsyncAuthentication(AsyncResource):
                 json=_setup_body(recovery_token, password, email, key="recovery_token"),
                 cast_to=Dict[str, str],
             ),
+        )
+
+    async def refresh(self, *, refresh_token: str) -> AuthTokenPair:
+        """Async variant of :meth:`Authentication.refresh`."""
+
+        return cast(
+            AuthTokenPair,
+            await self._client.request("auth.refresh", json={"refresh_token": refresh_token}, cast_to=AuthTokenPair),
         )
 
     async def logout(self) -> None:

@@ -20,6 +20,7 @@ from graphrec_core.database.models import (
     AuditLog,
     RefreshSession,
     SecurityEvent,
+    Tenant,
     TenantUser,
 )
 from graphrec_core.database.tenancy import set_local_tenant
@@ -35,6 +36,8 @@ ROLE_SCOPES: dict[str, list[str]] = {
         "keys:write",
         "users:write",
         "billing:read",
+        # Request a plan change; a platform operator approves it (migration 0039).
+        "billing:write",
         "usage:read",
         "catalog:read",
         "catalog:write",
@@ -48,6 +51,8 @@ ROLE_SCOPES: dict[str, list[str]] = {
         "recommendations:read",
         "deployments:read",
         "metrics:read",
+        # UC-31: the tenant's own (redacted) audit trail.
+        "audit:read",
     ],
     "tenant_developer": [
         "keys:write",
@@ -101,10 +106,85 @@ class LoginIdentity:
     user_role: str
 
 
+#: D-13: tenant states whose members get a status-only session.
+RESTRICTED_TENANT_STATUSES = frozenset({"suspended", "deleting"})
+RESTRICTED_SCOPE = "account:status"
+
+
 class AuthenticationService:
     def __init__(self, session: Session, settings: Settings) -> None:
         self.session = session
         self.settings = settings
+
+    def refresh(self, refresh_token: str, *, correlation_id: UUID, source: str) -> AuthTokenPair:
+        """A-05: rotate a refresh token. Each token works once; presenting an
+        already-rotated token is treated as theft and revokes every session of
+        that user (refresh sessions and outstanding access tokens)."""
+        digest = hashlib.sha256(refresh_token.encode()).hexdigest()
+        now = datetime.now(timezone.utc)
+        try:
+            row = self.session.execute(text("SELECT * FROM public.resolve_refresh_session(:digest)"),
+                                       {"digest": digest}).mappings().one_or_none()
+            if row is None:
+                raise self._refresh_failed()
+            tenant_id, user_id = row["tenant_id"], row["user_id"]
+            set_local_tenant(self.session, tenant_id)
+            if row["revoked_at"] is not None and row["rotated"]:
+                self._revoke_family(tenant_id, user_id, now, correlation_id, source, reason="refresh_token_reuse")
+                self.session.commit()
+                raise self._refresh_failed()
+            if (row["revoked_at"] is not None or row["expires_at"] <= now or row["user_status"] != "active"
+                    or row["tenant_status"] != "active" or row["user_role"] not in ROLE_SCOPES):
+                self.session.rollback()
+                raise self._refresh_failed()
+            consumed = self.session.execute(update(RefreshSession).where(
+                RefreshSession.id == row["session_id"], RefreshSession.tenant_id == tenant_id,
+                RefreshSession.revoked_at.is_(None),
+            ).values(revoked_at=now)).rowcount
+            if consumed != 1:
+                # A concurrent request rotated it first: the same token was used twice.
+                self.session.rollback()
+                set_local_tenant(self.session, tenant_id)
+                self._revoke_family(tenant_id, user_id, now, correlation_id, source, reason="refresh_token_reuse")
+                self.session.commit()
+                raise self._refresh_failed()
+            identity = LoginIdentity(user_id=user_id, tenant_id=tenant_id, normalized_email=row["normalized_email"],
+                                     credential_digest=None, user_status=row["user_status"],
+                                     tenant_status=row["tenant_status"], user_role=row["user_role"])
+            return self._issue_session(identity, correlation_id=correlation_id, source=source,
+                                       email=row["normalized_email"], rotated_from_id=row["session_id"],
+                                       refresh_expires_at=row["expires_at"])
+        except ApiError:
+            raise
+        except SQLAlchemyError as exc:
+            self.session.rollback()
+            raise ApiError(503, "authentication_unavailable", "Session refresh is temporarily unavailable",
+                           retryable=True, retry_after_seconds=5) from exc
+
+    def _revoke_family(self, tenant_id: UUID, user_id: UUID, now: datetime, correlation_id: UUID,
+                       source: str, *, reason: str) -> None:
+        self.session.execute(update(TenantUser).where(
+            TenantUser.tenant_id == tenant_id, TenantUser.id == user_id,
+        ).values(auth_epoch=TenantUser.auth_epoch + 1))
+        self.session.execute(update(RefreshSession).where(
+            RefreshSession.tenant_id == tenant_id, RefreshSession.user_id == user_id,
+            RefreshSession.revoked_at.is_(None),
+        ).values(revoked_at=now))
+        self.session.add(SecurityEvent(
+            id=uuid4(), tenant_id=tenant_id, event_type=reason, severity="warning",
+            source_hash=protected_auth_hash(source),
+            sanitized_detail={"correlation_id": str(correlation_id)}, occurred_at=now,
+        ))
+        self.session.add(AuditLog(
+            id=uuid4(), tenant_id=tenant_id, actor_type="system", actor_reference=None,
+            action_type="sessions_revoked", resource_type="tenant_user", resource_reference=user_id,
+            outcome="succeeded", correlation_reference=correlation_id,
+            redacted_details={"reason": reason}, occurred_at=now,
+        ))
+
+    @staticmethod
+    def _refresh_failed() -> ApiError:
+        return ApiError(401, "invalid_refresh_token", "The session can no longer be refreshed. Sign in again.")
 
     def logout(self, *, tenant_id: UUID, user_id: UUID, correlation_id: UUID) -> None:
         now = datetime.now(timezone.utc)
@@ -143,8 +223,17 @@ class AuthenticationService:
             # Only identities that could actually sign in take part in the
             # uniqueness check: a pending invitation (no password yet) or a
             # suspended tenant must not make another tenant's login ambiguous.
-            identities = [i for i in self._resolve_identities(request.email)
+            resolved = self._resolve_identities(request.email)
+            identities = [i for i in resolved
                           if i.credential_digest and i.user_status == "active" and i.tenant_status == "active"]
+            if not identities:
+                # D-13: a member of a suspended (or deleting) tenant may sign in to a
+                # restricted session that can only read the tenant's status.
+                held = [i for i in resolved if i.credential_digest and i.user_status == "active"
+                        and i.tenant_status in RESTRICTED_TENANT_STATUSES and i.user_role in ROLE_SCOPES]
+                if len(held) == 1 and verify_password(held[0].credential_digest, request.password):
+                    return self._issue_session(held[0], correlation_id=correlation_id, source=source,
+                                               email=request.email, restricted=True)
             if len(identities) != 1:
                 for identity in identities or [None]:
                     verify_password(
@@ -555,17 +644,23 @@ class AuthenticationService:
         correlation_id: UUID,
         source: str,
         email: str,
+        rotated_from_id: UUID | None = None,
+        refresh_expires_at: datetime | None = None,
+        restricted: bool = False,
     ) -> AuthTokenPair:
         now = datetime.now(timezone.utc)
         access_expires = now + timedelta(seconds=self.settings.access_token_ttl_seconds)
-        refresh_expires = now + timedelta(seconds=self.settings.refresh_token_ttl_seconds)
-        scopes = list(ROLE_SCOPES[identity.user_role])
+        # A rotated session keeps the family's absolute expiry: refreshing never
+        # extends a sign-in beyond REFRESH_TOKEN_TTL_SECONDS.
+        refresh_expires = refresh_expires_at or now + timedelta(seconds=self.settings.refresh_token_ttl_seconds)
+        scopes = [RESTRICTED_SCOPE] if restricted else list(ROLE_SCOPES[identity.user_role])
         refresh_token = secrets.token_urlsafe(48)
         refresh_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
         set_local_tenant(self.session, identity.tenant_id)
         auth_epoch = self.session.scalar(select(TenantUser.auth_epoch).where(
             TenantUser.tenant_id == identity.tenant_id, TenantUser.id == identity.user_id,
         ))
+        tenant_name = self.session.scalar(select(Tenant.name).where(Tenant.id == identity.tenant_id))
         access_token = jwt.encode(
             {
                 "sub": str(identity.user_id),
@@ -573,6 +668,7 @@ class AuthenticationService:
                 "role": identity.user_role,
                 "av": auth_epoch,
                 "scopes": scopes,
+                **({"restricted": True} if restricted else {}),
                 "iat": now,
                 "exp": access_expires,
                 "jti": str(uuid4()),
@@ -601,14 +697,14 @@ class AuthenticationService:
                     created_at=now,
                     expires_at=refresh_expires,
                     revoked_at=None,
-                    rotated_from_id=None,
+                    rotated_from_id=rotated_from_id,
                 ),
                 AuditLog(
                     id=uuid4(),
                     tenant_id=identity.tenant_id,
                     actor_type="tenant_user",
                     actor_reference=identity.user_id,
-                    action_type="authentication",
+                    action_type="session_refreshed" if rotated_from_id else "authentication",
                     resource_type="refresh_session",
                     resource_reference=None,
                     outcome="succeeded",
@@ -619,7 +715,7 @@ class AuthenticationService:
                 SecurityEvent(
                     id=uuid4(),
                     tenant_id=identity.tenant_id,
-                    event_type="login_succeeded",
+                    event_type="session_refreshed" if rotated_from_id else "login_succeeded",
                     severity="info",
                     source_hash=protected_auth_hash(source),
                     sanitized_detail={
@@ -638,6 +734,8 @@ class AuthenticationService:
             refresh_token=refresh_token,
             user_role=identity.user_role,  # type: ignore[arg-type]
             scopes=scopes,
+            email=identity.normalized_email,
+            tenant_name=tenant_name,
         )
 
     def _record_failure(

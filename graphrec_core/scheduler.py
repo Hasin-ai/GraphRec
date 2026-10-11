@@ -9,6 +9,8 @@ active scheduler; extra replicas wait as hot standbys.
 from __future__ import annotations
 
 import logging
+import signal
+import threading
 import time
 
 from sqlalchemy import text
@@ -56,17 +58,31 @@ def run_capacity_tick() -> int:
     return changes
 
 
+STOP = threading.Event()
+
+
+def _install_signal_handlers() -> None:
+    def stop(signum, _frame):  # noqa: ANN001
+        logger.info("Received signal %s: stopping after the current tick", signum)
+        STOP.set()
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+
+
 def main() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    from graphrec_core.observability import configure_logging
+    configure_logging(get_settings().effective_log_format, get_settings().log_level)
+    _install_signal_handlers()
     tick = get_settings().scheduler_tick_seconds
     with engine.connect() as guard:
         while not guard.scalar(text("SELECT pg_try_advisory_lock(:k)"), {"k": SCHEDULER_LOCK}):
             guard.commit()
             logger.info("Another scheduler is active; standing by")
-            time.sleep(tick)
+            if STOP.wait(tick):
+                return
         guard.commit()
         logger.info("Scheduler active (tick %ss)", tick)
-        while True:
+        while not STOP.is_set():
             started = time.monotonic()
             try:
                 guard.execute(text("SELECT 1"))
@@ -75,7 +91,8 @@ def main() -> None:
                 run_retraining_tick()
             except Exception:
                 logger.exception("Scheduler tick failed")
-            time.sleep(max(1.0, tick - (time.monotonic() - started)))
+            STOP.wait(max(1.0, tick - (time.monotonic() - started)))
+        logger.info("Scheduler stopped")
 
 
 if __name__ == "__main__":

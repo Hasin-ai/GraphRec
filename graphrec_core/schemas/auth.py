@@ -60,6 +60,11 @@ class AuthTokenPair(BaseModel):
     refresh_token: str
     user_role: Literal["tenant_administrator", "tenant_developer", "platform_administrator"]
     scopes: list[str]
+    # Normalized sign-in email of the authenticated user, so clients can label
+    # the session even when the caller did not supply an email (setup/recovery).
+    email: str | None = None
+    # A-26: the tenant's registered name, so clients label the workspace with it.
+    tenant_name: str | None = None
 
 
 class RecoverPasswordRequest(BaseModel):
@@ -80,3 +85,13 @@ class RecoverPasswordRequest(BaseModel):
         if len(value) < 8 or len(value) > get_settings().max_password_length:
             raise ValueError("Password length is invalid")
         return value
+
+
+class RefreshRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    refresh_token: str = Field(min_length=16, max_length=256)
+
+
+class RecoverPasswordResponse(BaseModel):
+    status: Literal["completed"]

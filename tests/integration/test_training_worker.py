@@ -14,7 +14,28 @@ from tests.integration.test_srs_acceptance import provision, limits
 pytestmark = pytest.mark.integration
 
 
+@pytest.fixture(autouse=True)
+def isolated_training_queue():
+    """A-16: claim_training_job() takes the globally oldest queued job, so jobs
+    left queued by other tests (any tenant) would be claimed here instead of the
+    job under test. Drain them first through the same claim path and mark them
+    cancelled, tenant by tenant, so these tests see only their own work."""
+    while True:
+        with SessionLocal() as db, db.begin():
+            claimed = db.execute(text('SELECT * FROM public.claim_training_job()')).first()
+        if claimed is None:
+            break
+        with SessionLocal() as db, db.begin():
+            job_id, tenant_id = claimed
+            set_local_tenant(db, tenant_id)
+            job = db.get(TrainingJob, job_id)
+            job.status = job.stage = 'cancelled'
+            job.completed_at = datetime.now(timezone.utc)
+    yield
+
+
 def test_interrupted_job_retries_once_then_fails_visibly(client):
+    """ER-NF-04."""
     tenant, headers = provision(client)
     seed(client, headers)
     response = client.post('/v1/training-jobs', json={'configuration': {'epochs': 1}}, headers=headers)
@@ -54,6 +75,7 @@ def seed(client, headers):
 
 
 def test_real_tenant_training_and_cancel(client, tmp_path, monkeypatch):
+    """NR-F-07 / NR-F-10 / ER-F-02 / ER-NF-03 (a foreign-tenant artifact is refused at activation) / UC-12 / UC-14 / UC-15."""
     monkeypatch.setattr(get_settings(), 'generated_model_root', str(tmp_path))
     tenant, headers = provision(client)
     limits(client, tenant, training_jobs=3)
@@ -105,3 +127,40 @@ def test_real_tenant_training_and_cancel(client, tmp_path, monkeypatch):
     with SessionLocal() as db, db.begin():
         set_local_tenant(db, UUID(tenant))
         assert db.scalar(select(TrainingJob.model_version_id).where(TrainingJob.id == UUID(job_id))) is None
+
+
+def _train(client, headers, tenant, request_id):
+    response = client.post('/v1/training-jobs', json={'request_id': request_id, 'configuration': {'mode': 'train', 'epochs': 1}},
+                           headers=headers)
+    assert response.status_code == 200, response.text
+    assert run_once()
+    with SessionLocal() as db, db.begin():
+        set_local_tenant(db, UUID(tenant))
+        job = db.get(TrainingJob, UUID(response.json()['id']))
+        assert job.status == 'succeeded', job.failure_reason
+        return str(job.model_version_id)
+
+
+def test_xr_f_10_candidate_and_active_are_compared_on_one_common_set(client, tmp_path, monkeypatch):
+    """UC-17."""
+    monkeypatch.setattr(get_settings(), 'generated_model_root', str(tmp_path))
+    monkeypatch.setattr(get_settings(), 'training_cooldown_seconds', 0)
+    tenant, headers = provision(client)
+    limits(client, tenant, training_jobs=3)
+    seed(client, headers)
+    first = _train(client, headers, tenant, 'compare-1')
+    comparison = client.get(f'/v1/model-versions/{first}', headers=headers).json()['metrics']['comparison']
+    # No active version yet: the candidate is compared with the baseline only.
+    assert comparison['active'] is None and comparison['examples'] == comparison['candidate']['examples'] > 0
+    assert comparison['popularity_baseline']['examples'] == comparison['examples']
+    assert client.post(f'/v1/model-versions/{first}:activate', headers=headers).status_code == 200
+    second = _train(client, headers, tenant, 'compare-2')
+    comparison = client.get(f'/v1/model-versions/{second}', headers=headers).json()['metrics']['comparison']
+    active = comparison['active']
+    assert active['model_version_id'] == first
+    # Same examples, same denominator, for every compared version.
+    assert active['examples'] == comparison['candidate']['examples'] == comparison['popularity_baseline']['examples'] == comparison['examples']
+    for metrics in (active, comparison['candidate'], comparison['popularity_baseline']):
+        assert 0 <= metrics['NDCG@10'] <= 1 and 0 <= metrics['Hit@10'] <= 1
+    assert comparison['ndcg10_delta_vs_active'] == pytest.approx(comparison['candidate']['NDCG@10'] - active['NDCG@10'])
+    assert (tmp_path / tenant).exists()

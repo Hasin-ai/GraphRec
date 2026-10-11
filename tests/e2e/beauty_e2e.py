@@ -100,8 +100,8 @@ def user_history(dataset: Path, user_id: str) -> list[str]:
 
 
 def write_storefront_env(values: dict[str, str]) -> Path:
-    env_path = REPO / "apps" / "demo-storefront" / ".env"
-    example = REPO / "apps" / "demo-storefront" / ".env.example"
+    env_path = REPO / "archive" / "demo-storefront" / ".env"
+    example = REPO / "archive" / "demo-storefront" / ".env.example"
     lines = (env_path if env_path.is_file() else example).read_text(encoding="utf-8").splitlines()
     seen: set[str] = set()
     out: list[str] = []

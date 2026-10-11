@@ -167,6 +167,26 @@ class TenantResourceQuota(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class PlanChangeRequest(Base):
+    """A tenant's request to move to another plan; a platform operator decides (migration 0039)."""
+
+    __tablename__ = "plan_change_requests"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    current_plan_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("pricing_plans.id"), nullable=False)
+    requested_plan_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("pricing_plans.id"), nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="pending")
+    message: Mapped[str | None] = mapped_column(Text)
+    requested_by: Mapped[str | None] = mapped_column(Text)
+    decision_reason: Mapped[str | None] = mapped_column(Text)
+    decided_by: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
     __table_args__ = (Index("ix_audit_logs_tenant_time", "tenant_id", "occurred_at"),)

@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.1.0 — Unreleased
+
+The SDK now shares one version with the GraphRec API and console.
+
+- `storefront.events.list()` / `AsyncEvents.list()` read recently received events (`GET /v1/events`), with `user_id`, `event_type` and `product_id` filters.
+- `auth.refresh(refresh_token=...)` rotates a refresh token (`POST /v1/auth/refresh`).
+- `client.platform.operators`: `login()`, `me()`, `list()`, `create()`, `update()` for named operators (D-04).
+- `UsageDimension.measured` flags dimensions GraphRec does not measure yet.
+- `GraphRec.plans()` reads the public plan limits.
+- `GraphRec.ready()` reads `/readyz`.
+- `GraphRec.meta()` reads the product version.
+- `Recommendations.active_model_version_id` is new; `model_version_id` is now `None` when a fallback served the request.
+- `AuthTokenPair.tenant_name` carries the tenant's registered name.
+- `AuthTokenPair.email` carries the signed-in account's email.
+
 ## 1.0.0 — 2026-10-04
 
 The SDK now covers all 68 API routes and groups them by audience. This release is **breaking**: every resource moved.

@@ -1,6 +1,7 @@
 services:
   postgres:
     image: postgres:17.5-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_OWNER_USER}
@@ -16,9 +17,12 @@ services:
       retries: 20
 
   migrate:
-    build: .
+    build: &api-build
+      context: .
+      target: runtime
     command: ["alembic", "upgrade", "head"]
     environment:
+      GRAPHREC_ENV: ${GRAPHREC_ENV:-development}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_OWNER_USER}:${POSTGRES_OWNER_PASSWORD}@postgres:5432/${POSTGRES_DB}
     depends_on:
       postgres:
@@ -27,6 +31,7 @@ services:
 
   redis:
     image: redis:7.4.2-alpine
+    restart: unless-stopped
     command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -36,9 +41,12 @@ services:
 
   qdrant:
     image: qdrant/qdrant:v1.12.0
+    # A-14: reachable only from this machine (development). The production file
+    # publishes no internal ports at all.
     ports:
-      - "6333:6333"
-      - "6334:6334"
+      - "127.0.0.1:${QDRANT_HTTP_PORT:-6333}:6333"
+      - "127.0.0.1:${QDRANT_GRPC_PORT:-6334}:6334"
+    restart: unless-stopped
     volumes:
       - qdrant_data:/qdrant/storage
     healthcheck:
@@ -48,8 +56,21 @@ services:
       retries: 20
 
   api:
-    build: .
+    build: *api-build
     environment: &api-environment
+      GRAPHREC_ENV: ${GRAPHREC_ENV:-development}
+      # nginx is the only client in this network; the API port below binds to localhost.
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-*}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+      QDRANT_TIMEOUT_SECONDS: ${QDRANT_TIMEOUT_SECONDS:-5}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
+      DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-20}
+      DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-10}
+      DB_CONNECT_TIMEOUT_SECONDS: ${DB_CONNECT_TIMEOUT_SECONDS:-5}
+      DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-30000}
+      MAX_BULK_BODY_BYTES: ${MAX_BULK_BODY_BYTES:-1048576}
+      FALLBACK_POPULARITY_WINDOW_DAYS: ${FALLBACK_POPULARITY_WINDOW_DAYS:-30}
+      GENERATED_MODEL_ROOT: /app/generated_artifacts
       DATABASE_URL: postgresql+psycopg://graphrec_app:${POSTGRES_APP_PASSWORD}@postgres:5432/${POSTGRES_DB}
       AUDIT_HASH_SECRET: ${AUDIT_HASH_SECRET}
       JWT_SIGNING_SECRET: ${JWT_SIGNING_SECRET}
@@ -80,9 +101,14 @@ services:
       ACCOUNT_SETUP_TOKEN_TTL_SECONDS: ${ACCOUNT_SETUP_TOKEN_TTL_SECONDS:-86400}
       TRAINING_COOLDOWN_SECONDS: ${TRAINING_COOLDOWN_SECONDS:-60}
       RETRAINING_MIN_INTERVAL_MINUTES: ${RETRAINING_MIN_INTERVAL_MINUTES:-60}
+      SCHEDULER_TICK_SECONDS: ${SCHEDULER_TICK_SECONDS:-15}
       CAPACITY_TARGET_RPM_PER_REPLICA: ${CAPACITY_TARGET_RPM_PER_REPLICA:-120}
       CAPACITY_SCALE_DOWN_STABILIZATION_SECONDS: ${CAPACITY_SCALE_DOWN_STABILIZATION_SECONDS:-120}
       PLATFORM_ADMIN_TOKEN: ${PLATFORM_ADMIN_TOKEN:-}
+      OPERATOR_TOKEN_TTL_SECONDS: ${OPERATOR_TOKEN_TTL_SECONDS:-3600}
+      LOG_FORMAT: ${LOG_FORMAT:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
       QDRANT_URL: ${QDRANT_URL:-http://qdrant:6334}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       REDIS_TIMEOUT_MS: ${REDIS_TIMEOUT_MS:-30}
@@ -97,7 +123,9 @@ services:
       - ${MODEL_ARTIFACT_DIR:-./model_artifacts}:/artifacts:ro
       - trained_models:/app/generated_artifacts
     ports:
-      - "${API_PORT:-8010}:8000"
+      - "127.0.0.1:${API_PORT:-8010}:8000"
+    restart: unless-stopped
+    stop_grace_period: 30s
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -106,25 +134,23 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/readyz')"]
       interval: 5s
       timeout: 3s
       retries: 20
 
   scheduler:
-    build: .
+    build: *api-build
     # XR-F-02/03 retraining policies and XR-F-08 capacity controller.
     command: ["python", "-m", "graphrec_core.scheduler"]
-    environment:
-      <<: *api-environment
-      SCHEDULER_TICK_SECONDS: ${SCHEDULER_TICK_SECONDS:-15}
+    environment: *api-environment
     depends_on:
       migrate:
         condition: service_completed_successfully
     restart: unless-stopped
 
   worker:
-    build: .
+    build: *api-build
     command: ["python", "-m", "graphrec_core.dgsr.worker"]
     environment: *api-environment
     volumes:
@@ -133,15 +159,22 @@ services:
       migrate:
         condition: service_completed_successfully
     restart: unless-stopped
+    # The worker finishes or hands back its current batch on SIGTERM (A-21).
+    stop_grace_period: 60s
 
   frontend:
     build:
-      context: ./frontend_02
+      context: ./web
       args:
         # Empty: nginx proxies /v1 to the api service on the same origin.
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+    environment:
+      # One public URL: page requests by any other address are redirected here
+      # (e.g. https://graphrec.example.com). Empty serves every address as-is.
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-}
     ports:
       - "${FRONTEND_PORT:-5180}:80"
+    restart: unless-stopped
     depends_on:
       api:
         condition: service_healthy
@@ -157,15 +190,37 @@ services:
     working_dir: /app
     command: ["sh", "-c", "npm ci && npm test -- --run && npm run build && npm audit"]
     volumes:
-      - ./frontend_02:/app:ro
+      - ./web:/app:ro
       - /app/node_modules
       - /app/dist
 
+  api-test:
+    # Backend unit and integration suites inside the Compose network:
+    #   docker compose --profile test run --rm api-test
+    build:
+      context: .
+      target: test
+    profiles: ["test"]
+    command: ["python", "-m", "pytest", "-q", "tests", "--ignore=tests/e2e"]
+    environment:
+      <<: *api-environment
+      GRAPHREC_ENV: development
+    volumes:
+      - ${MODEL_ARTIFACT_DIR:-./model_artifacts}:/artifacts:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      qdrant:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   demo-account:
-    build: .
+    build: *api-build
     profiles: ["demo"]
     command: ["python", "-m", "scripts.create_local_demo_user"]
     environment:
+      GRAPHREC_ENV: development
       DATABASE_URL: postgresql+psycopg://graphrec_app:${POSTGRES_APP_PASSWORD}@postgres:5432/${POSTGRES_DB}
       AUDIT_HASH_SECRET: ${AUDIT_HASH_SECRET}
       JWT_SIGNING_SECRET: ${JWT_SIGNING_SECRET}

@@ -1,0 +1,29 @@
+{
+  "name": "reel-storefront",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "gen:api": "openapi-typescript ../openapi.json -o src/api/schema.d.ts",
+    "check:api": "npm run gen:api && git diff --exit-code -- src/api/schema.d.ts"
+  },
+  "dependencies": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-router-dom": "7.18.3"
+  },
+  "devDependencies": {
+    "@types/react": "19.1.6",
+    "@types/react-dom": "19.1.6",
+    "@vitejs/plugin-react": "4.6.0",
+    "openapi-typescript": "7.4.4",
+    "typescript": "5.8.3",
+    "vite": "7.3.6"
+  },
+  "overrides": {
+    "rollup": "4.63.1"
+  }
+}
