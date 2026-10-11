@@ -9,7 +9,7 @@ import { FilmTile } from "./FilmTile";
 const MAX_DIVERSITY = 0.8;
 
 function ServingControls({ applied }: { applied: boolean }) {
-  const { serving, setServing } = useDemo();
+  const { serving, appliedServing, setServing } = useDemo();
   const [draft, setDraft] = useState(serving.diversity);
   useEffect(() => setDraft(serving.diversity), [serving.diversity]);
   // Commit once the slider has been still for a moment, so a drag or a run of arrow
@@ -29,6 +29,8 @@ function ServingControls({ applied }: { applied: boolean }) {
           <button className="link" onClick={() => setDraft(DEFAULT_DIVERSITY)}>reset</button>
         )}
       </label>
+      {applied && Math.abs(draft - appliedServing.diversity) > 1e-9 && <span className="muted small">
+        Press “Update picks” to apply.</span>}
       {!applied && <span className="muted small" title="Diversity re-ranks the model's candidates; a popular list has none to spread">
         Not applied to popular picks — watch a film first.</span>}
     </div>
@@ -38,7 +40,8 @@ function ServingControls({ applied }: { applied: boolean }) {
 export function Shelf({ recs, loading, onUpdate, pending, emptyHint }: {
   recs: Recs | Unavailable | null; loading: boolean; onUpdate?: () => void; pending?: number; emptyHint?: string;
 }) {
-  const { setInsight, insightOpen, notify, watchedIds } = useDemo();
+  const { setInsight, insightOpen, notify, watchedIds, serving, appliedServing } = useDemo();
+  const settingsChanged = Math.abs(serving.diversity - appliedServing.diversity) > 1e-9;
   if (!recs) {
     return (
       <section className="shelf" aria-busy="true">
@@ -72,7 +75,7 @@ export function Shelf({ recs, loading, onUpdate, pending, emptyHint }: {
           {onUpdate && <ServingControls applied={!recs.trace.fallbackUsed} />}
         </div>
         {onUpdate && (
-          <button className="btn primary" onClick={onUpdate} disabled={loading} title="Ask GraphRec for a fresh list using everything you've watched">
+          <button className={`btn primary ${pending || settingsChanged ? "has-pending" : ""}`} onClick={onUpdate} disabled={loading} title="Ask GraphRec for a fresh list using everything you've watched">
             {loading ? "Updating…" : "Update picks"}{pending ? <span className="count" aria-label={`${pending} new since last update`}>{pending}</span> : null}
           </button>
         )}

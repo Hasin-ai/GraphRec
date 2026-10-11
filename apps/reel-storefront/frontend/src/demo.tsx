@@ -53,6 +53,7 @@ interface DemoState {
   notify: (message: string) => void;
   setLastTrace: (r: Recs) => void;
   serving: Serving;
+  appliedServing: Serving;
   setServing: (next: Partial<Serving>) => Promise<void>;
 }
 
@@ -65,8 +66,10 @@ export function DemoProvider({ children }: { children: ReactNode }) {
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [insightOpen, setInsightOpen] = useState(() => readPref("insight", false));
   const [tab, setTab] = useState<Tab>("sequence");
-  const [autoRefresh, setAutoRefreshState] = useState(() => readPref("autoUpdate", true));
-  const setAutoRefresh = useCallback((on: boolean) => { setAutoRefreshState(on); writePref("autoUpdate", on); }, []);
+  // Picks change only when the shopper presses "Update picks". Auto-update is an explicit opt-in
+  // (Insight drawer); the key was renamed so browsers that had the old default-on value start off.
+  const [autoRefresh, setAutoRefreshState] = useState(() => readPref("autoUpdateOptIn", false));
+  const setAutoRefresh = useCallback((on: boolean) => { setAutoRefreshState(on); writePref("autoUpdateOptIn", on); }, []);
   const [history, setHistory] = useState<Film[]>([]);
   const [pending, setPending] = useState(0);
   const [version, setVersion] = useState(0);
@@ -74,6 +77,8 @@ export function DemoProvider({ children }: { children: ReactNode }) {
   const [lastTrace, setLastTrace] = useState<Recs | null>(null);
   const [serving, setServingState] = useState<Serving>(readServing);
   const servingRef = useRef(serving);
+  /** Serving settings the shelf on screen was built with; differs from `serving` until "Update picks". */
+  const [appliedServing, setAppliedServing] = useState<Serving>(serving);
 
   const notify = useCallback((message: string) => {
     setToast(message);
@@ -86,10 +91,12 @@ export function DemoProvider({ children }: { children: ReactNode }) {
   const refreshHome = useCallback(async () => {
     const mine = ++homeRequest.current;
     setHomeLoading(true);
+    const asked = servingRef.current;
     try {
-      const r = await api.recommend("home", undefined, servingRef.current);
+      const r = await api.recommend("home", undefined, asked);
       if (mine !== homeRequest.current) return;
       setHome(r);
+      setAppliedServing(asked);
       if (!isUnavailable(r)) setLastTrace(r);
       setPending(0);
     } catch (e) {
@@ -166,16 +173,16 @@ export function DemoProvider({ children }: { children: ReactNode }) {
     servingRef.current = merged;
     setServingState(merged);
     writeText("diversity", String(merged.diversity));
-    await refreshHome();
-  }, [refreshHome]);
+    // Not applied yet: the shelf keeps its current picks until "Update picks" is pressed.
+  }, []);
 
   const value = useMemo<DemoState>(() => ({
     session, home, homeLoading, receipts, insightOpen, tab, autoRefresh, pendingSinceRefresh: pending, version, toast, lastTrace,
     history, watchedIds,
-    switchPersona, resetGuest, refreshHome, watch, replay, notify, setAutoRefresh, setLastTrace, serving, setServing,
+    switchPersona, resetGuest, refreshHome, watch, replay, notify, setAutoRefresh, setLastTrace, serving, appliedServing, setServing,
     setInsight: (open, t) => { setInsightOpen(open); writePref("insight", open); if (t) setTab(t); },
   }), [session, home, homeLoading, receipts, insightOpen, tab, autoRefresh, pending, version, toast, lastTrace,
-       history, watchedIds, switchPersona, resetGuest, refreshHome, watch, replay, notify, setAutoRefresh, serving, setServing]);
+       history, watchedIds, switchPersona, resetGuest, refreshHome, watch, replay, notify, setAutoRefresh, serving, appliedServing, setServing]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

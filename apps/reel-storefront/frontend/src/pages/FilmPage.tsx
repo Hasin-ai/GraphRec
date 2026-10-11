@@ -15,7 +15,7 @@ function popularityLine(f: Film): string {
 export function FilmPage() {
   const { id = "" } = useParams();
   const from = (useLocation().state ?? undefined) as { requestId: string; position: number } | undefined;
-  const { watch, notify, setLastTrace, watchedIds, insightOpen, serving } = useDemo();
+  const { watch, notify, setLastTrace, watchedIds, insightOpen, appliedServing: serving } = useDemo();
   const [film, setFilm] = useState<Film | null>(null);
   const [missing, setMissing] = useState(false);
   const [more, setMore] = useState<Recs | Unavailable | null>(null);
