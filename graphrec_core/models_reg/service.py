@@ -77,6 +77,9 @@ class ModelRegistryService:
     def register_model_version(
         self, tenant_id: UUID, payload: ModelVersionCreate
     ) -> ModelVersionResource:
+        if get_settings().is_production:
+            # A-02: tenants cannot assert their own model quality in production.
+            raise ApiError(404, "resource_not_found", "The requested resource was not found")
         now = datetime.now(timezone.utc)
         existing = self.db.execute(
             select(ModelVersion).where(
@@ -92,6 +95,7 @@ class ModelRegistryService:
                 f"Model version tag '{payload.version_tag}' already exists for this tenant.",
             )
 
+        require_capacity(self.db, tenant_id, "active_model_versions")
         mv = ModelVersion(
             id=uuid4(),
             tenant_id=tenant_id,
@@ -100,21 +104,10 @@ class ModelRegistryService:
             status="eligible",
             metrics=payload.metrics,
             artifact_uri=payload.artifact_uri
-            or f"rustfs://graphrec-models/{tenant_id}/{payload.version_tag}.safetensors",
+            or f"unregistered://{tenant_id}/{payload.version_tag}",
             created_at=now,
         )
         self.db.add(mv)
-
-        usage = UsageEvent(
-            id=uuid4(),
-            tenant_id=tenant_id,
-            usage_type="active_model_versions",
-            quantity=Decimal("1"),
-            source_id=f"model-version-{mv.id}",
-            idempotency_key=str(uuid4()),
-            occurred_at=now,
-        )
-        self.db.add(usage)
         self._audit(tenant_id, "model_registered", mv.id)
         self.db.commit()
 
@@ -191,7 +184,6 @@ class ModelRegistryService:
             active.status = "retired"
 
         self.db.flush()
-        require_capacity(self.db, tenant_id, "active_model_versions")
 
         target.status = "active"
         target.activated_at = now
@@ -256,6 +248,8 @@ class ModelRegistryService:
                     raise ValueError("The version has no indexed products")
                 evict_artifact(directory)
             else:
+                if get_settings().is_production:
+                    raise ValueError("Only trained DGSR versions can become active in production")
                 # Development placeholders are usable only when their index was
                 # actually created. A successful job row alone is insufficient.
                 info = get_qdrant_client().get_collection(collection_name(tenant_id, target.id))
@@ -331,6 +325,9 @@ class ModelRegistryService:
             if snapshot is None:
                 raise ApiError(404, "resource_not_found", "Dataset snapshot not found.")
         require_capacity(self.db, tenant_id, "training_jobs")
+        # D-11: every successful job registers a version; refuse up front when the
+        # tenant already retains its plan's maximum (archive one to make room).
+        require_capacity(self.db, tenant_id, "active_model_versions")
         artifact_name = (payload.configuration or {}).get("pretrained_artifact")
         mode = (payload.configuration or {}).get("mode", "train")
         self._check_training_eligibility(tenant_id, cooldown=artifact_name is not None or mode == "train")
@@ -340,6 +337,10 @@ class ModelRegistryService:
             return self._queue_training(tenant_id, payload)
         if mode != "placeholder":
             raise ApiError(422, "validation_failed", "Choose train, a pretrained_artifact, or an explicit development placeholder.")
+        if get_settings().is_production:
+            # A-02: synthetic embeddings are a development aid, never a production model.
+            raise ApiError(422, "validation_failed", "Placeholder training is available only in development.",
+                           details={"fields": [{"field": "configuration.mode", "message": "Use train or a pretrained_artifact"}]})
         now = datetime.now(timezone.utc)
         settings = get_settings()
 
@@ -372,7 +373,7 @@ class ModelRegistryService:
             status="eligible",
             # Real metrics come from the training worker; none exist for synthetic embeddings.
             metrics={},
-            artifact_uri=f"rustfs://graphrec-models/{tenant_id}/{version_tag}.safetensors",
+            artifact_uri=f"placeholder://{tenant_id}/{version_tag}",
             created_at=now,
         )
         self.db.add(mv)

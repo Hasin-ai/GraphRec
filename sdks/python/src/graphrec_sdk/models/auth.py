@@ -20,6 +20,10 @@ class AuthTokenPair(GraphRecModel):
     #: ``tenant_administrator`` or ``tenant_developer``.
     user_role: str
     scopes: List[str] = []
+    #: Normalized sign-in email of the authenticated user (also returned by setup and recovery).
+    email: Optional[str] = None
+    #: The tenant's registered name.
+    tenant_name: Optional[str] = None
 
 
 class TenantRegistration(GraphRecModel):

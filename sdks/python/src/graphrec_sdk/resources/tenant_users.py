@@ -25,6 +25,17 @@ def _invite_body(email: str, role: str, display_name: Optional[str]) -> Dict[str
     return body
 
 
+def _update_body(role: Optional[str], status: Optional[str], reason: Optional[str]) -> Dict[str, Any]:
+    if role is not None and role not in ROLES:
+        raise InputValidationError(f"role must be one of {ROLES}")
+    if status is not None and status not in ("active", "locked", "disabled"):
+        raise InputValidationError("status must be active, locked or disabled")
+    body = {k: v for k, v in (("role", role), ("status", status), ("reason", reason)) if v is not None}
+    if not set(body) - {"reason"}:
+        raise InputValidationError("provide role or status")
+    return body
+
+
 class TenantUsers(SyncResource):
     """Tenant user administration. Administrator bearer tokens only (scope ``users:write``)."""
 
@@ -52,6 +63,25 @@ class TenantUsers(SyncResource):
                 cast_to=TenantUserInvitation,
             ),
         )
+
+    def get(self, user_id: Union[str, UUID]) -> TenantUser:
+        """``GET /v1/tenant/users/{user_id}``."""
+        return cast(TenantUser, self._client.request("tenant_users.get", path_params={"user_id": user_id}, cast_to=TenantUser))
+
+    def update(self, user_id: Union[str, UUID], *, role: Optional[str] = None, status: Optional[str] = None,
+               reason: Optional[str] = None) -> TenantUser:
+        """Change a member's role or status (``active``, ``locked``, ``disabled``).
+
+        ``PATCH /v1/tenant/users/{user_id}``. Ends the member's sessions. The last
+        active administrator cannot be demoted, locked or disabled (ConflictError).
+        """
+        return cast(TenantUser, self._client.request("tenant_users.update", path_params={"user_id": user_id},
+                                                     json=_update_body(role, status, reason), cast_to=TenantUser))
+
+    def resend_invitation(self, user_id: Union[str, UUID]) -> TenantUserInvitation:
+        """Issue a new one-time setup link; the previous one stops working."""
+        return cast(TenantUserInvitation, self._client.request(
+            "tenant_users.resend_invitation", path_params={"user_id": user_id}, cast_to=TenantUserInvitation))
 
     def revoke_invitation(self, user_id: Union[str, UUID]) -> TenantUser:
         """Withdraw a pending invitation; its one-time setup link stops working.
@@ -92,6 +122,25 @@ class AsyncTenantUsers(AsyncResource):
                 cast_to=TenantUserInvitation,
             ),
         )
+
+    async def get(self, user_id: Union[str, UUID]) -> TenantUser:
+        """``GET /v1/tenant/users/{user_id}``."""
+        return cast(TenantUser, await self._client.request("tenant_users.get", path_params={"user_id": user_id}, cast_to=TenantUser))
+
+    async def update(self, user_id: Union[str, UUID], *, role: Optional[str] = None, status: Optional[str] = None,
+               reason: Optional[str] = None) -> TenantUser:
+        """Change a member's role or status (``active``, ``locked``, ``disabled``).
+
+        ``PATCH /v1/tenant/users/{user_id}``. Ends the member's sessions. The last
+        active administrator cannot be demoted, locked or disabled (ConflictError).
+        """
+        return cast(TenantUser, await self._client.request("tenant_users.update", path_params={"user_id": user_id},
+                                                     json=_update_body(role, status, reason), cast_to=TenantUser))
+
+    async def resend_invitation(self, user_id: Union[str, UUID]) -> TenantUserInvitation:
+        """Issue a new one-time setup link; the previous one stops working."""
+        return cast(TenantUserInvitation, await self._client.request(
+            "tenant_users.resend_invitation", path_params={"user_id": user_id}, cast_to=TenantUserInvitation))
 
     async def revoke_invitation(self, user_id: Union[str, UUID]) -> TenantUser:
         """Async variant of :meth:`TenantUsers.revoke_invitation`."""

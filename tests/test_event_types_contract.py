@@ -7,7 +7,7 @@ import pytest
 
 from graphrec_core.schemas.events import EVENT_TYPES, EventType
 
-FRONTEND = Path(__file__).resolve().parents[1] / "frontend_02" / "src" / "api" / "eventTypes.ts"
+FRONTEND = Path(__file__).resolve().parents[1] / "web" / "src" / "api" / "eventTypes.ts"
 
 
 def test_literal_matches_constant():

@@ -1,0 +1,30 @@
+# Continuous Deployment for GraphRec: Triggers upon push to main
+name: cd
+
+on:
+  push:
+    branches: [main, reel/production-readiness]
+  workflow_dispatch:
+
+concurrency:
+  group: cd-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to GCP VM
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            cd ~/GraphRec
+            git fetch origin
+            CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+            git reset --hard origin/$CURRENT_BRANCH
+            sudo docker compose up -d --build
+            sudo docker compose ps

@@ -88,6 +88,7 @@ def create_key(
 def test_empty_list_and_redacted_create_list_detail_are_exact(
     client: TestClient,
 ) -> None:
+    """NR-F-03 / UC-04."""
     tenant_id, user_id, token = provision_user(client)
     assert client.get("/v1/api-keys", headers=bearer(token)).json() == {"items": []}
 

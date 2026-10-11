@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 
 
 #: Single source of the accepted interaction types. The console's list
-#: (frontend_02/src/api/eventTypes.ts) is checked against this by tests.
+#: (web/src/api/eventTypes.ts) is checked against this by tests.
 EVENT_TYPES = ("view", "click", "add_to_cart", "remove_from_cart", "purchase", "rating", "search", "add_to_wishlist")
 EventType = Literal["view", "click", "add_to_cart", "remove_from_cart", "purchase", "rating", "search", "add_to_wishlist"]
 
@@ -44,6 +44,18 @@ class EventItemOutcome(BaseModel):
     reason: str | None = None
 
 
+class EventRecord(BaseModel):
+    """One stored interaction, as listed by ``GET /v1/events``."""
+
+    event_id: str
+    event_type: str
+    user_id: str | None = None
+    external_product_id: str | None = None
+    context: dict[str, Any] = Field(default_factory=dict)
+    occurred_at: datetime
+    created_at: datetime
+
+
 class EventBatchResponse(BaseModel):
     id: UUID
     status: str
@@ -56,3 +68,12 @@ class EventBatchResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class EventSubmitResponse(BaseModel):
+    """Result of ``POST /v1/events``. A duplicate returns the original receipt time."""
+
+    event_id: str
+    accepted: bool
+    duplicate: bool
+    received_at: datetime

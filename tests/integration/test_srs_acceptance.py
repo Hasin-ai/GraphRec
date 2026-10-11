@@ -30,6 +30,7 @@ def limits(client, tenant, **overrides):
 
 
 def test_feedback_replay_ownership_and_disabled_recommendation(client):
+    """NR-F-14 / UC-23 / BRULE-09 / BRULE-11 / ER-F-04 (feedback replay)."""
     tenant, headers = provision(client)
     provisioned_foreign_tenant, foreign = provision(client)
     assert client.put('/v1/products/movie', json={'external_id': 'movie', 'title': 'Movie'}, headers=headers).status_code == 200
@@ -38,6 +39,10 @@ def test_feedback_replay_ownership_and_disabled_recommendation(client):
     unavailable = client.post('/v1/recommendations', json={'user_id': 'shopper', 'fallback_allowed': False}, headers=headers)
     assert unavailable.status_code == 503
     assert unavailable.json()['error']['code'] == 'recommendation_unavailable'
+    # BRULE-03 (A-21b): the customer exists because the tenant sent an interaction for it;
+    # recommendation requests alone never create customers.
+    assert client.post('/v1/events', json={'event_id': 'shopper-view', 'event_type': 'view', 'user_id': 'shopper',
+                                           'external_product_id': 'movie'}, headers=headers).status_code == 200
     request = {'request_id': 'same-request', 'user_id': 'shopper', 'top_n': 1}
     result = client.post('/v1/recommendations', json=request, headers=headers)
     assert result.status_code == 200, result.text
@@ -78,6 +83,7 @@ def test_feedback_replay_ownership_and_disabled_recommendation(client):
 
 
 def test_limits_and_snapshot_ownership_are_enforced_by_api(client):
+    """ER-F-09 / BRULE-10."""
     tenant, headers = provision(client)
     _, foreign = provision(client)
     limits(client, tenant, stored_products=1, accepted_events=1, recommendation_requests=1, training_jobs=0)
@@ -102,6 +108,7 @@ def test_limits_and_snapshot_ownership_are_enforced_by_api(client):
 
 
 def test_snapshot_captures_real_immutable_tenant_content(client):
+    """ER-F-01 / BRULE-12."""
     tenant, headers = provision(client)
     foreign_tenant, _ = provision(client)
     product = {'external_id': 'snapshot-movie', 'title': 'Original title'}
@@ -123,6 +130,7 @@ def test_snapshot_captures_real_immutable_tenant_content(client):
 
 
 def test_training_replays_once_and_failed_activation_is_audited(client):
+    """ER-F-06 / UC-18 / ER-F-04 (training replay)."""
     tenant, headers = provision(client)
     _, foreign = provision(client)
     limits(client, tenant, training_jobs=1)
@@ -156,6 +164,7 @@ def test_training_replays_once_and_failed_activation_is_audited(client):
 
 
 def test_deployment_tracks_last_ready_version_and_protects_rollback_target(client):
+    """NR-F-11 / UC-19 / XR-F-05."""
     tenant, headers = provision(client)
     limits(client, tenant, training_jobs=3)
     assert client.put('/v1/products/movie', json={'external_id': 'movie', 'title': 'Movie'}, headers=headers).status_code == 200
@@ -176,6 +185,7 @@ def test_deployment_tracks_last_ready_version_and_protects_rollback_target(clien
 
 
 def test_platform_plan_assignment_preserves_overrides_and_usage(client):
+    """UC-28."""
     tenant, headers = provision(client)
     operator = {'Accept': 'application/json', 'Authorization': f'Bearer {get_settings().platform_admin_token}'}
     limits(client, tenant, stored_products=7)
@@ -188,7 +198,10 @@ def test_platform_plan_assignment_preserves_overrides_and_usage(client):
     assert response.json()['limits']['stored_products'] == 7
     assert response.json()['limits']['training_jobs'] == pro['limits']['training_jobs']
     current = client.get(f'/v1/platform/tenants/{tenant}/quotas', headers=operator)
-    assert current.json() == response.json()
+    # The assignment result is the stored quota plus the (empty) list of acknowledged conflicts.
+    assigned = response.json()
+    assert assigned.pop('warnings') == []
+    assert current.json() == assigned
     usage = client.get(f'/v1/platform/tenants/{tenant}/usage', headers=operator)
     assert usage.status_code == 200, usage.text
     products = next(item for item in usage.json()['dimensions'] if item['type'] == 'stored_products')
@@ -225,6 +238,7 @@ def test_platform_plan_edit_updates_assigned_base_limits_and_audit(client):
 
 
 def test_operator_issued_recovery_is_single_use_and_invalidates_old_access(client):
+    """UC-03."""
     tag = uuid4().hex
     email = f"recover-{tag}@example.org"
     initial_password = f"Old-{tag}!"
@@ -272,6 +286,7 @@ def test_operator_issued_recovery_is_single_use_and_invalidates_old_access(clien
 
 
 def test_catalog_sync_and_event_batch_retain_item_outcomes_and_replay(client):
+    """NR-F-05 / NR-F-06 / NR-NF-05 / BRULE-05 / ER-F-04 (product and event replay) / UC-06 / UC-10 / UC-11."""
     tenant, headers = provision(client)
     _, foreign = provision(client)
     product = {'external_id': 'movie', 'title': 'Movie'}
@@ -310,6 +325,7 @@ def test_catalog_sync_and_event_batch_retain_item_outcomes_and_replay(client):
 
 
 def test_concurrency_and_minute_limits_reject_excess_without_double_metering(client, monkeypatch):
+    """ER-NF-07."""
     from concurrent.futures import ThreadPoolExecutor
     from threading import Event
     from apps.api.routes import recommendations
@@ -339,3 +355,28 @@ def test_concurrency_and_minute_limits_reject_excess_without_double_metering(cli
     assert rate.status_code == 429
     assert rate.json()['error']['details']['limit_name'] == 'requests_per_minute'
     assert rate.headers['retry-after'] == '60'
+
+
+def test_xr_f_06_retained_versions_limit_counts_every_non_archived_version(client):
+    """D-11: active_model_versions bounds retained versions; archiving frees room."""
+    tenant, headers = provision(client)
+    limits(client, tenant, active_model_versions=2, training_jobs=10)
+    first = client.post('/v1/model-versions', json={'version_tag': 'r1', 'model_type': 'development_placeholder'}, headers=headers)
+    second = client.post('/v1/model-versions', json={'version_tag': 'r2', 'model_type': 'development_placeholder'}, headers=headers)
+    assert first.status_code == second.status_code == 200
+    third = client.post('/v1/model-versions', json={'version_tag': 'r3', 'model_type': 'development_placeholder'}, headers=headers)
+    assert third.status_code == 429
+    assert third.json()['error']['details']['limit_name'] == 'active_model_versions'
+    refused_job = client.post('/v1/training-jobs', json={'configuration': {'mode': 'placeholder'}}, headers=headers)
+    assert refused_job.status_code == 429
+    assert client.post(f"/v1/model-versions/{first.json()['id']}:archive", headers=headers).status_code == 200
+    assert client.post('/v1/model-versions', json={'version_tag': 'r3', 'model_type': 'development_placeholder'}, headers=headers).status_code == 200
+    usage = {d['type']: d for d in client.get('/v1/usage', headers=headers).json()['dimensions']}
+    assert usage['active_model_versions']['used'] == 2
+
+
+def test_xr_f_06_plans_have_no_unenforced_limits(client):
+    """D-11: Pro allows one concurrent training job (BRULE-06) and no plan lists queued_messages."""
+    plans = {p['code']: p['limits'] for p in client.get('/v1/plans').json()['items']}
+    assert all('queued_messages' not in limits for limits in plans.values())
+    assert plans['pro']['concurrent_training_jobs'] == 1

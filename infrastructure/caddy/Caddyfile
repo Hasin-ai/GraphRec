@@ -1,0 +1,27 @@
+# Production edge (D-10): automatic HTTPS for GRAPHREC_DOMAIN, then the bundled
+# nginx, which serves the console and proxies /v1 to the API. Nothing else is
+# published: PostgreSQL, Redis, Qdrant, the API port and /metrics stay internal.
+{
+	email {$ACME_EMAIL}
+}
+
+{$GRAPHREC_DOMAIN} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+	# Metrics are for the internal Prometheus only (http://api:8000/metrics).
+	@metrics path /metrics /metrics/*
+	respond @metrics 404
+	request_body {
+		max_size 12MB
+	}
+	reverse_proxy frontend:80 {
+		header_up X-Forwarded-Proto {scheme}
+	}
+	log {
+		output stdout
+		format json
+	}
+}

@@ -1,34 +1,37 @@
 [build-system]
-requires = ["setuptools>=75"]
+requires = ["setuptools>=83"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "graphrec"
-version = "0.1.0"
+dynamic = ["version"]
 description = "GraphRec multi-tenant recommendation platform"
 requires-python = ">=3.12"
 dependencies = [
   "alembic==1.16.4",
   "argon2-cffi==25.1.0",
   "email-validator==2.2.0",
-  "fastapi==0.116.1",
+  "fastapi==0.136.3",
   "numpy>=1.26.0",
   "python-multipart>=0.0.12",
-  "PyJWT==2.10.1",
+  "PyJWT==2.15.0",
   "psycopg[binary]==3.2.9",
   "pydantic-settings==2.10.1",
   "qdrant-client[grpc]>=1.12.0,<1.13",
   "redis==5.2.1",
   "sqlalchemy==2.0.41",
-  "torch>=2.4",
+  "torch>=2.10",
   "uvicorn[standard]==0.35.0",
 ]
 
 [project.optional-dependencies]
 test = [
   "httpx==0.28.1",
-  "pytest==8.4.1",
+  "pytest==9.0.3",
 ]
+
+[tool.setuptools.dynamic]
+version = { file = "VERSION" }
 
 [tool.setuptools.packages.find]
 include = ["apps*", "graphrec_core*", "scripts*"]

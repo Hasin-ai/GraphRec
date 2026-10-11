@@ -5,9 +5,8 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from apps.api.main import app
-from graphrec_core.schemas.products import ProductBulkUpsertRequest, ProductUpsert
 from graphrec_core.schemas.events import EventBatchSubmit, EventSubmit
-from graphrec_core.schemas.models import ModelVersionCreate, TrainingJobCreate
+from graphrec_core.schemas.models import ModelVersionCreate
 
 client = TestClient(app)
 

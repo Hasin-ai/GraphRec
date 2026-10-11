@@ -1,0 +1,8 @@
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+
+export default defineConfig({
+  plugins: [react()],
+  server: { port: 5291, proxy: { "/api/reel": { target: "http://localhost:5290", changeOrigin: false } } },
+  build: { outDir: "dist", rollupOptions: { maxParallelFileOps: 1 } },
+});

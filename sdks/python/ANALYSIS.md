@@ -12,7 +12,7 @@ GraphRec is a multi-tenant recommendation platform for independent e-commerce bu
 | Domain services | `graphrec_core/*`: registration, auth, api_keys, subscription, usage, catalog, events, datasets, models_reg, vector_store |
 | Data | PostgreSQL 17 through SQLAlchemy 2 and Alembic (10 migrations); forced row-level security on every tenant-owned table (migration 0009 extends it to the domain tables); runtime role `graphrec_app` without BYPASSRLS |
 | Vectors | Qdrant (gRPC), one collection per `tenant × model version`, HNSW, cosine distance |
-| Frontend | React 19 + Vite operator console (`frontend_02/`), talking to `/v1` through nginx |
+| Frontend | React 19 + Vite operator console (`web/`), talking to `/v1` through nginx |
 | Ops | Docker Compose: postgres, migrate, qdrant, api, frontend, plus test/demo profiles |
 
 ## 2. API contract (what the SDK encodes)

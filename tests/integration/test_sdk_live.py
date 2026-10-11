@@ -130,9 +130,13 @@ def ops(public: g.GraphRec) -> g.GraphRec:
 
 def test_health(public: g.GraphRec) -> None:
     assert public.health()["status"] in {"ok", "healthy"}
+    assert public.meta()["version"] == g.__version__
+    assert public.ready()["checks"]["database"]["status"] == "ok"
+    assert {plan["code"] for plan in public.plans()["items"]} >= {"free", "basic", "pro"}
 
 
 def test_catalog_lifecycle(shop: Tenant) -> None:
+    """NR-F-04 / UC-05 / UC-07 / UC-08."""
     catalog = shop.admin.tenant.catalog
     result = catalog.bulk_upsert(
         [{"external_id": f"sku-{i}", "title": f"Item {i}", "price": "10.00", "category": ["a", "b"][i % 2]}
@@ -159,6 +163,7 @@ def test_catalog_lifecycle(shop: Tenant) -> None:
 
 
 def test_events_and_batches(shop: Tenant) -> None:
+    """UC-09."""
     events = shop.store.storefront.events
     first = events.create("view", user_id="u-1", product_id="sku-1", event_id=f"evt-{uuid4().hex}")
     assert first.accepted and not first.duplicate
@@ -169,6 +174,8 @@ def test_events_and_batches(shop: Tenant) -> None:
          for i in range(20)]
     )
     assert batch.accepted_count == 20
+    recent = events.list(limit=5, user_id="u-1")
+    assert recent and all(item.user_id == "u-1" for item in recent)
     listed = events.list_batches()
     assert listed and events.get_batch(listed[0].id).id == listed[0].id
     with pytest.raises(g.RequestValidationError):
@@ -176,6 +183,7 @@ def test_events_and_batches(shop: Tenant) -> None:
 
 
 def test_recommendations_and_feedback(shop: Tenant) -> None:
+    """NR-F-12 / UC-21 / UC-22."""
     store = shop.store.storefront
     recs = store.recommendations.get(user_id="u-1", top_n=4, exclude_product_ids=["sku-0"])
     assert "sku-0" not in recs.product_ids and len(recs) <= 4
@@ -199,6 +207,7 @@ def test_recommendations_and_feedback(shop: Tenant) -> None:
 
 def test_auth_login_logout_and_recovery(public: g.GraphRec, shop: Tenant, ops: g.GraphRec) -> None:
     tokens = public.tenant.auth.login(email=shop.email, password=PASSWORD)
+    tokens = public.tenant.auth.refresh(refresh_token=tokens.refresh_token)
     session = public.with_credentials(access_token=tokens.access_token)
     assert session.tenant.subscription.get().plan_code
     session.tenant.auth.logout()
@@ -226,11 +235,24 @@ def test_password_client_logout_signs_in_again(shop: Tenant) -> None:
     assert shop.admin.tenant.users.list().total >= 1
 
 
-def test_tenant_users(shop: Tenant) -> None:
+def test_tenant_users(public: g.GraphRec, shop: Tenant) -> None:
     users = shop.admin.tenant.users
     invite = users.invite(f"dev-{uuid4().hex[:8]}@example.org", display_name="Dev")
     assert invite.setup_token and invite.status == "invited"
     assert any(u.id == invite.id for u in users.list())
+    assert users.get(invite.id).email == invite.email
+    resent = users.resend_invitation(invite.id)
+    assert resent.setup_token != invite.setup_token
+    with pytest.raises(g.ConflictError):  # pending invitations are resent or revoked, not edited
+        users.update(invite.id, role="tenant_administrator")
+    member = users.invite(f"member-{uuid4().hex[:8]}@example.org")
+    public.tenant.auth.setup_password(setup_token=member.setup_token, password=PASSWORD)
+    promoted = users.update(member.id, role="tenant_administrator", reason="SDK live test")
+    assert promoted.role == "tenant_administrator"
+    assert any(r.action_type == "tenant_user_updated" and r.reason == "SDK live test"
+               for r in shop.admin.tenant.audit.list(action="tenant_user_updated").items)
+    with pytest.raises(g.InputValidationError):
+        users.update(member.id)
     revoked = users.revoke_invitation(invite.id)
     assert revoked.id == invite.id and revoked.status != "invited"
     with pytest.raises(g.ConflictError):
@@ -269,6 +291,7 @@ def test_billing_and_usage(shop: Tenant) -> None:
 
 
 def test_datasets_training_and_model_registry(shop: Tenant) -> None:
+    """NR-F-09 / UC-16 / UC-20."""
     tenant = shop.admin.tenant
     csv = "event_id,event_type,user_id,external_product_id\n" + "".join(
         f"ds-{uuid4().hex[:6]}-{i},click,u-{i % 5},sku-{i % 10}\n" for i in range(30)
@@ -381,23 +404,69 @@ def test_platform_tenants_quotas_and_plans(ops: g.GraphRec, shop: Tenant) -> Non
         platform.plans.update(pro.id, name=pro.name, limits={"stored_products": 1}, is_active=True)
 
 
+def test_plan_change_requests(public: g.GraphRec, ops: g.GraphRec) -> None:
+    """No payments: the tenant requests a plan, the operator approves or rejects it."""
+    tenant = _provision(public, "plans")
+    subscription = tenant.admin.tenant.subscription
+    assert subscription.list_requests().pending is None
+    asked = subscription.request_plan("basic", message="Launch week")
+    assert asked.is_pending and asked.requested_plan_code == "basic"
+    with pytest.raises(g.ConflictError):
+        subscription.request_plan("pro")
+    with pytest.raises(g.PermissionDeniedError):
+        tenant.store.tenant.subscription.request_plan("pro")   # API keys cannot request plans
+
+    queue = ops.platform.plan_requests.list(status="pending")
+    assert queue.pending_count >= 1 and any(r.id == UUID(asked.id) for r in queue.items)
+    decided = ops.platform.plan_requests.approve(asked.id, reason="Approved for launch")
+    assert decided.request.status == "approved" and decided.warnings == []
+    assert subscription.get().plan_code == "basic"
+
+    rejected = ops.platform.plan_requests.reject(subscription.request_plan("pro").id, reason="Start with Basic")
+    assert rejected.request.status == "rejected" and subscription.get().plan_code == "basic"
+    cancelled = subscription.cancel_request(subscription.request_plan("free").id)
+    assert cancelled.status == "cancelled"
+    assert [r.status for r in subscription.list_requests().items][:3] == ["cancelled", "rejected", "approved"]
+
+
+def test_tenant_account_status(shop: Tenant) -> None:
+    """D-13: any signed-in member can read the workspace status."""
+    status = shop.admin.tenant.account.status()
+    assert status.status == "active" and status.restricted_session is False
+
+
+def test_platform_operators(public: g.GraphRec, ops: g.GraphRec) -> None:
+    """D-04: create an operator with the bootstrap token, sign in, act under its own identity."""
+    email, password = f"sdk-op-{uuid4().hex[:8]}@example.org", f"Sdk-operator-{uuid4().hex}"
+    created = ops.platform.operators.create(email=email, display_name="SDK Operator", password=password,
+                                            roles=["monitoring", "operator_admin"])
+    session = public.platform.operators.login(email=email, password=password)
+    operator = public.with_credentials(access_token=session.access_token)
+    assert operator.platform.operators.me().operator_id == created.id
+    assert any(o.id == created.id for o in operator.platform.operators.list())
+    assert operator.platform.operators.update(created.id, display_name="SDK Operator 2").display_name == "SDK Operator 2"
+    with pytest.raises(g.PermissionDeniedError):
+        operator.platform.list_audit_logs()
+
+
 def test_platform_status_and_monitoring(ops: g.GraphRec, shop: Tenant) -> None:
     status = ops.platform.status()
     assert status.database == "connected" and status.status in {"healthy", "degraded"}
     assert any(a.tenant_id == shop.id for a in ops.platform.list_audit_logs())
     assert isinstance(ops.platform.list_failures().items, list)
+    assert any(u.tenant_id == shop.id and not u.unavailable for u in ops.platform.list_usage().items)
 
 
 def test_platform_suspension_blocks_tenant_credentials(public: g.GraphRec, ops: g.GraphRec) -> None:
     tenant = _provision(public, "suspend")
     assert tenant.store.tenant.catalog.list(limit=1).total == 0
-    assert ops.platform.tenants.set_status(tenant.id, g.TenantStatus.SUSPENDED).status == "suspended"
+    assert ops.platform.tenants.set_status(tenant.id, g.TenantStatus.SUSPENDED, reason="Live suspension test").status == "suspended"
     with pytest.raises((g.AuthenticationError, g.PermissionDeniedError)):
         tenant.store.tenant.catalog.list(limit=1)
-    assert ops.platform.tenants.set_status(tenant.id, "active").status == "active"
+    assert ops.platform.tenants.set_status(tenant.id, "active", reason="Live reactivation test").status == "active"
     assert tenant.store.tenant.catalog.list(limit=1).total == 0
     with pytest.raises(g.RequestValidationError):
-        ops.platform.tenants.set_status(tenant.id, "frozen")
+        ops.platform.tenants.set_status(tenant.id, "frozen", reason="Invalid status test")
 
 
 # -- authorization and tenant isolation ------------------------------------------------
@@ -417,6 +486,7 @@ def test_platform_token_is_not_a_tenant_credential(ops: g.GraphRec) -> None:
 
 def test_tenant_isolation(shop: Tenant, other: Tenant) -> None:
     # Ensure tenant A has data and B starts empty.
+    """BRULE-07."""
     shop.admin.tenant.catalog.upsert({"external_id": "iso-1", "title": "Isolated"})
     assert other.store.tenant.catalog.list().total == 0
     with pytest.raises(g.NotFoundError):

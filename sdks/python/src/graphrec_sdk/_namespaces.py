@@ -22,9 +22,11 @@ from .resources.events import AsyncEvents, Events
 from .resources.ml import AsyncModelVersions, AsyncTrainingJobs, ModelVersions, TrainingJobs
 from .resources.platform import (
     AsyncPlatformOperations,
+    AsyncPlatformPlanRequests,
     AsyncPlatformPlans,
     AsyncPlatformTenants,
     PlatformOperations,
+    PlatformPlanRequests,
     PlatformPlans,
     PlatformTenants,
 )
@@ -43,6 +45,8 @@ from .resources.recommendations import (
 )
 from .resources.serving import AsyncDeployment, AsyncMetrics, Deployment, Metrics
 from .resources.tenant_users import AsyncTenantUsers, TenantUsers
+from .resources.account import Account, AsyncAccount, AsyncTenantAudit, TenantAudit
+from .resources.operators import AsyncPlatformOperators, PlatformOperators
 from .resources.tenants import AsyncAuthentication, Authentication
 
 if TYPE_CHECKING:
@@ -100,8 +104,12 @@ class TenantNamespace:
     recommendation_policy: RecommendationPolicyResource
     deployment: Deployment
     metrics: Metrics
+    account: Account
+    audit: TenantAudit
 
     def __init__(self, api: SyncAPIClient) -> None:
+        self.account = Account(api)
+        self.audit = TenantAudit(api)
         self.auth = Authentication(api)
         self.users = TenantUsers(api)
         self.api_keys = ApiKeys(api)
@@ -133,8 +141,12 @@ class AsyncTenantNamespace:
     recommendation_policy: AsyncRecommendationPolicyResource
     deployment: AsyncDeployment
     metrics: AsyncMetrics
+    account: AsyncAccount
+    audit: AsyncTenantAudit
 
     def __init__(self, api: AsyncAPIClient) -> None:
+        self.account = AsyncAccount(api)
+        self.audit = AsyncTenantAudit(api)
         self.auth = AsyncAuthentication(api)
         self.users = AsyncTenantUsers(api)
         self.api_keys = AsyncApiKeys(api)
@@ -151,16 +163,20 @@ class AsyncTenantNamespace:
 
 
 class PlatformNamespace(PlatformOperations):
-    """Cross-tenant operations: ``tenants``, ``plans`` plus ``status()``,
+    """Cross-tenant operations: ``tenants``, ``plans``, ``plan_requests`` plus ``status()``,
     ``list_failures()`` and ``list_audit_logs()``."""
 
     tenants: PlatformTenants
     plans: PlatformPlans
+    plan_requests: PlatformPlanRequests
+    operators: PlatformOperators
 
     def __init__(self, api: SyncAPIClient) -> None:
         super().__init__(api)
         self.tenants = PlatformTenants(api)
         self.plans = PlatformPlans(api)
+        self.plan_requests = PlatformPlanRequests(api)
+        self.operators = PlatformOperators(api)
 
 
 class AsyncPlatformNamespace(AsyncPlatformOperations):
@@ -168,8 +184,12 @@ class AsyncPlatformNamespace(AsyncPlatformOperations):
 
     tenants: AsyncPlatformTenants
     plans: AsyncPlatformPlans
+    plan_requests: AsyncPlatformPlanRequests
+    operators: AsyncPlatformOperators
 
     def __init__(self, api: AsyncAPIClient) -> None:
         super().__init__(api)
         self.tenants = AsyncPlatformTenants(api)
         self.plans = AsyncPlatformPlans(api)
+        self.plan_requests = AsyncPlatformPlanRequests(api)
+        self.operators = AsyncPlatformOperators(api)
