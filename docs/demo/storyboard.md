@@ -1,17 +1,16 @@
 # GraphRec + ReelStore Product Demonstration Storyboard
 
-- **Format:** 16:9 (`1280×720` MP4 master at 24 fps; `960×540` optimized GIF at 12 fps for GitHub README)
-- **Target Duration:** ~36 seconds
-- **Data & Environment:** Live Docker Compose instances of GraphRec (`http://localhost:5180`, API `:8010`) and ReelStore (`http://localhost:5290`, backed by the MovieLens-32M DGSR checkpoint and 7,047 live movie posters)
+- **Format:** 16:9 live browser recording (`1280×720` H.264 MP4 master at 24 fps, `3.47 MB`; `800×450` GitHub-optimized GIF at 10 fps, `6.84 MB`)
+- **Duration:** `29.0 s`
+- **Environment:** Live Docker Compose instances of GraphRec (`http://localhost:5180`, API `:8010`) and ReelStore (`http://localhost:5290`, 7,951 films with 7,047 live posters)
 
-## Scene-by-Scene Breakdown
+## Scene-by-Scene Timeline
 
-| Scene | Time | Duration | Visual Content | On-Screen Story |
-|---|---|---|---|---|
-| **1. Title & Hero** | `0:00 – 0:04` | 4.0s | Branded dark-slate intro card cross-fading into the live GraphRec landing page (`/`) | Introduce **GraphRec + ReelStore** — multi-tenant graph-based sequential recommendations powered by DGSR. |
-| **2. ReelStore Storefront & Browsing** | `0:04 – 0:10` | 6.0s | Live ReelStore homepage with real posters → Browse page with genre/tag filters → Film detail page showing metadata, tags, and `"More like this"` shelf | Show the real e-commerce storefront experience across 7,951 MovieLens films. |
-| **3. Live Personalized Re-Ranking** | `0:10 – 0:17` | 7.0s | Switch shopper to **Maya** (animation history → animation Top-10) → record watches on Sci-Fi films (`Gattaca`, `Contact`, `Dark City`) → click **Update picks** → live shelf shifts to Sci-Fi recommendations | Prove real-time sequential personalization: new interactions immediately shift DGSR's ranking without retraining weights. |
-| **4. Glass-Box Insight & Capability Proofs** | `0:17 – 0:23` | 6.0s | Open ReelStore's **Insight** drawer → **Sequence** tab (20-film DGSR window & event receipts) → **Proof** tab showing the live **Capability Proof Battery** results against GraphRec | Show transparent request tracing, idempotency, and verified end-to-end GraphRec + DGSR behavior. |
-| **5. Multi-Tenant Operator Console** | `0:23 – 0:29` | 6.0s | Live GraphRec Operator Console (`/models` as tenant admin showing active DGSR checkpoint & metrics → `/admin/tenants` as platform operator showing isolated tenants & statuses) | Demonstrate multi-tenant isolation, forced PostgreSQL Row-Level Security (RLS), and per-tenant model lifecycle management. |
-| **6. Technical Architecture** | `0:29 – 0:34` | 5.0s | Clean vector architecture diagram (`architecture.svg`) with animated lifecycle highlight bar | Explain the complete request path: ReelStore → Python SDK → GraphRec API → DGSR + Qdrant + PostgreSQL 17 (RLS) + Redis. |
-| **7. Finale & Outro** | `0:34 – 0:38` | 4.0s | Return to the live personalized ReelStore showcase → smooth cross-fade to closing brand card | Reinforce GraphRec + ReelStore identity and repository tagline. |
+| Scene | Time | Visual Content | What Is Demonstrated |
+|---|---|---|---|
+| **1. Intro Card** | `0:00 – 0:02` | Branded dark-slate intro card | Introduces **GraphRec + ReelStore** and the core stack (`FastAPI`, `PyTorch DGSR`, `Qdrant ANN`, `PostgreSQL RLS`, `React 19`, `Python SDK`). |
+| **2. ReelStore Live Walkthrough** | `0:02 – 0:16` | Continuous Playwright recording of ReelStore: homepage posters → Browse scrolling → Film detail page + live watch event → Maya persona switch with live rank-delta badges (`↑5`, `↑1`, `↓4`) and `67 ms · trace` → Insight drawer (`Proof` tab running the live 19-check Capability Proof Battery) | Real storefront browsing, idempotent watch-event ingestion, immediate sequential re-ranking, and glass-box transparency. |
+| **3. GraphRec Tenant Console** | `0:16 – 0:20` | Live recording of Tenant Admin workspace (`/models` showing active `v1 DGSR` → `/overview` showing 24h request volume, p95 latency, `7,951` catalog products, and healthy serving/event pipelines) | Tenant-scoped model lifecycle management and live serving telemetry. |
+| **4. GraphRec Platform Console** | `0:20 – 0:24` | Live recording of Platform Operator `/admin/tenants` scrolling across isolated tenants | Multi-tenant isolation enforced by PostgreSQL Row-Level Security (RLS) and per-tenant quotas. |
+| **5. System Architecture** | `0:24 – 0:27` | Clean vector architecture diagram (`architecture.svg`) | Complete request lifecycle from ReelStore through `graphrec-sdk` and GraphRec API into DGSR, Qdrant, PostgreSQL 17, and Redis 7. |
+| **6. Brand Outro** | `0:27 – 0:29` | Closing brand card | Repository structure (`graphrec/`, `reelstore/`, `sdks/python/`) and GitHub URL. |
