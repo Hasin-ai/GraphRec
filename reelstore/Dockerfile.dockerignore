@@ -1,0 +1,13 @@
+**
+!sdks/python/pyproject.toml
+!sdks/python/README.md
+!sdks/python/src/**
+!reelstore/app/**
+!reelstore/scripts/**
+!reelstore/data/**
+!reelstore/requirements.txt
+!reelstore/frontend/**
+reelstore/frontend/node_modules
+reelstore/frontend/dist
+**/__pycache__
+**/*.pyc

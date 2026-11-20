@@ -3,7 +3,7 @@ name: cd
 
 on:
   push:
-    branches: [main, reel/production-readiness]
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -26,5 +26,6 @@ jobs:
             git fetch origin
             CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
             git reset --hard origin/$CURRENT_BRANCH
+            cd graphrec
             sudo docker compose up -d --build
             sudo docker compose ps

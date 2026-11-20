@@ -44,7 +44,7 @@ dist/
 build/
 
 # ==========================================
-# Node.js & Frontend (Vite / Next.js)
+# Node.js & Frontend (Vite / React)
 # ==========================================
 node_modules/
 .next/
@@ -56,7 +56,7 @@ yarn-debug.log*
 yarn-error.log*
 
 # ==========================================
-# Machine Learning, Datasets & Models
+# Machine Learning, Datasets & Model Artifacts
 # ==========================================
 *.pt
 *.pth
@@ -74,6 +74,10 @@ yarn-error.log*
 /models/
 /checkpoints/
 exports/
+graphrec/model_artifacts/
+movielens/
+covers/
+.ipynb_checkpoints/
 
 # ==========================================
 # Environment Variables & Secrets
@@ -98,56 +102,20 @@ minio_data/
 rustfs_data/
 redis_data/
 rabbitmq_data/
+reelstore/state/
 
 # ==========================================
-# Temporary / Generated Binary Documents
+# Test Outputs & Temporary Artifacts
 # ==========================================
 *.docx
 *.tmp
 *.temp
-
-# ==========================================
-# Documentation & Diagrams
-# ==========================================
-docs/*
-!docs/*.md
-!docs/load/
-!docs/load/*.json
-!docs/srs-implementation-matrix.md
-!docs/srs-implementation-report.md
-diagrams/
-
-
-# ==========================================
-# Research notebooks (kept out of the repo)
-# ==========================================
-/dgsr_notebooks/
-.ipynb_checkpoints/
-
-# Playwright
-web/e2e-results/
-web/e2e-screens/
-test-results/
-
-# Pretrained model artifacts mounted into the API (MODEL_ARTIFACT_DIR)
-/model_artifacts/
-
-# Generated end-to-end reports
-/tests/e2e/results/
-
-# Local datasets, notebooks & IDE/AI assistant workspace files
-movielens/
-.claude/
-Claude outputs/
-
-
-# Generated UI-audit screenshots (regenerate with web/docs/ui-audit/capture.mjs)
-web/docs/ui-audit/before/
-web/docs/ui-audit/after/
-
-# Local archives, Redis dumps and ad-hoc QA scratch scripts
 *.tgz
 *.tar.gz
 *.rdb
-/qa_*.ps1
-/qa_*.py
+graphrec/web/e2e-results/
+graphrec/web/e2e-screens/
+graphrec/tests/e2e/results/
+reelstore/e2e/e2e-results/
+test-results/
+.claude/

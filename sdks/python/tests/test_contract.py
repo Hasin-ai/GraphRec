@@ -27,8 +27,9 @@ from graphrec_sdk.resources import tenant_users as tenant_users_resource
 from graphrec_sdk.resources import tenants as tenants_resource
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-ROUTES_DIR = REPO_ROOT / "apps" / "api" / "routes"
-SCHEMAS_DIR = REPO_ROOT / "graphrec_core" / "schemas"
+GRAPHREC_ROOT = REPO_ROOT / "graphrec"
+ROUTES_DIR = GRAPHREC_ROOT / "apps" / "api" / "routes"
+SCHEMAS_DIR = GRAPHREC_ROOT / "graphrec_core" / "schemas"
 
 pytestmark = pytest.mark.skipif(
     not ROUTES_DIR.is_dir() or not SCHEMAS_DIR.is_dir(),
@@ -161,7 +162,7 @@ def server_routes() -> Dict[Tuple[str, str], ServerRoute]:
     for path in sorted(ROUTES_DIR.glob("*.py")):
         for route in _parse_router_file(path, "router"):
             found[(route.method, route.path)] = route
-    for route in _parse_router_file(REPO_ROOT / "apps" / "api" / "main.py", "app"):
+    for route in _parse_router_file(GRAPHREC_ROOT / "apps" / "api" / "main.py", "app"):
         found[(route.method, route.path)] = route
     return found
 
@@ -442,7 +443,7 @@ def _string_set(node: ast.AST, names: Dict[str, ast.AST]) -> Set[str]:
 
 
 def test_role_and_delegation_scopes_match_server() -> None:
-    service = _module_assignments(REPO_ROOT / "graphrec_core" / "auth" / "service.py")
+    service = _module_assignments(GRAPHREC_ROOT / "graphrec_core" / "auth" / "service.py")
     role_node = service["ROLE_SCOPES"]
     assert isinstance(role_node, ast.Dict)
     server_roles = {
@@ -452,7 +453,7 @@ def test_role_and_delegation_scopes_match_server() -> None:
     }
     assert server_roles == {role: set(scopes) for role, scopes in g.ROLE_SCOPES.items()}
 
-    api_key_scopes = _module_assignments(REPO_ROOT / "graphrec_core" / "api_keys" / "scopes.py")
+    api_key_scopes = _module_assignments(GRAPHREC_ROOT / "graphrec_core" / "api_keys" / "scopes.py")
     assert _string_set(api_key_scopes["API_KEY_COMPATIBLE_SCOPES"], api_key_scopes) == set(
         g.API_KEY_SCOPES
     )

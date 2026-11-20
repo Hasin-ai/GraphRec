@@ -1,186 +1,124 @@
-<div align="center">
+# GraphRec & ReelStore
 
-# GraphRec
-
-**A graph-based, multi-tenant recommendation engine for e-commerce**
-
-Plug personalized, session-aware recommendations into any storefront through a simple REST API or Python SDK, powered by Dynamic Graph Neural Networks (DGSR).
-
-
-[Features](#features) · [Architecture](#architecture) · [Quick start](#quick-start) · [SDK](#python-sdk) · [API](#api-overview) · [Model](#the-model-dgsr)
-
-</div>
-
----
-
-## Overview
-
-Most small and mid-sized online stores can't afford to build a recommendation system. GraphRec offers one as a service: each store (tenant) sends its catalog and user interactions, and GraphRec returns ranked recommendations that account for **what a user did and when they did it**.
-
-Under the hood, user–item interactions are modeled as a **dynamic graph**, and a reimplementation of **DGSR** (*Dynamic Graph Neural Networks for Sequential Recommendation*, TKDE 2022) learns embeddings that capture both long-term preferences and short-term intent. Embeddings are served from **Qdrant** for fast similarity retrieval.
+A multi-tenant, graph-based sequential recommendation platform (**GraphRec**), its typed client library (**Python SDK**), and its production-grade reference storefront (**ReelStore**).
 
 > Developed as the Software Project Lab III (SPL-3) project at the Institute of Information Technology (IIT), University of Dhaka.
 
-## Features
+## Projects in This Repository
 
-- **Multi-tenant by design** — isolated data, API keys and models per store
-- **Sequential, time-aware recommendations** — powered by a dynamic graph neural network
-- **Three access levels** — storefront integration, tenant admin, and platform admin, each with scoped permissions
-- **Python SDK** — typed client covering the entire API
-- **Vector search** — item/user embeddings stored and queried in Qdrant
-- **Admin dashboard** — React UI for managing tenants, catalogs and monitoring
-- **Demo storefront** — end-to-end e-commerce demo built on the MovieLens dataset
-- **One-command setup** — full stack runs via Docker Compose
+| Project | Directory | Purpose |
+|---|---|---|
+| **GraphRec** | [`graphrec/`](graphrec/README.md) | Multi-tenant recommendation platform: FastAPI API, DGSR PyTorch training/serving engine, background worker & scheduler, PostgreSQL (with forced RLS), Redis, Qdrant, and React 19 operator console. |
+| **ReelStore** | [`reelstore/`](reelstore/README.md) | Independent MovieLens film storefront (FastAPI + React 19) that integrates with GraphRec via the Python SDK, with an interactive Insight drawer and on-demand capability proof battery. |
+| **Python SDK** | [`sdks/python/`](sdks/python/README.md) | Shared typed client library (`graphrec-sdk`) covering storefront, tenant admin, and platform admin API surfaces. |
 
-## Architecture
+## How GraphRec and ReelStore Relate
 
-```
-            ┌──────────────────┐       ┌──────────────────┐
-            │  Storefront /    │       │  React Admin     │
-            │  Python SDK      │       │  Dashboard       │
-            └────────┬─────────┘       └────────┬─────────┘
-                     │   REST (API key / JWT)   │
-                     └────────────┬─────────────┘
-                                  ▼
-                      ┌──────────────────────┐
-                      │   FastAPI backend    │
-                      │  auth · tenants ·    │
-                      │  events · recs       │
-                      └───┬──────────────┬───┘
-                          │              │
-                ┌─────────▼───┐   ┌──────▼────────┐
-                │ PostgreSQL  │   │    Qdrant     │
-                │ tenants,    │   │  embeddings,  │
-                │ items,      │   │  ANN search   │
-                │ interactions│   └──────▲────────┘
-                └─────────┬───┘          │
-                          │       ┌──────┴────────┐
-                          └──────►│  DGSR model   │
-                                  │ (train/infer) │
-                                  └───────────────┘
+ReelStore is a standalone client application that consumes GraphRec strictly over HTTP through the shared Python SDK (`sdks/python`), mirroring how any external e-commerce storefront integrates with GraphRec:
+
+```text
+┌───────────────────────────┐        ┌────────────────────────────┐
+│  ReelStore (reelstore/)   │        │  GraphRec Console          │
+│  React 19 + FastAPI :5290 │        │  (graphrec/web/) :5180     │
+└─────────────┬─────────────┘        └──────────────┬─────────────┘
+              │ graphrec-sdk (ApiKey)               │ REST (JWT / Bearer)
+              └──────────────────┬──────────────────┘
+                                 ▼
+                  ┌─────────────────────────────┐
+                  │  GraphRec API (graphrec/)   │
+                  │  FastAPI :8010 + DGSR       │
+                  └───┬──────────┬──────────┬───┘
+                      │          │          │
+              ┌───────▼──┐  ┌────▼───┐  ┌───▼────┐
+              │PostgreSQL│  │ Qdrant │  │ Redis  │
+              │  (RLS)   │  │ (ANN)  │  │(limits)│
+              └───────▲──┘  └────▲───┘  └────────┘
+                      │          │
+              ┌───────┴──────────┴───────┐
+              │ Worker & Scheduler (DGSR)│
+              └──────────────────────────┘
 ```
 
-## Tech stack
+Both projects have independent dependencies, Docker Compose stacks, test suites, and documentation. They share only the client SDK in `sdks/python/` and communicate over the HTTP API (or Docker network when running side by side).
 
-| Layer | Technology |
-|---|---|
-| Backend API | FastAPI, Python |
-| Frontend | React |
-| Database | PostgreSQL |
-| Vector store | Qdrant |
-| Model | DGSR (PyTorch) |
-| Deployment | Docker Compose |
+## Repository Structure
 
-## Quick start
+```text
+GraphRec/
+├── graphrec/                  # GraphRec multi-tenant recommendation platform
+│   ├── apps/api/              # FastAPI HTTP API & routers
+│   ├── graphrec_core/         # Domain services, auth, billing, DGSR model & serving
+│   ├── migrations/            # Alembic PostgreSQL migrations (with RLS)
+│   ├── infrastructure/        # Postgres init scripts and production Caddyfile
+│   ├── scripts/               # Operational, OpenAPI export, SDK doc-gen, and eval scripts
+│   ├── tests/                 # Unit, integration, and e2e test suites
+│   ├── web/                   # React 19 + Vite operator console & docs portal
+│   ├── docs/                  # Architecture, API, SRS, security, performance & ops docs
+│   ├── Dockerfile             # Multi-stage API / worker / scheduler image
+│   └── docker-compose.yml     # Full GraphRec stack (dev + prod overlay)
+├── reelstore/                 # ReelStore reference MovieLens storefront
+│   ├── app/                   # FastAPI BFF, Redis state store, proof battery, observability
+│   ├── frontend/              # React 19 + Vite storefront UI & Insight drawer
+│   ├── data/                  # MovieLens catalog, personas, model card, cover index
+│   ├── scripts/               # Bootstrap, data build, cover upload, CLI capability proof
+│   ├── tests/                 # Unit and contract tests
+│   ├── e2e/                   # Playwright browser tests for ReelStore
+│   ├── docs/                  # ReelStore deployment & operations runbooks
+│   ├── Dockerfile             # Multi-stage ReelStore image
+│   └── docker-compose.yml     # Standalone Compose project joining GraphRec's network
+├── sdks/                      # Shared client SDKs
+│   └── python/                # graphrec-sdk package, examples, unit & contract tests
+├── .github/                   # CI/CD workflows, issue templates, PR template
+├── CHANGELOG.md
+└── CONTRIBUTING.md
+```
 
-### Prerequisites
+## Technology Stack
 
-- Docker and Docker Compose
-- Git
+- **Backend API & Services**: Python 3.12+, FastAPI, SQLAlchemy 2, Alembic, Pydantic v2
+- **ML Model**: PyTorch implementation of **DGSR** (*Dynamic Graph Neural Networks for Sequential Recommendation*, IEEE TKDE 2022)
+- **Data & Infrastructure**: PostgreSQL 17 (forced Row-Level Security), Qdrant (vector search), Redis 7 (rate limits, slot leases, shared storefront state), RustFS (optional S3 cover storage for ReelStore)
+- **Frontends**: React 19, TypeScript, Vite, Nginx (GraphRec console), Playwright & Vitest
+- **Deployment**: Docker, Docker Compose, Caddy (production TLS overlay)
 
-### Run the stack
+## Quick Start
+
+### 1. Start GraphRec
 
 ```bash
-git clone https://github.com/<your-username>/GraphRec.git
-cd GraphRec
-cp .env.example .env        # edit secrets and ports as needed
+cd graphrec
+cp .env.example .env           # configure secrets as needed
 docker compose up -d --build
 ```
 
-Once running:
+Services started:
+- **Operator Console & Docs**: `http://localhost:5180`
+- **GraphRec API**: `http://localhost:8010`
+- **Qdrant**: `http://localhost:6333`
 
-| Service | URL |
-|---|---|
-| API | http://localhost:8000 |
-| Interactive API docs | http://localhost:8000/docs |
-| Admin dashboard | http://localhost:<frontend-port> |
-| Qdrant | http://localhost:6333 |
+### 2. Start ReelStore (Optional Reference Storefront)
 
-### Environment variables
-
-| Variable | Description |
-|---|---|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `QDRANT_URL` | Qdrant endpoint |
-| `JWT_SECRET` | Secret used to sign admin tokens |
-| `<...>` | `<add remaining variables from .env.example>` |
-
-## Python SDK
+With GraphRec running, bootstrap a ReelStore tenant and launch the storefront from the repository root:
 
 ```bash
-pip install -e ./sdk
+docker compose -f reelstore/docker-compose.yml --env-file graphrec/.env run --rm reel-bootstrap
+docker compose -f reelstore/docker-compose.yml up -d --build reel
 ```
 
-```python
-from graphrec import GraphRecClient
+ReelStore will be available at `http://localhost:5290`.
 
-client = GraphRecClient(base_url="http://localhost:8000", api_key="YOUR_TENANT_KEY")
+## Documentation
 
-# Send an interaction
-client.events.track(user_id="u_42", item_id="movie_318", event="view")
-
-# Get recommendations
-recs = client.recommendations.for_user("u_42", k=10)
-for r in recs:
-    print(r.item_id, r.score)
-```
-
-The SDK covers all three API surfaces:
-
-- **Storefront** — track events, fetch recommendations
-- **Tenant admin** — manage catalog, API keys, training
-- **Platform admin** — manage tenants and users
-
-## API overview
-
-| Area | Example endpoints | Auth |
-|---|---|---|
-| Storefront | `POST /events`, `GET /recommendations/{user_id}` | Tenant API key |
-| Tenant admin | `/tenant/items`, `/tenant/keys`, `/tenant/train` | Tenant admin JWT |
-| Platform admin | `/admin/tenants`, `/admin/users` | Platform admin JWT |
-
-Full, always-current reference: **`/docs`** (Swagger UI) on a running instance.
-
-## The model: DGSR
-
-GraphRec uses a from-scratch reimplementation of **DGSR**:
-
-1. Interactions become a **dynamic user–item graph**, where every edge carries its timestamp/order.
-2. For each user, a sub-graph of their recent history and related items is sampled.
-3. **Dynamic graph recurrent layers** propagate information along time-ordered edges, capturing both long-term taste and short-term intent.
-4. The resulting embeddings score candidate items; top-K are returned, with Qdrant handling fast retrieval.
-
-The demo is trained on **MovieLens**.
-
-## Project structure
-
-```
-GraphRec/
-├── backend/          # FastAPI app (routes, services, models)
-├── frontend/         # React admin dashboard
-├── sdk/              # Python SDK
-├── model/            # DGSR training & inference
-├── demo/             # E-commerce storefront demo
-├── docker-compose.yml
-└── README.md
-```
-
-## Roadmap
-
-- [ ] Real-time incremental model updates
-- [ ] A/B testing for recommendation strategies
-- [ ] More recommendation surfaces (similar items, trending)
-- [ ] Published SDK on PyPI
+- **GraphRec Platform**: [graphrec/README.md](graphrec/README.md)
+  - [API Reference](graphrec/docs/API.md) · [Deployment](graphrec/docs/DEPLOYMENT.md) · [Operations](graphrec/docs/OPERATIONS.md) · [Security](graphrec/docs/SECURITY.md) · [Performance](graphrec/docs/PERFORMANCE.md) · [Architecture Decisions](graphrec/docs/DECISIONS.md)
+- **ReelStore Storefront**: [reelstore/README.md](reelstore/README.md)
+  - [Deployment](reelstore/docs/DEPLOYMENT.md) · [Operations](reelstore/docs/OPERATIONS.md)
+- **Python SDK**: [sdks/python/README.md](sdks/python/README.md)
+- **Contributing**: [CONTRIBUTING.md](CONTRIBUTING.md) · **Changelog**: [CHANGELOG.md](CHANGELOG.md)
 
 ## Acknowledgements
 
 - Supervisor: **Dr. Rezvi Shahariar**, Associate Professor, IIT, University of Dhaka
-- DGSR: Zhang et al., *Dynamic Graph Neural Networks for Sequential Recommendation*, IEEE TKDE 2022
-- Dataset: [MovieLens](https://grouplens.org/datasets/movielens/) by GroupLens Research
-
-## Author
-
-**Hasin Ahmed** — BSSE, IIT, University of Dhaka
-## License
-
-`<MIT / your choice>` — see [LICENSE](LICENSE).
+- Author: **Hasin Ahmed** — BSSE, IIT, University of Dhaka
+- Model reference: Zhang et al., *Dynamic Graph Neural Networks for Sequential Recommendation*, IEEE TKDE 2022
+- Reference dataset: [MovieLens](https://grouplens.org/datasets/movielens/) by GroupLens Research
