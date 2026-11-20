@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     #: Where the storefront itself fetches covers when REEL_COVERS_BASE_URL is a path on this site
     #: (e.g. "/reel-covers"): the bucket URL on the Docker network. Lets covers load without exposing RustFS.
     reel_covers_origin: str = "http://rustfs:9000/reel-covers"
+    #: Optional local directory containing cover JPEGs (e.g. mounted ml-20m-psm posters).
+    #: When set and the requested file exists locally, /reel-covers/<name> serves it directly.
+    reel_covers_dir: Optional[Path] = None
 
     graphrec_timeout_seconds: float = 5.0
     graphrec_max_retries: int = 1

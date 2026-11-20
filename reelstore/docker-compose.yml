@@ -34,10 +34,12 @@ services:
       # A full URL (http://host:9000/reel-covers) sends browsers to RustFS directly; "" turns covers off.
       REEL_COVERS_BASE_URL: ${REEL_COVERS_BASE_URL-/reel-covers}
       REEL_COVERS_ORIGIN: http://rustfs:9000/reel-covers
+      REEL_COVERS_DIR: /app/covers
     ports:
       - "${REEL_PORT:-5290}:5290"
     volumes:
       - reel_state:/app/state
+      - ${REEL_COVERS_HOST_DIR:-../../ml-20m-psm/ml-20m-psm/posters}:/app/covers:ro
     networks: [graphrec]
     restart: unless-stopped
 

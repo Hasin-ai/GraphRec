@@ -4,6 +4,12 @@ A multi-tenant, graph-based sequential recommendation platform (**GraphRec**), i
 
 > Developed as the Software Project Lab III (SPL-3) project at the Institute of Information Technology (IIT), University of Dhaka.
 
+## Product Demo
+
+![GraphRec and ReelStore Demo](docs/demo/graphrec-reelstore-demo.gif)
+
+*Full 1080p/720p master video: [`docs/demo/graphrec-reelstore-demo.mp4`](docs/demo/graphrec-reelstore-demo.mp4) · Storyboard: [`docs/demo/storyboard.md`](docs/demo/storyboard.md) · Architecture diagram: [`docs/demo/architecture.svg`](docs/demo/architecture.svg)*
+
 ## Projects in This Repository
 
 | Project | Directory | Purpose |

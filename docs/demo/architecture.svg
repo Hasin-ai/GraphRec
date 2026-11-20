@@ -1,0 +1,175 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720" font-family="Inter, Segoe UI, system-ui, -apple-system, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B1120"/>
+      <stop offset="100%" stop-color="#111827"/>
+    </linearGradient>
+    <linearGradient id="accentBlue" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#38BDF8"/>
+      <stop offset="100%" stop-color="#6366F1"/>
+    </linearGradient>
+    <linearGradient id="accentEmerald" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#10B981"/>
+      <stop offset="100%" stop-color="#06B6D4"/>
+    </linearGradient>
+    <linearGradient id="accentAmber" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#EF4444"/>
+    </linearGradient>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#38BDF8"/>
+    </marker>
+    <marker id="arrowIndigo" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#818CF8"/>
+    </marker>
+    <marker id="arrowEmerald" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#34D399"/>
+    </marker>
+    <filter id="cardShadow" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1280" height="720" fill="url(#bg)"/>
+  <!-- Subtle dot grid -->
+  <g fill="#1E293B" opacity="0.55">
+    <circle cx="80" cy="80" r="1.5"/><circle cx="160" cy="80" r="1.5"/><circle cx="240" cy="80" r="1.5"/><circle cx="320" cy="80" r="1.5"/>
+    <circle cx="960" cy="80" r="1.5"/><circle cx="1040" cy="80" r="1.5"/><circle cx="1120" cy="80" r="1.5"/><circle cx="1200" cy="80" r="1.5"/>
+    <circle cx="80" cy="640" r="1.5"/><circle cx="160" cy="640" r="1.5"/><circle cx="1120" cy="640" r="1.5"/><circle cx="1200" cy="640" r="1.5"/>
+  </g>
+
+  <!-- Header -->
+  <rect x="64" y="42" width="10" height="34" rx="5" fill="url(#accentBlue)"/>
+  <text x="88" y="67" fill="#F8FAFC" font-size="26" font-weight="700" letter-spacing="-0.3">GraphRec + ReelStore System Architecture</text>
+  <text x="88" y="92" fill="#94A3B8" font-size="14">End-to-end multi-tenant sequential recommendation pipeline powered by Dynamic Graph Neural Networks (DGSR)</text>
+
+  <!-- Left Column: Client Applications -->
+  <text x="64" y="138" fill="#64748B" font-size="11" font-weight="700" letter-spacing="1.4">CLIENT APPLICATIONS</text>
+
+  <!-- ReelStore Card -->
+  <g filter="url(#cardShadow)">
+    <rect x="64" y="152" width="276" height="196" rx="14" fill="#131C31" stroke="#1E3A5F" stroke-width="1.5"/>
+    <rect x="64" y="152" width="276" height="5" rx="2.5" fill="url(#accentEmerald)"/>
+    <text x="84" y="186" fill="#F8FAFC" font-size="18" font-weight="700">ReelStore</text>
+    <rect x="242" y="170" width="78" height="22" rx="11" fill="#064E3B"/>
+    <text x="281" y="185" fill="#6EE7B7" font-size="11" font-weight="600" text-anchor="middle">Port 5290</text>
+    <text x="84" y="210" fill="#94A3B8" font-size="12.5">Reference MovieLens Storefront</text>
+    <line x1="84" y1="224" x2="320" y2="224" stroke="#1E293B" stroke-width="1"/>
+    <text x="84" y="246" fill="#CBD5E1" font-size="12">• React 19 + Vite UI &amp; Insight Drawer</text>
+    <text x="84" y="268" fill="#CBD5E1" font-size="12">• FastAPI BFF (/api/reel/*)</text>
+    <text x="84" y="290" fill="#CBD5E1" font-size="12">• 7,951 Films + 7,047 Live Posters</text>
+    <text x="84" y="312" fill="#CBD5E1" font-size="12">• 19-Check Capability Proof Battery</text>
+    <text x="84" y="334" fill="#34D399" font-size="11.5" font-weight="600">Auth: Scoped Storefront API Key</text>
+  </g>
+
+  <!-- GraphRec Console Card -->
+  <g filter="url(#cardShadow)">
+    <rect x="64" y="378" width="276" height="178" rx="14" fill="#131C31" stroke="#312E81" stroke-width="1.5"/>
+    <rect x="64" y="378" width="276" height="5" rx="2.5" fill="url(#accentBlue)"/>
+    <text x="84" y="412" fill="#F8FAFC" font-size="18" font-weight="700">Operator Console</text>
+    <rect x="242" y="396" width="78" height="22" rx="11" fill="#1E1B4B"/>
+    <text x="281" y="411" fill="#A5B4FC" font-size="11" font-weight="600" text-anchor="middle">Port 5180</text>
+    <text x="84" y="436" fill="#94A3B8" font-size="12.5">Tenant &amp; Platform Management</text>
+    <line x1="84" y1="450" x2="320" y2="450" stroke="#1E293B" stroke-width="1"/>
+    <text x="84" y="472" fill="#CBD5E1" font-size="12">• React 19 + TypeScript + Nginx</text>
+    <text x="84" y="494" fill="#CBD5E1" font-size="12">• Catalog, Events, Models &amp; Quotas</text>
+    <text x="84" y="516" fill="#CBD5E1" font-size="12">• Platform Tenants &amp; Audit Trail</text>
+    <text x="84" y="538" fill="#818CF8" font-size="11.5" font-weight="600">Auth: JWT Rotation / Operator Token</text>
+  </g>
+
+  <!-- Shared SDK Bridge -->
+  <g filter="url(#cardShadow)">
+    <rect x="380" y="210" width="136" height="82" rx="12" fill="#0F172A" stroke="#38BDF8" stroke-width="1.5"/>
+    <text x="448" y="239" fill="#38BDF8" font-size="13" font-weight="700" text-anchor="middle">Python SDK</text>
+    <text x="448" y="258" fill="#E2E8F0" font-size="11.5" text-anchor="middle">graphrec-sdk</text>
+    <text x="448" y="276" fill="#94A3B8" font-size="10.5" text-anchor="middle">sdks/python</text>
+  </g>
+
+  <!-- Arrows from Clients to API -->
+  <line x1="340" y1="251" x2="376" y2="251" stroke="#34D399" stroke-width="2.2" marker-end="url(#arrowEmerald)"/>
+  <line x1="516" y1="251" x2="554" y2="251" stroke="#38BDF8" stroke-width="2.2" marker-end="url(#arrowBlue)"/>
+  <path d="M 340 468 L 480 468 L 480 345 L 554 345" fill="none" stroke="#818CF8" stroke-width="2.2" marker-end="url(#arrowIndigo)"/>
+  <text x="448" y="486" fill="#818CF8" font-size="11" text-anchor="middle">REST /v1/*</text>
+
+  <!-- Center Column: GraphRec Core Platform -->
+  <text x="560" y="138" fill="#64748B" font-size="11" font-weight="700" letter-spacing="1.4">GRAPHREC CORE PLATFORM</text>
+
+  <g filter="url(#cardShadow)">
+    <rect x="560" y="152" width="330" height="404" rx="16" fill="#131C31" stroke="#2563EB" stroke-width="1.8"/>
+    <rect x="560" y="152" width="330" height="5" rx="2.5" fill="url(#accentBlue)"/>
+    <text x="582" y="186" fill="#F8FAFC" font-size="19" font-weight="700">GraphRec API</text>
+    <rect x="794" y="170" width="76" height="22" rx="11" fill="#172554"/>
+    <text x="832" y="185" fill="#93C5FD" font-size="11" font-weight="600" text-anchor="middle">Port 8010</text>
+    <text x="582" y="208" fill="#94A3B8" font-size="12.5">FastAPI · Multi-Tenant Request Pipeline</text>
+
+    <!-- Inner box 1: Auth & Tenant Isolation -->
+    <rect x="580" y="226" width="290" height="68" rx="10" fill="#0F172A" stroke="#1E293B" stroke-width="1.2"/>
+    <text x="596" y="248" fill="#38BDF8" font-size="13" font-weight="700">1. Auth, Scopes &amp; Admission</text>
+    <text x="596" y="268" fill="#CBD5E1" font-size="11.5">API Key / JWT verify · Tenant context · Rate limits</text>
+    <text x="596" y="284" fill="#94A3B8" font-size="11">X-Correlation-ID · Idempotency · Quota metering</text>
+
+    <!-- Inner box 2: DGSR Serving Pipeline -->
+    <rect x="580" y="308" width="290" height="104" rx="10" fill="#0F172A" stroke="#4F46E5" stroke-width="1.4"/>
+    <text x="596" y="330" fill="#A5B4FC" font-size="13" font-weight="700">2. DGSR Sequential Graph Engine</text>
+    <text x="596" y="350" fill="#CBD5E1" font-size="11.5">• Reads user's 20-item timestamped history</text>
+    <text x="596" y="368" fill="#CBD5E1" font-size="11.5">• Dynamic Graph Recurrent encoding (PyTorch)</text>
+    <text x="596" y="386" fill="#CBD5E1" font-size="11.5">• Seen-item exclusion + diversity + freshness</text>
+    <text x="596" y="402" fill="#34D399" font-size="11">Graceful fallback: session → popular_fallback</text>
+
+    <!-- Inner box 3: Worker & Scheduler -->
+    <rect x="580" y="426" width="290" height="110" rx="10" fill="#0F172A" stroke="#1E293B" stroke-width="1.2"/>
+    <text x="596" y="448" fill="#FBBF24" font-size="13" font-weight="700">3. Async Worker &amp; Scheduler</text>
+    <text x="596" y="468" fill="#CBD5E1" font-size="11.5">• Background DGSR training &amp; checkpoint import</text>
+    <text x="596" y="486" fill="#CBD5E1" font-size="11.5">• Common-set offline evaluation &amp; versioning</text>
+    <text x="596" y="504" fill="#CBD5E1" font-size="11.5">• Scheduled retraining &amp; capacity scaling</text>
+    <text x="596" y="522" fill="#94A3B8" font-size="11">Zero-downtime model activation &amp; rollback</text>
+  </g>
+
+  <!-- Right Column: Data & Infrastructure -->
+  <text x="944" y="138" fill="#64748B" font-size="11" font-weight="700" letter-spacing="1.4">DATA &amp; INFRASTRUCTURE</text>
+
+  <!-- PostgreSQL -->
+  <g filter="url(#cardShadow)">
+    <rect x="944" y="152" width="272" height="114" rx="14" fill="#131C31" stroke="#1E3A5F" stroke-width="1.5"/>
+    <text x="964" y="182" fill="#38BDF8" font-size="16" font-weight="700">PostgreSQL 17</text>
+    <text x="964" y="204" fill="#CBD5E1" font-size="12">• Forced Row-Level Security (RLS)</text>
+    <text x="964" y="224" fill="#CBD5E1" font-size="12">• Tenants, Catalog, Events, Models</text>
+    <text x="964" y="244" fill="#94A3B8" font-size="11.5">Runtime role: graphrec_app (no bypass)</text>
+  </g>
+
+  <!-- Qdrant -->
+  <g filter="url(#cardShadow)">
+    <rect x="944" y="284" width="272" height="106" rx="14" fill="#131C31" stroke="#312E81" stroke-width="1.5"/>
+    <text x="964" y="314" fill="#A5B4FC" font-size="16" font-weight="700">Qdrant Vector DB</text>
+    <text x="964" y="336" fill="#CBD5E1" font-size="12">• Per-tenant × version collections</text>
+    <text x="964" y="356" fill="#CBD5E1" font-size="12">• HNSW cosine ANN retrieval (gRPC)</text>
+    <text x="964" y="376" fill="#94A3B8" font-size="11.5">128-dim item &amp; user embeddings</text>
+  </g>
+
+  <!-- Redis -->
+  <g filter="url(#cardShadow)">
+    <rect x="944" y="408" width="272" height="90" rx="14" fill="#131C31" stroke="#7F1D1D" stroke-width="1.5"/>
+    <text x="964" y="438" fill="#FCA5A5" font-size="16" font-weight="700">Redis 7</text>
+    <text x="964" y="460" fill="#CBD5E1" font-size="12">• Shared rate limits &amp; slot leases</text>
+    <text x="964" y="480" fill="#CBD5E1" font-size="12">• ReelStore shelf diffs &amp; impressions</text>
+  </g>
+
+  <!-- Model Artifacts -->
+  <g filter="url(#cardShadow)">
+    <rect x="944" y="514" width="272" height="72" rx="14" fill="#131C31" stroke="#065F46" stroke-width="1.5"/>
+    <text x="964" y="542" fill="#6EE7B7" font-size="15" font-weight="700">DGSR Model Artifacts</text>
+    <text x="964" y="564" fill="#CBD5E1" font-size="11.5">MovieLens-32M checkpoint + id_maps</text>
+  </g>
+
+  <!-- Arrows from Core to Data -->
+  <line x1="890" y1="210" x2="940" y2="210" stroke="#38BDF8" stroke-width="2" marker-end="url(#arrowBlue)"/>
+  <line x1="890" y1="336" x2="940" y2="336" stroke="#818CF8" stroke-width="2" marker-end="url(#arrowIndigo)"/>
+  <line x1="890" y1="452" x2="940" y2="452" stroke="#38BDF8" stroke-width="2" marker-end="url(#arrowBlue)"/>
+  <line x1="890" y1="546" x2="940" y2="546" stroke="#34D399" stroke-width="2" marker-end="url(#arrowEmerald)"/>
+
+  <!-- Bottom Lifecycle Strip -->
+  <rect x="64" y="614" width="1152" height="62" rx="12" fill="#0F172A" stroke="#1E293B" stroke-width="1.2"/>
+  <text x="90" y="641" fill="#38BDF8" font-size="12" font-weight="700">REQUEST LIFECYCLE</text>
+  <text x="90" y="661" fill="#CBD5E1" font-size="12.5">Shopper Action → Event Ingest (Idempotent) → 20-Item History Window → DGSR Encode → Qdrant ANN + Rules → Ranked Top-N + Feedback Attribution</text>
+</svg>

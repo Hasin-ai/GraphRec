@@ -19,10 +19,6 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-import boto3
-from botocore.config import Config
-from botocore.exceptions import ClientError
-
 DATA = Path(__file__).resolve().parent.parent / "data"
 
 
@@ -34,19 +30,34 @@ def main() -> int:
     p.add_argument("--secret-key", default=os.getenv("RUSTFS_SECRET_KEY", "rustfsadmin"))
     p.add_argument("--bucket", default=os.getenv("REEL_COVERS_BUCKET", "reel-covers"))
     p.add_argument("--workers", type=int, default=16)
+    p.add_argument("--manifest-only", action="store_true",
+                   help="Only write data/covers.json without uploading to RustFS (for local bind-mounted covers).")
     args = p.parse_args()
 
     films = json.loads((DATA / "films.json").read_text(encoding="utf-8"))
     wanted: dict[str, Path] = {}
     for f in films:
+        movie_path = args.covers_dir / f"{f['id']}.jpg"
         imdb = (f.get("imdbId") or "").zfill(7)
-        path = args.covers_dir / f"{imdb}.jpg"
-        if imdb.strip("0") and path.is_file():
-            wanted[f["id"]] = path
+        imdb_path = args.covers_dir / f"{imdb}.jpg"
+        if movie_path.is_file():
+            wanted[f["id"]] = movie_path
+        elif imdb.strip("0") and imdb_path.is_file():
+            wanted[f["id"]] = imdb_path
     print(f"{len(wanted)}/{len(films)} films have a cover in {args.covers_dir}")
     if not wanted:
         print("Nothing to upload: check --covers-dir.", file=sys.stderr)
         return 1
+
+    if args.manifest_only:
+        manifest = {film_id: path.name for film_id, path in wanted.items()}
+        (DATA / "covers.json").write_text(json.dumps(manifest, separators=(",", ":"), sort_keys=True), encoding="utf-8")
+        print(f"wrote {DATA / 'covers.json'} ({len(manifest)} covers)")
+        return 0
+
+    import boto3
+    from botocore.config import Config
+    from botocore.exceptions import ClientError
 
     s3 = boto3.client("s3", endpoint_url=args.endpoint, aws_access_key_id=args.access_key,
                       aws_secret_access_key=args.secret_key, region_name="us-east-1",

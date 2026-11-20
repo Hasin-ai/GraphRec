@@ -179,7 +179,7 @@ def create_app(settings: Optional[Settings] = None, svc: Optional[Services] = No
             )
         return response
 
-    # Film covers, same-origin: /reel-covers/<imdb>.jpg is streamed from the RustFS bucket.
+    # Film covers, same-origin: /reel-covers/<id>.jpg served from local dir (if configured) or RustFS bucket.
     if cfg.reel_covers_base_url.startswith("/"):
         import re as _re
         import httpx
@@ -187,12 +187,21 @@ def create_app(settings: Optional[Settings] = None, svc: Optional[Services] = No
 
         covers_path = cfg.reel_covers_base_url.rstrip("/")
         covers_http = httpx.AsyncClient(timeout=10.0)
-        cover_name = _re.compile(r"^[0-9]{7,8}\.jpg$")
+        cover_name = _re.compile(r"^[0-9]{1,8}\.jpg$")
+        local_covers_dir = cfg.reel_covers_dir.resolve() if cfg.reel_covers_dir else None
 
         @app.get(covers_path + "/{name}", include_in_schema=False)
         async def cover(name: str):
             if not cover_name.match(name):
                 return error_response(404, "not_found", "Unknown cover.")
+            if local_covers_dir is not None:
+                local_file = local_covers_dir / name
+                if local_file.is_file():
+                    return FileResponse(
+                        local_file,
+                        media_type="image/jpeg",
+                        headers={"Cache-Control": "public, max-age=604800"},
+                    )
             try:
                 upstream = await covers_http.send(
                     covers_http.build_request("GET", f"{cfg.reel_covers_origin.rstrip('/')}/{name}"), stream=True)
